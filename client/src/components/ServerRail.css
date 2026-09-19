@@ -1,0 +1,55 @@
+.server-rail {
+  width: 72px;
+  flex: 0 0 72px;
+  background: var(--bg-deep);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 0;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.server-rail ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.server-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-tertiary);
+  color: var(--text-h);
+  font:
+    600 15px/1 var(--sans);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    border-radius 0.15s,
+    background 0.15s;
+}
+
+.server-icon:hover {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 30%;
+}
+
+.server-icon.active {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 30%;
+}
+
+.server-icon.add-server {
+  font-size: 22px;
+  color: var(--accent);
+}

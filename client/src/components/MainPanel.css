@@ -1,0 +1,39 @@
+.main-panel {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.channel-header {
+  height: 48px;
+  flex: 0 0 48px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+  box-sizing: border-box;
+}
+
+.channel-header .channel-icon {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.channel-title {
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.channel-content {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.placeholder {
+  color: var(--text);
+}

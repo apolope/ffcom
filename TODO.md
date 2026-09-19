@@ -46,7 +46,7 @@ Todas as decisões abaixo foram tomadas — ver `docs/architecture.md` para o de
 
 ## client
 
-- [ ] Layout base: rail de servidores → categorias → canais → lista de membros (estilo Discord)
+- [x] Layout base: rail de servidores → categorias → canais → lista de membros (estilo Discord)
 - [ ] Tela de adicionar servidor via IP/DNS
 - [ ] Integração de voz/vídeo via `livekit-client`
 - [ ] Compartilhamento de tela
