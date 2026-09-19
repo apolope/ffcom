@@ -1,0 +1,28 @@
+# Node / client
+node_modules/
+dist/
+dist-electron/
+release/
+.vite/
+*.local
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/server-central/bin/
+/server-channel/bin/
+vendor/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

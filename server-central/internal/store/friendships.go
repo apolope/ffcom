@@ -1,0 +1,75 @@
+package store
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type FriendshipStore struct {
+	pool *pgxpool.Pool
+}
+
+// Request cria um pedido de amizade de requesterID para addresseeID.
+func (s *FriendshipStore) Request(ctx context.Context, requesterID, addresseeID string) (Friendship, error) {
+	const query = `
+		INSERT INTO friendships (requester_id, addressee_id, status)
+		VALUES ($1, $2, 'pending')
+		RETURNING id, requester_id, addressee_id, status, created_at, updated_at
+	`
+	return s.scanOne(ctx, query, requesterID, addresseeID)
+}
+
+// SetStatus atualiza o status de um pedido de amizade existente (ex.: accepted, blocked).
+func (s *FriendshipStore) SetStatus(ctx context.Context, id string, status FriendshipStatus) (Friendship, error) {
+	const query = `
+		UPDATE friendships SET status = $2, updated_at = now()
+		WHERE id = $1
+		RETURNING id, requester_id, addressee_id, status, created_at, updated_at
+	`
+	return s.scanOne(ctx, query, id, status)
+}
+
+// ListForAccount lista as amizades em que a conta participa, como requester ou addressee.
+func (s *FriendshipStore) ListForAccount(ctx context.Context, accountID string) ([]Friendship, error) {
+	const query = `
+		SELECT id, requester_id, addressee_id, status, created_at, updated_at
+		FROM friendships
+		WHERE requester_id = $1 OR addressee_id = $1
+		ORDER BY updated_at DESC
+	`
+	rows, err := s.pool.Query(ctx, query, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("friendships: list por account_id: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Friendship
+	for rows.Next() {
+		var f Friendship
+		if err := rows.Scan(&f.ID, &f.RequesterID, &f.AddresseeID, &f.Status, &f.CreatedAt, &f.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("friendships: scan: %w", err)
+		}
+		out = append(out, f)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("friendships: iterar linhas: %w", err)
+	}
+	return out, nil
+}
+
+func (s *FriendshipStore) scanOne(ctx context.Context, query string, args ...any) (Friendship, error) {
+	var f Friendship
+	err := s.pool.QueryRow(ctx, query, args...).
+		Scan(&f.ID, &f.RequesterID, &f.AddresseeID, &f.Status, &f.CreatedAt, &f.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Friendship{}, ErrNotFound
+	}
+	if err != nil {
+		return Friendship{}, fmt.Errorf("friendships: query: %w", err)
+	}
+	return f, nil
+}

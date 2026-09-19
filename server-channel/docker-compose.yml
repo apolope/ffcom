@@ -1,0 +1,99 @@
+networks:
+  ffcom-channel:
+
+volumes:
+  postgres_data:
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ffcom}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      POSTGRES_DB: ${POSTGRES_DB:-ffcom_channel}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - ffcom-channel
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ffcom} -d ${POSTGRES_DB:-ffcom_channel}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # SFU de voz/vídeo/compartilhamento de tela. Ver docs/architecture.md
+  # ("Decisão: SFU de voz/vídeo — LiveKit"). Config injetada via LIVEKIT_CONFIG
+  # (variável de ambiente suportada nativamente pelo livekit-server) em vez de
+  # arquivo montado, para manter tudo centralizado no .env.
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    environment:
+      LIVEKIT_CONFIG: |
+        port: 7880
+        rtc:
+          tcp_port: 7881
+          port_range_start: ${LIVEKIT_RTC_PORT_RANGE_START:-50000}
+          port_range_end: ${LIVEKIT_RTC_PORT_RANGE_END:-50100}
+          use_external_ip: true
+        keys:
+          ${LIVEKIT_API_KEY:?defina LIVEKIT_API_KEY no .env}: ${LIVEKIT_API_SECRET:?defina LIVEKIT_API_SECRET no .env}
+    ports:
+      - "7880:7880/tcp" # HTTP/WebSocket (signaling)
+      - "7881:7881/tcp" # RTC fallback via TCP
+      - "${LIVEKIT_RTC_PORT_RANGE_START:-50000}-${LIVEKIT_RTC_PORT_RANGE_END:-50100}:${LIVEKIT_RTC_PORT_RANGE_START:-50000}-${LIVEKIT_RTC_PORT_RANGE_END:-50100}/udp" # mídia RTC
+    networks:
+      - ffcom-channel
+
+  # TURN/STUN para NAT traversal — necessário para quem hospedar atrás de NAT
+  # residencial. Ver docs/architecture.md, "Implicação de deploy" na decisão do LiveKit.
+  # TURN_EXTERNAL_IP é obrigatório: precisa ser o IP público (ou IP mapeado via
+  # port-forwarding) do host, não o IP interno do container.
+  coturn:
+    image: coturn/coturn:latest
+    restart: unless-stopped
+    command:
+      - -n
+      - --log-file=stdout
+      - --external-ip=${TURN_EXTERNAL_IP:?defina TURN_EXTERNAL_IP (IP público do host) no .env}
+      - --realm=${TURN_REALM:-ffcom.local}
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_STATIC_AUTH_SECRET:?defina TURN_STATIC_AUTH_SECRET no .env}
+      - --min-port=${TURN_RELAY_MIN_PORT:-49160}
+      - --max-port=${TURN_RELAY_MAX_PORT:-49200}
+      - --no-cli
+      - --fingerprint
+    ports:
+      - "3478:3478/tcp"
+      - "3478:3478/udp"
+      - "${TURN_RELAY_MIN_PORT:-49160}-${TURN_RELAY_MAX_PORT:-49200}:${TURN_RELAY_MIN_PORT:-49160}-${TURN_RELAY_MAX_PORT:-49200}/udp"
+    networks:
+      - ffcom-channel
+
+  # App Go do server-channel. Scaffolding básico (auth via Authentik +
+  # GET /api/me) já existe; integração com LiveKit, canais de
+  # texto/forum, permissões e convites ainda são TODO — ver TODO.md,
+  # seção "server-channel".
+  #
+  # Autenticação: mesma instância central de Authentik usada por
+  # server-central, validada localmente sem chamada entre os dois
+  # componentes — ver docs/architecture.md, "modelo de dados de
+  # server-channel".
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+      livekit:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-ffcom}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ffcom_channel}?sslmode=disable
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:?defina OIDC_ISSUER_URL no .env (https://authentik.abs.a3sitsolutions.com.br/application/o/ffcom/)}
+      LIVEKIT_URL: ws://livekit:7880
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+    ports:
+      - "${SERVER_CHANNEL_PORT:-8080}:8080"
+    networks:
+      - ffcom-channel

@@ -1,0 +1,49 @@
+networks:
+  ffcom-central:
+
+volumes:
+  postgres_data:
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ffcom}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      POSTGRES_DB: ${POSTGRES_DB:-ffcom_central}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - ffcom-central
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ffcom} -d ${POSTGRES_DB:-ffcom_central}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # App Go do server-central. Ainda não implementado (main.go é um stub) —
+  # ver TODO.md, seção "server-central". O serviço já fica cabeado aqui para
+  # não precisar reescrever o compose quando o código chegar.
+  #
+  # Autenticação: NÃO há Authentik neste compose. server-central é apenas
+  # mais um app registrado na instância central de Authentik do
+  # abs-3d-printer (authentik.abs.a3sitsolutions.com.br) — ver
+  # docs/architecture.md, "Decisão: autenticação em server-central —
+  # Authentik (OIDC) da instância central do abs-3d-printer".
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-ffcom}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ffcom_central}?sslmode=disable
+      # server-central e' Resource Server puro (valida Bearer JWT via
+      # issuer/JWKS) -- nao precisa de client_id/secret, so o issuer. Quem
+      # tem client_id (publico, PKCE) e' o `client`, que faz o login de
+      # verdade contra o Authentik.
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:?defina OIDC_ISSUER_URL no .env (https://authentik.abs.a3sitsolutions.com.br/application/o/ffcom/)}
+    ports:
+      - "${SERVER_CENTRAL_PORT:-8081}:8080"
+    networks:
+      - ffcom-central
