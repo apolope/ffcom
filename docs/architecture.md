@@ -163,6 +163,24 @@ Não existe endpoint de cadastro separado: `internal/auth/middleware.go` (`auth.
 
 **Revisitar quando:** o Authentik desta instância passar a emitir `aud` granular por client (mesmo gatilho já registrado na decisão de validação de JWT em `server-central` — nesse ponto reativar `ClientID` faria sentido nos dois componentes).
 
+## Decisão: canal de texto em server-channel — gorilla/websocket, REST para histórico
+
+**Alternativas consideradas (biblioteca WebSocket):** `gorilla/websocket`, `coder/websocket` (ex-`nhooyr.io/websocket`), `net/http` puro (sem lib, não cobre o handshake).
+
+**Decisão:** `github.com/gorilla/websocket`, com o padrão hub/client (goroutine `ReadPump`/`WritePump` por conexão, ping/pong a cada 54s, `send` bufferizado por client) descrito no próprio exemplo oficial da lib.
+
+**Razão:** é a biblioteca WebSocket mais madura e documentada do ecossistema Go, e o padrão hub/client do exemplo oficial resolve diretamente o requisito de fanout (uma mensagem nova precisa chegar a todos os membros conectados ao mesmo canal) sem reinventar controle de concorrência sobre `*websocket.Conn` (que não é seguro para escritas concorrentes).
+
+**Split REST/WebSocket:** já estava definido em "Decisão: protocolo entre client, server-central e server-channel" (REST para CRUD/stateless, WebSocket para tempo real). Aplicado concretamente: `GET /api/channels/{id}/messages` (REST, paginação por `before`/`limit`, keyset em `created_at`) devolve histórico; `GET /api/channels/{id}/ws` (WebSocket) recebe frames `message.create` do client e distribui `message.created` (broadcast, inclusive para o autor, para confirmar id/timestamp atribuídos pelo servidor) via `internal/realtime.Hub`, um hub por canal mantido em memória pelo processo de `server-channel`. Escopo desta decisão é só canal de texto (`ThreadID` sempre nulo); posts de thread de forum ficam para o TODO separado "Canal forum: threads/posts".
+
+**Formato de frame:** envelope JSON `{"type": "...", ...}`; hoje só `message.create` (client → servidor), `message.created` e `error` (servidor → client). Mensagem vazia ou maior que 4000 caracteres é rejeitada com `error` antes de tocar o Postgres.
+
+**Autenticação no handshake de WebSocket:** a API `WebSocket` do navegador não permite setar headers customizados na abertura da conexão, então o client não consegue mandar `Authorization: Bearer <token>` como faz nas chamadas REST (`fetch`). `internal/auth.Middleware` (compartilhado entre REST e WebSocket) agora aceita o token por dois caminhos: header `Authorization` (rotas REST) ou subprotocolo `Sec-WebSocket-Protocol: access_token, <token>` (rota de WebSocket, setado via `new WebSocket(url, ["access_token", token])` no client), que é a forma padrão de carregar credenciais num handshake de WS sem colocar o token na URL/query string (evita vazamento em access log/histórico/referrer, relevante já que TLS obrigatório ainda é TODO em aberto). O `Upgrader` de `internal/httpapi/channel_ws.go` declara `Subprotocols: []string{"access_token"}` para aceitar e ecoar esse subprotocolo no handshake.
+
+**Política de origem do Upgrade:** mantido o `CheckOrigin` padrão do gorilla (exige `Origin` igual a `Host` quando o header vem presente). Isso é suficiente para localhost/dev com client e server-channel no mesmo host, mas **vai bloquear** o client (origem própria, ex. PWA em outro domínio, ou build Electron) assim que a integração real começar — nenhuma rota de `server-channel` libera CORS/Origin cruzado hoje, nem as REST existentes. Revisitar junto do TODO "Layout base" do client, quando o client de fato passar a chamar `server-channel` de uma origem diferente.
+
+**Revisitar quando:** o volume de conexões simultâneas por canal justificar mover o hub para fora do processo (ex. Redis pub/sub), caso `server-channel` algum dia precise rodar em múltiplas réplicas — hoje é um único processo por comunidade, então hub em memória é suficiente.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

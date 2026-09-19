@@ -38,7 +38,7 @@ Todas as decisões abaixo foram tomadas — ver `docs/architecture.md` para o de
 
 - [x] Modelo de dados: categorias, canais (texto/voz/forum), mensagens, permissões/roles, convites
 - [ ] Integração com LiveKit: criar sala por canal de voz, emitir token de acesso, aplicar permissões
-- [ ] Canal de texto: envio/histórico de mensagens via WebSocket
+- [x] Canal de texto: envio/histórico de mensagens via WebSocket
 - [ ] Canal forum: threads/posts
 - [ ] Sistema de permissões/roles por servidor e por canal
 - [ ] Convites (geração e validação)

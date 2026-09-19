@@ -19,7 +19,7 @@ O "servidor" propriamente dito do FFCom: categorias, canais de texto/voz/forum. 
 - Convites.
 - Orquestração do LiveKit: criação de sala por canal de voz, emissão de token de acesso por permissão.
 
-Nenhum código ainda — ver [`../TODO.md`](../TODO.md), seção "server-channel".
+Ver [`../TODO.md`](../TODO.md), seção "server-channel", para o que falta. Implementado até aqui: modelo de dados completo, autenticação (validação local de JWT contra o Authentik central), `GET /api/me`, e canal de texto (`GET /api/channels/{id}/messages` para histórico REST paginado, `GET /api/channels/{id}/ws` para envio/recebimento em tempo real via WebSocket).
 
 ## Rodando via Docker Compose
 
