@@ -91,9 +91,12 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-ffcom}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ffcom_channel}?sslmode=disable
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:?defina OIDC_ISSUER_URL no .env (https://authentik.abs.a3sitsolutions.com.br/application/o/ffcom/)}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
-      LIVEKIT_URL: ws://livekit:7880
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      # Endereço público que o client usa para se conectar ao LiveKit
+      # diretamente (sinalização + mídia) — não passa pelo server-channel.
+      # Ver docs/architecture.md, "Decisão: integração de voz com LiveKit".
+      LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:?defina LIVEKIT_PUBLIC_URL no .env}
     ports:
       - "${SERVER_CHANNEL_PORT:-8080}:8080"
     networks:

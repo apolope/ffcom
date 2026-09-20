@@ -24,6 +24,22 @@ Outros pontos de referência no mesmo espaço: [Spacebar](https://github.com/spa
 
 **Revisitar quando:** se algum canal precisar de controle de mídia muito específico (ex. áudio espacial, mixagem custom) que o LiveKit não expõe.
 
+## Decisão: integração de voz com LiveKit — token assinado localmente, sem SDK oficial
+
+**Contexto:** implementar o item de TODO "Integração com LiveKit: criar sala por canal de voz, emitir token de acesso, aplicar permissões" em `server-channel`.
+
+**Alternativas consideradas:** usar `github.com/livekit/server-sdk-go` (SDK oficial, reexporta `github.com/livekit/protocol` para montar o `AccessToken`); assinar o JWT do access token diretamente com uma lib JWT genérica, sem depender do SDK; criar a sala explicitamente via `RoomServiceClient` (API HTTP do LiveKit) antes de devolver o token.
+
+**Decisão:**
+1. **Sem SDK oficial:** `github.com/livekit/protocol` (dependência do `server-sdk-go` só para montar um `AccessToken`) arrasta `pion/webrtc`, `redis` e `prometheus` de trânsito — peso incompatível com a decisão "server-channel é um binário Go único fácil de distribuir" (ver "Decisão: linguagem de server-central e server-channel — Go" abaixo). O formato do access token do LiveKit é um JWT HS256 documentado e estável, então `internal/livekit/token.go` assina com `github.com/golang-jwt/jwt/v5` (dependência já leve, sem transitivos pesados) em vez de importar o SDK inteiro.
+2. **Sala não é criada explicitamente:** `POST /api/channels/{id}/voice/token` não chama a API do LiveKit — o próprio LiveKit cria a sala (nome = id do canal de voz) implicitamente no primeiro participante que entrar com um token válido para aquele nome. Evita depender de `RoomServiceClient` (que teria trazido de volta o SDK pesado) só para um `CreateRoom` que o LiveKit já faz sozinho.
+3. **Permissões:** como o sistema de permissões/roles do FFCom (TODO.md, "Sistema de permissões/roles por servidor e por canal") ainda não existe, todo membro autenticado deste `server-channel` recebe o mesmo grant (`roomJoin`, `canPublish`, `canSubscribe`, `canPublishData`) para qualquer canal de voz — o único controle de acesso hoje é "é membro deste server-channel" (via `auth.Middleware`), o mesmo nível que já vale para canais de texto.
+4. **Descoberta do endereço do LiveKit pelo client:** a conexão de voz (sinalização + mídia) vai direto do client para o LiveKit, sem passar pelo `server-channel` — então o client precisa saber o endereço público do LiveKit, que pode ser diferente do endereço do próprio `server-channel` (porta/subdomínio dedicados). `POST /api/channels/{id}/voice/token` devolve `{ token, roomName, url }`, onde `url` vem de uma nova variável `LIVEKIT_PUBLIC_URL` (ver `docker-compose.yml`/`.env.example`), obrigatória assim como `LIVEKIT_API_KEY`/`LIVEKIT_API_SECRET`.
+
+**Razão:** mantém a mesma filosofia de dependências enxutas já aplicada em `server-channel` (pgx direto em vez de ORM, sem framework HTTP) — trocar ~15 pacotes transitivos por uma lib JWT de escopo único para uma operação que é, na prática, "assinar um JSON".
+
+**Revisitar quando:** o sistema de permissões/roles for implementado (nesse ponto o grant do LiveKit passa a variar por role/canal, não mais fixo); ou se algum fluxo precisar de operações administrativas no LiveKit (kickar participante, listar quem está numa sala, forçar fechamento de sala) que exigem mesmo a API HTTP do LiveKit — nesse ponto pode valer a pena reavaliar o `server-sdk-go` só para esse uso específico, isolado do caminho de emissão de token.
+
 ## Decisão: linguagem de server-central e server-channel — Go
 
 **Alternativas consideradas:** Java/Spring Boot (stack já usado em outros projetos do autor), Node.js/TypeScript, Elixir/Phoenix, Go.

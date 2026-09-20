@@ -1,5 +1,6 @@
 import type { Channel, ChannelType } from '../types'
 import { TextChannelView } from './TextChannelView'
+import { VoiceChannelView } from './VoiceChannelView'
 import './MainPanel.css'
 
 const CHANNEL_ICON: Record<ChannelType, string> = {
@@ -31,7 +32,10 @@ export function MainPanel({ channel, serverBaseUrl }: MainPanelProps) {
         {channel?.type === 'text' && (
           <TextChannelView key={channel.id} serverBaseUrl={serverBaseUrl} channel={channel} />
         )}
-        {channel && channel.type !== 'text' && (
+        {channel?.type === 'voice' && (
+          <VoiceChannelView key={channel.id} serverBaseUrl={serverBaseUrl} channel={channel} />
+        )}
+        {channel && channel.type === 'forum' && (
           <p className="placeholder">Conteúdo de "{channel.name}" ainda não implementado.</p>
         )}
       </div>

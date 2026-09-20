@@ -17,7 +17,7 @@ import (
 // allowedOrigins vem de CORS_ALLOWED_ORIGINS (ver docs/architecture.md,
 // "Decisão: CORS em server-channel") — origens do client (web/PWA,
 // Electron) autorizadas a chamar esta instância de uma origem diferente.
-func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string) http.Handler {
+func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string, liveKitAPIKey, liveKitAPISecret, liveKitPublicURL string) http.Handler {
 	mux := http.NewServeMux()
 	hub := realtime.NewHub()
 
@@ -33,6 +33,7 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string
 	mux.Handle("GET /api/channels", protected(handleListChannels(db.Channels)))
 	mux.Handle("GET /api/channels/{id}/messages", protected(handleListMessages(db.Channels, db.Messages)))
 	mux.Handle("GET /api/channels/{id}/ws", protected(handleChannelWS(hub, db.Channels, db.Messages, upgrader)))
+	mux.Handle("POST /api/channels/{id}/voice/token", protected(handleVoiceToken(db.Channels, liveKitAPIKey, liveKitAPISecret, liveKitPublicURL)))
 
 	return withCORS(allowed, mux)
 }

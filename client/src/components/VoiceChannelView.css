@@ -1,0 +1,66 @@
+.voice-channel {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+}
+
+.voice-channel-prompt {
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--text);
+}
+
+.voice-channel-prompt button {
+  font: inherit;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+.voice-participant-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 16px;
+  margin: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.voice-participant {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-h);
+}
+
+.voice-mic-icon.muted {
+  opacity: 0.5;
+}
+
+.voice-controls {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+  padding: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.voice-controls button {
+  font: inherit;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-h);
+  cursor: pointer;
+}

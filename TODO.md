@@ -37,7 +37,7 @@ Todas as decisões abaixo foram tomadas — ver `docs/architecture.md` para o de
 ## server-channel
 
 - [x] Modelo de dados: categorias, canais (texto/voz/forum), mensagens, permissões/roles, convites
-- [ ] Integração com LiveKit: criar sala por canal de voz, emitir token de acesso, aplicar permissões
+- [x] Integração com LiveKit: criar sala por canal de voz, emitir token de acesso (`POST /api/channels/{id}/voice/token`, sala criada implicitamente pelo LiveKit); "aplicar permissões" ainda é o mesmo nível de "é membro deste server-channel" — falta o sistema de permissões/roles abaixo para diferenciar por role/canal, ver `docs/architecture.md`
 - [x] Canal de texto: envio/histórico de mensagens via WebSocket
 - [x] CORS configurável (`CORS_ALLOWED_ORIGINS`) para o client chamar de outra origem (REST + WebSocket)
 - [ ] Canal forum: threads/posts
@@ -51,7 +51,7 @@ Todas as decisões abaixo foram tomadas — ver `docs/architecture.md` para o de
 - [x] Login OIDC (Authorization Code + PKCE, `oidc-client-ts`) contra o Authentik central — tela de login antes do shell principal
 - [x] Tela de adicionar servidor via IP/DNS (`client/src/components/AddServerDialog.tsx`, via API de `server-central`; ver `client/src/hooks/useKnownServers.ts`)
 - [x] API REST em `server-channel` para o client listar categorias/canais reais
-- [ ] Integração de voz/vídeo via `livekit-client`
+- [x] Integração de voz/vídeo via `livekit-client` (`client/src/components/VoiceChannelView.tsx` + `client/src/hooks/useVoiceChannel.ts`; vídeo em si — publicar câmera — ainda não tem controle na UI, só áudio)
 - [ ] Compartilhamento de tela
 - [x] Chat de texto em tempo real (histórico via REST + WebSocket, ver `client/src/hooks/useChannelChat.ts`)
 - [ ] Canal forum (UI de threads)

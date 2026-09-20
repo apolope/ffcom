@@ -123,6 +123,32 @@ export async function fetchChannelHistory(
   return body.messages.slice().reverse()
 }
 
+export interface VoiceToken {
+  token: string
+  roomName: string
+  // Endereço público do LiveKit desta instância de server-channel — pode
+  // ser diferente de baseUrl (ver docs/architecture.md, "Decisão:
+  // integração de voz com LiveKit"), por isso vem sempre do servidor em vez
+  // de ser derivado no client.
+  url: string
+}
+
+// POST /api/channels/{id}/voice/token — pede um access token de LiveKit
+// novo a cada tentativa de entrar num canal de voz (ver
+// hooks/useVoiceChannel.ts). Não há cache: o token tem TTL curto e o custo
+// de pedir de novo é uma requisição HTTP local ao server-channel.
+export async function fetchVoiceToken(
+  baseUrl: string,
+  channelId: string,
+  accessToken: string,
+): Promise<VoiceToken> {
+  const res = await fetch(`${baseUrl}/api/channels/${channelId}/voice/token`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  return parseJsonOrThrow<VoiceToken>(res)
+}
+
 function toWebSocketUrl(baseUrl: string, channelId: string): string {
   const url = new URL(`${baseUrl}/api/channels/${channelId}/ws`)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
