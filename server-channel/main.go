@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
 	"a3sitsolutions.com/ffcom/server-channel/internal/httpapi"
@@ -36,7 +37,7 @@ func main() {
 		log.Fatalf("server-channel: %v", err)
 	}
 
-	router := httpapi.NewRouter(verifier, db)
+	router := httpapi.NewRouter(verifier, db, parseAllowedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS")))
 
 	log.Printf("server-channel: ouvindo em :%s (OIDC issuer: %s)", port, issuerURL)
 	if err := http.ListenAndServe(":"+port, router); err != nil {
@@ -50,4 +51,23 @@ func requireEnv(name string) string {
 		log.Fatalf("server-channel: variável de ambiente %s não definida", name)
 	}
 	return value
+}
+
+// parseAllowedOrigins lê CORS_ALLOWED_ORIGINS (lista separada por vírgula,
+// ex.: "http://localhost:5173,https://chat.minhacomunidade.com"). Vazio
+// significa nenhuma origem cruzada liberada — mantém o comportamento restrito
+// anterior por padrão (ver docs/architecture.md, "Decisão: CORS em
+// server-channel").
+func parseAllowedOrigins(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	var origins []string
+	for _, o := range strings.Split(raw, ",") {
+		o = strings.TrimSpace(o)
+		if o != "" {
+			origins = append(origins, o)
+		}
+	}
+	return origins
 }

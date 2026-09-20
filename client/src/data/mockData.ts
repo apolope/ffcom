@@ -3,8 +3,8 @@ import type { KnownServer, ServerDetail } from '../types'
 // Dados estáticos de exemplo até a API de server-central (diretório de
 // servidores) e server-channel (categorias/canais/membros) serem integradas.
 export const mockServers: KnownServer[] = [
-  { id: 'srv-1', name: 'A3S Community', initials: 'A3' },
-  { id: 'srv-2', name: 'Retro Games', initials: 'RG' },
+  { id: 'srv-1', name: 'A3S Community', initials: 'A3', baseUrl: 'http://localhost:8080' },
+  { id: 'srv-2', name: 'Retro Games', initials: 'RG', baseUrl: 'http://localhost:8080' },
 ]
 
 export const mockServerDetails: Record<string, ServerDetail> = {

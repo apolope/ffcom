@@ -13,14 +13,24 @@ import (
 // O realtime.Hub de canais de texto vive pelo tempo de vida do processo,
 // compartilhado entre a rota de WebSocket e (futuramente) qualquer outro
 // ponto que precise fazer broadcast para clients conectados.
-func NewRouter(verifier *auth.Verifier, db *store.Store) http.Handler {
+//
+// allowedOrigins vem de CORS_ALLOWED_ORIGINS (ver docs/architecture.md,
+// "Decisão: CORS em server-channel") — origens do client (web/PWA,
+// Electron) autorizadas a chamar esta instância de uma origem diferente.
+func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string) http.Handler {
 	mux := http.NewServeMux()
 	hub := realtime.NewHub()
+
+	allowed := make(map[string]bool, len(allowedOrigins))
+	for _, origin := range allowedOrigins {
+		allowed[origin] = true
+	}
+	upgrader := newUpgrader(allowed)
 
 	protected := auth.Middleware(verifier, db.Members)
 	mux.Handle("GET /api/me", protected(handleMe()))
 	mux.Handle("GET /api/channels/{id}/messages", protected(handleListMessages(db.Channels, db.Messages)))
-	mux.Handle("GET /api/channels/{id}/ws", protected(handleChannelWS(hub, db.Channels, db.Messages)))
+	mux.Handle("GET /api/channels/{id}/ws", protected(handleChannelWS(hub, db.Channels, db.Messages, upgrader)))
 
-	return mux
+	return withCORS(allowed, mux)
 }

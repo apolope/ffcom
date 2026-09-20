@@ -3,10 +3,13 @@ import { ServerRail } from './components/ServerRail'
 import { ChannelSidebar } from './components/ChannelSidebar'
 import { MainPanel } from './components/MainPanel'
 import { MemberList } from './components/MemberList'
+import { LoginScreen } from './components/LoginScreen'
+import { useAuth } from './auth/AuthProvider'
 import { mockServerDetails, mockServers } from './data/mockData'
 import './App.css'
 
 function App() {
+  const { status } = useAuth()
   const [selectedServerId, setSelectedServerId] = useState(mockServers[0].id)
 
   const server = mockServers.find((s) => s.id === selectedServerId)!
@@ -28,6 +31,14 @@ function App() {
     setSelectedChannelId(mockServerDetails[serverId].categories[0]?.channels[0]?.id)
   }
 
+  if (status === 'loading') {
+    return null
+  }
+
+  if (status === 'signed-out') {
+    return <LoginScreen />
+  }
+
   return (
     <div className="app-shell">
       <ServerRail
@@ -41,7 +52,7 @@ function App() {
         selectedChannelId={selectedChannelId}
         onSelectChannel={setSelectedChannelId}
       />
-      <MainPanel channel={channel} />
+      <MainPanel channel={channel} serverBaseUrl={server.baseUrl} />
       <MemberList members={detail.members} />
     </div>
   )

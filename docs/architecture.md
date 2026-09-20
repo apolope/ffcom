@@ -77,7 +77,7 @@ Outros pontos de referência no mesmo espaço: [Spacebar](https://github.com/spa
 - `server-central` é **Resource Server puro**: só valida Bearer JWT via `issuer`/JWKS (`OIDC_ISSUER_URL` apontando para `https://authentik.abs.a3sitsolutions.com.br/application/o/ffcom/`), sem `client_id`/`client_secret` próprio.
 - Quem faz o login de verdade (Authorization Code + PKCE, client público, sem secret) é o `client` (SPA React/Electron), contra a mesma instância central — mesmo padrão usado pelas outras SPAs que reusam esse Authentik (`abs3d-academy`, `a3s-ops-portal`, `hms-financeiro`).
 - O app "ffcom" (grupo + provider + application) precisa ser cadastrado via blueprint declarativo no repositório `abs-3d-printer` (`infra/authentik/blueprints/`), não pela UI — seguindo o passo a passo do procedimento citado acima. Isso ainda está pendente (ver TODO.md); os `redirect_uris` de produção dependem do domínio final do `client` web, ainda não decidido.
-- CORS: o Authentik dessa instância não libera `Access-Control-Allow-Origin` automaticamente — a origem do `client` precisa ser adicionada manualmente na allowlist do proxy reverso (NPM) na frente do Authentik antes do login funcionar no navegador.
+- CORS: o Authentik dessa instância não libera `Access-Control-Allow-Origin` automaticamente — a origem do `client` precisa ser adicionada manualmente na allowlist do proxy reverso (NPM) na frente do Authentik antes do login funcionar no navegador. **Feito em 2026-09-20 para `http://localhost:5173`** (origem de dev do `client`) — ver `D:\Dev\a3s-network\docs\services\nginx-proxy-manager.md` para o procedimento e o registro da mudança (repo/host fora do `ffcom`). Precisa ser revisto/trocado quando o domínio de produção do `client` for decidido (mesmo gatilho do ajuste de `redirect_uris` — ver TODO.md).
 
 **Implicação de deploy:** o Docker Compose de referência de `server-central` só precisa do app Go e do Postgres — nenhum serviço de Authentik/Redis local.
 
@@ -180,6 +180,32 @@ Não existe endpoint de cadastro separado: `internal/auth/middleware.go` (`auth.
 **Política de origem do Upgrade:** mantido o `CheckOrigin` padrão do gorilla (exige `Origin` igual a `Host` quando o header vem presente). Isso é suficiente para localhost/dev com client e server-channel no mesmo host, mas **vai bloquear** o client (origem própria, ex. PWA em outro domínio, ou build Electron) assim que a integração real começar — nenhuma rota de `server-channel` libera CORS/Origin cruzado hoje, nem as REST existentes. Revisitar junto do TODO "Layout base" do client, quando o client de fato passar a chamar `server-channel` de uma origem diferente.
 
 **Revisitar quando:** o volume de conexões simultâneas por canal justificar mover o hub para fora do processo (ex. Redis pub/sub), caso `server-channel` algum dia precise rodar em múltiplas réplicas — hoje é um único processo por comunidade, então hub em memória é suficiente.
+
+## Decisão: login OIDC no client — `oidc-client-ts` direto, sem framework de auth adicional
+
+**Alternativas consideradas:** `react-oidc-context` (wrapper de contexto React sobre `oidc-client-ts`), `@axa-fr/react-oidc`, `oidc-client-ts` puro com um `AuthProvider` próprio.
+
+**Decisão:** `oidc-client-ts` puro (`UserManager`), envolvido por um `AuthProvider`/`useAuth` próprios em `client/src/auth/`, sem lib de wrapper React adicional.
+
+**Razão:** o app já não usa nenhuma lib de estado/roteamento (nem `react-router`); adicionar `react-oidc-context` só para reexpor o mesmo `UserManager` via um Context um pouco diferente do que escrever esse Context à mão (~60 linhas) não paga a dependência extra. `oidc-client-ts` é a lib de referência do ecossistema (mesma base usada por `react-oidc-context`/`@axa-fr/react-oidc`), com `WebStorageStateStore` para persistir sessão em `localStorage`.
+
+**Fluxo implementado:** Authorization Code + PKCE, client público `ffcom` (mesmo cadastrado em `abs-3d-printer/infra/authentik/blueprints/providers-ffcom.yaml`), `redirect_uri` fixo em `${origin}/auth/callback` (hoje só `http://localhost:5173/auth/callback` está registrado — ver TODO.md sobre o ajuste de `redirect_uris` de produção). `client/src/auth/AuthProvider.tsx` detecta `pathname === '/auth/callback'` no mount, chama `signinRedirectCallback()` e limpa a URL; fora do callback, tenta restaurar sessão existente via `getUser()`. Um `useRef` evita processar o callback duas vezes sob o double-invoke de efeitos do `StrictMode` em dev (o `code` do Authorization Code é de uso único).
+
+**Sem renovação silenciosa automática (`automaticSilentRenew: false`):** exigiria um segundo `redirect_uri` (iframe de silent renew) cadastrado no blueprint do Authentik, que hoje só tem o callback principal. Quando o access token expira, o usuário loga de novo — aceitável nesta fase.
+
+**Revisitar quando:** o app ganhar roteamento real (`react-router` ou similar) — nesse ponto vale avaliar se `react-oidc-context` (que já integra bem com rotas protegidas) passa a valer a pena. Renovação silenciosa via refresh token pode ser revisitada junto do ajuste de `redirect_uris` de produção.
+
+## Decisão: CORS em server-channel — origens liberadas via `CORS_ALLOWED_ORIGINS`
+
+**Contexto:** já estava registrado como limitação conhecida na decisão de canal de texto acima ("vai bloquear o client... nenhuma rota de server-channel libera CORS/Origin cruzado hoje") — o gatilho previsto ali ("quando o client de fato passar a chamar server-channel de uma origem diferente") aconteceu ao implementar o chat de texto real no client (`http://localhost:5173` chamando `server-channel` em `http://localhost:8080`).
+
+**Alternativas consideradas:** liberar CORS para qualquer origem (`*`), lista fixa hardcoded no binário, lista configurável via variável de ambiente.
+
+**Decisão:** variável de ambiente `CORS_ALLOWED_ORIGINS` (lista separada por vírgula), vazia por padrão (nenhuma origem cruzada liberada — mantém o comportamento restrito anterior). `internal/httpapi/cors.go` (`withCORS`, aplicado a todo o mux) responde o preflight `OPTIONS` e ecoa `Access-Control-Allow-Origin` só para origens na lista; `internal/httpapi/channel_ws.go` (`newUpgrader`) aplica a mesma lista ao `CheckOrigin` do upgrader de WebSocket, mantendo como fallback o comportamento padrão do gorilla (sem header `Origin`, ou `Origin` igual a `Host`, sempre passa).
+
+**Razão:** `*` abriria a API para qualquer site read/write com o token de um usuário logado em outra aba — inaceitável já que a API aceita Bearer token. Hardcoded no binário exigiria rebuild por self-hoster toda vez que o domínio do client mudar; variável de ambiente segue a mesma filosofia já registrada na decisão de config via `.env` (self-hoster leigo edita um arquivo, não recompila).
+
+**Revisitar quando:** o domínio de produção do client (web/PWA) e o esquema de callback do Electron empacotado forem decididos (mesmo gatilho do ajuste de `redirect_uris` do Authentik) — nesse ponto o `CORS_ALLOWED_ORIGINS` de produção precisa incluir esse domínio.
 
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 

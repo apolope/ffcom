@@ -39,6 +39,7 @@ Todas as decisões abaixo foram tomadas — ver `docs/architecture.md` para o de
 - [x] Modelo de dados: categorias, canais (texto/voz/forum), mensagens, permissões/roles, convites
 - [ ] Integração com LiveKit: criar sala por canal de voz, emitir token de acesso, aplicar permissões
 - [x] Canal de texto: envio/histórico de mensagens via WebSocket
+- [x] CORS configurável (`CORS_ALLOWED_ORIGINS`) para o client chamar de outra origem (REST + WebSocket)
 - [ ] Canal forum: threads/posts
 - [ ] Sistema de permissões/roles por servidor e por canal
 - [ ] Convites (geração e validação)
@@ -47,10 +48,12 @@ Todas as decisões abaixo foram tomadas — ver `docs/architecture.md` para o de
 ## client
 
 - [x] Layout base: rail de servidores → categorias → canais → lista de membros (estilo Discord)
-- [ ] Tela de adicionar servidor via IP/DNS
+- [x] Login OIDC (Authorization Code + PKCE, `oidc-client-ts`) contra o Authentik central — tela de login antes do shell principal
+- [ ] Tela de adicionar servidor via IP/DNS (hoje `KnownServer.baseUrl` é fixo em `mockData.ts`)
+- [ ] API REST em `server-channel` para o client listar categorias/canais reais (hoje a navegação de canais continua com dados mock; só o conteúdo de canal de texto — histórico + WebSocket — já é real)
 - [ ] Integração de voz/vídeo via `livekit-client`
 - [ ] Compartilhamento de tela
-- [ ] Chat de texto em tempo real
+- [x] Chat de texto em tempo real (histórico via REST + WebSocket, ver `client/src/hooks/useChannelChat.ts`)
 - [ ] Canal forum (UI de threads)
 - [ ] Lista de amigos + presença (via `server-central`)
 - [ ] DMs (depende da decisão de design acima)

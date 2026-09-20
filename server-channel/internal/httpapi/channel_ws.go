@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/gorilla/websocket"
@@ -17,15 +18,33 @@ import (
 
 const maxMessageContentLength = 4000
 
-// Subprotocols precisa incluir "access_token" (ver
-// internal/auth.wsAuthSubprotocol) para o gorilla aceitar e ecoar de volta
-// o subprotocolo que o client usa para carregar o token no handshake, já
-// que a API WebSocket do navegador não permite setar o header
-// Authorization diretamente.
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	Subprotocols:    []string{"access_token"},
+// newUpgrader monta o upgrader do WebSocket de canal de texto. Subprotocols
+// precisa incluir "access_token" (ver internal/auth.wsAuthSubprotocol) para
+// o gorilla aceitar e ecoar de volta o subprotocolo que o client usa para
+// carregar o token no handshake, já que a API WebSocket do navegador não
+// permite setar o header Authorization diretamente.
+//
+// CheckOrigin reproduz o fallback padrão do gorilla (sem header Origin, ou
+// Origin igual ao Host, sempre passa) e adicionalmente aceita qualquer
+// origem em allowedOrigins (mesma lista usada pelo CORS REST em cors.go) —
+// ver docs/architecture.md, "Decisão: CORS em server-channel".
+func newUpgrader(allowedOrigins map[string]bool) websocket.Upgrader {
+	return websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		Subprotocols:    []string{"access_token"},
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				return true
+			}
+			if allowedOrigins[origin] {
+				return true
+			}
+			u, err := url.Parse(origin)
+			return err == nil && u.Host == r.Host
+		},
+	}
 }
 
 // GET /api/channels/{id}/ws — WebSocket de um canal de texto. O client
@@ -34,7 +53,7 @@ var upgrader = websocket.Upgrader{
 // realtime.Hub para todos os clients conectados a este canal (broadcast,
 // inclusive para o autor, para confirmar id/timestamp atribuídos pelo
 // servidor).
-func handleChannelWS(hub *realtime.Hub, channels *store.ChannelStore, messages *store.MessageStore) http.Handler {
+func handleChannelWS(hub *realtime.Hub, channels *store.ChannelStore, messages *store.MessageStore, upgrader websocket.Upgrader) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		channelID := r.PathValue("id")
 

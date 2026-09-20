@@ -1,4 +1,5 @@
 import type { Channel, ChannelType } from '../types'
+import { TextChannelView } from './TextChannelView'
 import './MainPanel.css'
 
 const CHANNEL_ICON: Record<ChannelType, string> = {
@@ -9,9 +10,10 @@ const CHANNEL_ICON: Record<ChannelType, string> = {
 
 interface MainPanelProps {
   channel: Channel | undefined
+  serverBaseUrl: string
 }
 
-export function MainPanel({ channel }: MainPanelProps) {
+export function MainPanel({ channel, serverBaseUrl }: MainPanelProps) {
   return (
     <section className="main-panel">
       <header className="channel-header">
@@ -25,12 +27,12 @@ export function MainPanel({ channel }: MainPanelProps) {
         )}
       </header>
       <div className="channel-content">
-        {channel ? (
-          <p className="placeholder">
-            Conteúdo de "{channel.name}" ainda não implementado.
-          </p>
-        ) : (
-          <p className="placeholder">Selecione um canal para começar.</p>
+        {!channel && <p className="placeholder">Selecione um canal para começar.</p>}
+        {channel?.type === 'text' && (
+          <TextChannelView key={channel.id} serverBaseUrl={serverBaseUrl} channel={channel} />
+        )}
+        {channel && channel.type !== 'text' && (
+          <p className="placeholder">Conteúdo de "{channel.name}" ainda não implementado.</p>
         )}
       </div>
     </section>
