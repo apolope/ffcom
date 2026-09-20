@@ -3,19 +3,22 @@ import './FriendsView.css'
 
 interface FriendsViewProps {
   friends: Friend[]
+  selectedFriendId: string | undefined
+  onSelectFriend: (accountId: string) => void
   onAddFriend: () => void
 }
 
 // Lista de amigos + presença (via server-central, ver hooks/useFriends.ts).
-// Substitui o painel de canal quando o botão "Amigos" do ServerRail está
-// selecionado — ainda não há DMs (ver TODO.md), então esta view só mostra a
-// lista, sem abrir conversa ao clicar num amigo.
-export function FriendsView({ friends, onAddFriend }: FriendsViewProps) {
+// Ocupa a coluna de "canais" quando o botão "Amigos" do ServerRail está
+// selecionado; clicar num amigo abre a conversa de DM correspondente (ver
+// components/DirectMessageView.tsx e docs/architecture.md, "Decisão: modelo
+// de DMs").
+export function FriendsView({ friends, selectedFriendId, onSelectFriend, onAddFriend }: FriendsViewProps) {
   const online = friends.filter((f) => f.online)
   const offline = friends.filter((f) => !f.online)
 
   return (
-    <div className="friends-view">
+    <nav className="friends-view" aria-label="Amigos">
       <header className="friends-header">
         <h1>Amigos</h1>
         <button type="button" onClick={onAddFriend}>
@@ -33,7 +36,12 @@ export function FriendsView({ friends, onAddFriend }: FriendsViewProps) {
             <div className="friends-group">
               <div className="friends-group-name">Online — {online.length}</div>
               {online.map((friend) => (
-                <FriendRow key={friend.accountId} friend={friend} />
+                <FriendRow
+                  key={friend.accountId}
+                  friend={friend}
+                  active={friend.accountId === selectedFriendId}
+                  onSelect={onSelectFriend}
+                />
               ))}
             </div>
           )}
@@ -41,21 +49,46 @@ export function FriendsView({ friends, onAddFriend }: FriendsViewProps) {
             <div className="friends-group">
               <div className="friends-group-name">Offline — {offline.length}</div>
               {offline.map((friend) => (
-                <FriendRow key={friend.accountId} friend={friend} />
+                <FriendRow
+                  key={friend.accountId}
+                  friend={friend}
+                  active={friend.accountId === selectedFriendId}
+                  onSelect={onSelectFriend}
+                />
               ))}
             </div>
           )}
         </div>
       )}
-    </div>
+    </nav>
   )
 }
 
-function FriendRow({ friend }: { friend: Friend }) {
+function FriendRow({
+  friend,
+  active,
+  onSelect,
+}: {
+  friend: Friend
+  active: boolean
+  onSelect: (accountId: string) => void
+}) {
   return (
-    <div className={friend.online ? 'friend-row' : 'friend-row offline'}>
+    <button
+      type="button"
+      className={
+        friend.online
+          ? active
+            ? 'friend-row active'
+            : 'friend-row'
+          : active
+            ? 'friend-row offline active'
+            : 'friend-row offline'
+      }
+      onClick={() => onSelect(friend.accountId)}
+    >
       <span className="friend-status" aria-hidden="true" />
       {friend.displayName}
-    </div>
+    </button>
   )
 }

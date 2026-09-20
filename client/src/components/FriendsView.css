@@ -1,8 +1,9 @@
 .friends-view {
-  flex: 1;
+  width: 240px;
+  flex: 0 0 240px;
   display: flex;
   flex-direction: column;
-  background: var(--bg);
+  background: var(--bg-secondary);
   overflow-y: auto;
 }
 
@@ -10,18 +11,26 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 24px;
+  gap: 8px;
+  padding: 16px;
   border-bottom: 1px solid var(--border);
+}
+
+.friends-header h1 {
+  font-size: 16px;
+  margin: 0;
 }
 
 .friends-header button {
   font: inherit;
-  padding: 8px 16px;
+  font-size: 13px;
+  padding: 6px 10px;
   border: none;
   border-radius: 4px;
   background: var(--accent);
   color: #fff;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .friends-empty {
@@ -35,7 +44,7 @@
 }
 
 .friends-list {
-  padding: 16px 24px;
+  padding: 12px 8px;
 }
 
 .friends-group {
@@ -52,12 +61,26 @@
 }
 
 .friend-row {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 8px;
+  padding: 8px;
+  border: none;
   border-radius: 4px;
+  background: transparent;
   color: var(--text-h);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.friend-row:hover {
+  background: var(--bg-tertiary);
+}
+
+.friend-row.active {
+  background: var(--bg-tertiary);
 }
 
 .friend-row.offline {

@@ -265,6 +265,20 @@ Não existe endpoint de cadastro separado: `internal/auth/middleware.go` (`auth.
 
 **Revisitar quando:** um fluxo de pedido de amizade explícito (`Request`/`SetStatus`, hoje sem endpoint) entrar em uso — nesse ponto vale decidir se uma amizade `pending` já permite DM ou só `accepted` (hoje a resposta é só `accepted`, já que é o único status alcançável na prática via convite).
 
+## Decisão: UI de DMs no client — um listener extra no mesmo WebSocket de `useFriends`, não uma segunda conexão
+
+**Contexto:** implementar a UI de DMs no client (TODO.md, "DMs (API de `server-central` pronta... falta UI no client)") esbarrou numa consequência não detalhada da decisão de backend "DMs entregues no mesmo WebSocket de presença": `hooks/useFriends.ts` já abre e possui a única conexão a `GET /api/presence/ws` da sessão. Uma UI de DM ingênua abriria sua própria conexão a essa mesma rota, duplicando handshake/heartbeat e contando como uma segunda aba para efeito de presença — o que o backend explicitamente evita fazer no seu próprio design.
+
+**Alternativas consideradas:** cada componente de DM abre sua própria `WebSocket` para `/api/presence/ws` (duplica conexão); mover a conexão para um React Context/Provider dedicado; `useFriends` expõe a instância de `WebSocket` já aberta, e quem mais precisar dela (`hooks/useDirectMessages.ts`) usa `addEventListener('message', ...)` na mesma instância em vez de `onmessage` (que só aceita um handler por vez).
+
+**Decisão:** `useFriends` passou a guardar o socket em estado (`useState<WebSocket | null>`) e devolvê-lo no retorno do hook. `useDirectMessages(accessToken, peerId, socket)` recebe essa mesma instância como parâmetro — não abre conexão própria — e anexa um listener via `addEventListener('message', ...)` (em vez de sobrescrever `.onmessage`, que já está em uso por `useFriends` para `presence.update`); os dois listeners coexistem porque a API `WebSocket` do navegador suporta múltiplos listeners de `message` simultâneos. `App.tsx` é o único ponto que chama `useFriends` e repassa `socket` para `DirectMessageView`.
+
+**Razão:** evita introduzir Context/Provider só para compartilhar uma referência (o projeto não usa nenhuma lib de estado/roteamento, mesmo argumento já registrado na decisão de login OIDC) — `App.tsx` já é a raiz única onde `useFriends` é chamado, então passar o socket como prop resolve o compartilhamento sem infraestrutura nova. Reaproveita exatamente o mesmo comportamento que o backend já decidiu ter (uma conexão por sessão faz dupla função).
+
+**Implicação:** `serverCentralApi.ts` unificou `decodePresenceFrame` (só `presence.update`) em `decodePresenceSocketFrame`, que decodifica os três tipos de frame que trafegam nessa conexão (`presence.update`, `dm.created`, `error`) — qualquer novo tipo de frame que passe a usar essa conexão no futuro deve ser adicionado ali, não num decoder paralelo.
+
+**Revisitar quando:** o client ganhar mais de um consumidor do socket de presença/DM que precise também *enviar* frames concorrentemente (hoje só `useDirectMessages.sendMessage` escreve nele) — nesse ponto vale considerar um pequeno hook "dono" dedicado (`usePresenceSocket`) em vez de `useFriends` continuar acumulando essa responsabilidade.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

@@ -56,7 +56,7 @@ Todas as decisões abaixo foram tomadas — ver `docs/architecture.md` para o de
 - [x] Chat de texto em tempo real (histórico via REST + WebSocket, ver `client/src/hooks/useChannelChat.ts`)
 - [ ] Canal forum (UI de threads)
 - [x] Lista de amigos + presença (via `server-central`)
-- [ ] DMs (API de `server-central` pronta — `GET/POST` via WebSocket de presença e `GET /api/dms/{accountId}/messages`, ver `docs/architecture.md`; falta UI no client)
+- [x] DMs (API de `server-central` pronta — `GET/POST` via WebSocket de presença e `GET /api/dms/{accountId}/messages`, ver `docs/architecture.md`; UI no client via `client/src/components/DirectMessageView.tsx`)
 - [ ] Build Electron para Windows/macOS/Linux
 - [ ] Build web/PWA
 

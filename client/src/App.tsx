@@ -7,6 +7,7 @@ import { LoginScreen } from './components/LoginScreen'
 import { AddServerDialog } from './components/AddServerDialog'
 import { FriendsView } from './components/FriendsView'
 import { AddFriendDialog } from './components/AddFriendDialog'
+import { DirectMessageView } from './components/DirectMessageView'
 import { useAuth } from './auth/AuthProvider'
 import { useServerStructure } from './hooks/useServerStructure'
 import { useKnownServers } from './hooks/useKnownServers'
@@ -19,11 +20,14 @@ const NO_MEMBERS: Member[] = []
 function App() {
   const { status, accessToken } = useAuth()
   const { servers, addServer } = useKnownServers(accessToken ?? '')
-  const { friends, createInvite, redeemInvite } = useFriends(accessToken ?? '')
+  const { friends, createInvite, redeemInvite, socket: presenceSocket } = useFriends(accessToken ?? '')
   const [selectedServerId, setSelectedServerId] = useState<string>()
   const [showFriends, setShowFriends] = useState(false)
   const [showAddServer, setShowAddServer] = useState(false)
   const [showAddFriend, setShowAddFriend] = useState(false)
+  const [selectedFriendId, setSelectedFriendId] = useState<string>()
+
+  const selectedFriend = friends.find((f) => f.accountId === selectedFriendId)
 
   useEffect(() => {
     if (selectedServerId && servers.some((s) => s.id === selectedServerId)) return
@@ -74,7 +78,26 @@ function App() {
         onAddServer={() => setShowAddServer(true)}
       />
       {showFriends ? (
-        <FriendsView friends={friends} onAddFriend={() => setShowAddFriend(true)} />
+        <>
+          <FriendsView
+            friends={friends}
+            selectedFriendId={selectedFriendId}
+            onSelectFriend={setSelectedFriendId}
+            onAddFriend={() => setShowAddFriend(true)}
+          />
+          {selectedFriend ? (
+            <DirectMessageView
+              key={selectedFriend.accountId}
+              peer={selectedFriend}
+              accessToken={accessToken ?? ''}
+              socket={presenceSocket}
+            />
+          ) : (
+            <div className="empty-state">
+              <p>Selecione um amigo para conversar.</p>
+            </div>
+          )}
+        </>
       ) : server ? (
         <>
           <ChannelSidebar

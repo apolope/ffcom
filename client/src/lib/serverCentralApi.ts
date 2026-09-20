@@ -126,17 +126,51 @@ export function openPresenceSocket(accessToken: string): WebSocket {
   return new WebSocket(toPresenceWebSocketUrl(), ['access_token', accessToken])
 }
 
-interface PresenceUpdateFrame {
-  type: 'presence.update'
-  accountId: string
-  online: boolean
+// DMs (ver docs/architecture.md, "Decisão: DMs entregues no mesmo WebSocket
+// de presença"): mesma conexão de openPresenceSocket acima, sem socket
+// dedicado — o client anexa um listener extra a esse mesmo WebSocket (ver
+// hooks/useDirectMessages.ts).
+
+export interface RemoteDirectMessage {
+  id: string
+  senderId: string
+  recipientId: string
+  content: string
+  createdAt: string
+  editedAt?: string
 }
 
-export function decodePresenceFrame(raw: string): PresenceUpdateFrame | null {
+export async function fetchDirectMessages(
+  accessToken: string,
+  otherAccountId: string,
+  limit = 50,
+): Promise<RemoteDirectMessage[]> {
+  const res = await fetch(
+    `${SERVER_CENTRAL_URL}/api/dms/${encodeURIComponent(otherAccountId)}/messages?limit=${limit}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  )
+  const body = await parseJsonOrThrow<{ messages: RemoteDirectMessage[] }>(res)
+  return body.messages.slice().reverse()
+}
+
+export function sendDirectMessageFrame(socket: WebSocket, recipientId: string, content: string): void {
+  socket.send(JSON.stringify({ type: 'dm.create', recipientId, content }))
+}
+
+type PresenceSocketFrame =
+  | { type: 'presence.update'; accountId: string; online: boolean }
+  | { type: 'dm.created'; message: RemoteDirectMessage }
+  | { type: 'error'; error: string }
+
+export function decodePresenceSocketFrame(raw: string): PresenceSocketFrame | null {
   try {
     const parsed = JSON.parse(raw) as { type?: string }
-    if (parsed.type === 'presence.update') {
-      return parsed as PresenceUpdateFrame
+    if (
+      parsed.type === 'presence.update' ||
+      parsed.type === 'dm.created' ||
+      parsed.type === 'error'
+    ) {
+      return parsed as PresenceSocketFrame
     }
     return null
   } catch {

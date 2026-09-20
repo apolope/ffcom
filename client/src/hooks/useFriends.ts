@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   createFriendInvite,
-  decodePresenceFrame,
+  decodePresenceSocketFrame,
   fetchFriends,
   fetchPresenceSnapshot,
   openPresenceSocket,
@@ -18,6 +18,11 @@ interface UseFriendsResult {
   error: string | undefined
   createInvite: () => Promise<string>
   redeemInvite: (code: string) => Promise<void>
+  // Conexão WebSocket de presença, exposta para hooks/useDirectMessages.ts
+  // anexar um listener extra nela (ver docs/architecture.md, "Decisão: DMs
+  // entregues no mesmo WebSocket de presença") em vez de abrir uma segunda
+  // conexão.
+  socket: WebSocket | null
 }
 
 function toFriend(remote: RemoteFriend, online: boolean): Friend {
@@ -38,6 +43,7 @@ export function useFriends(accessToken: string): UseFriendsResult {
   const [onlineIds, setOnlineIds] = useState<Set<string>>(new Set())
   const [status, setStatus] = useState<FriendsStatus>('loading')
   const [error, setError] = useState<string>()
+  const [socket, setSocket] = useState<WebSocket | null>(null)
 
   const load = useCallback(() => {
     setStatus('loading')
@@ -61,10 +67,11 @@ export function useFriends(accessToken: string): UseFriendsResult {
   useEffect(() => {
     if (!accessToken) return
 
-    const socket = openPresenceSocket(accessToken)
-    socket.onmessage = (event) => {
-      const frame = decodePresenceFrame(String(event.data))
-      if (!frame) return
+    const ws = openPresenceSocket(accessToken)
+    setSocket(ws)
+    ws.onmessage = (event) => {
+      const frame = decodePresenceSocketFrame(String(event.data))
+      if (!frame || frame.type !== 'presence.update') return
       setOnlineIds((prev) => {
         const next = new Set(prev)
         if (frame.online) {
@@ -76,7 +83,10 @@ export function useFriends(accessToken: string): UseFriendsResult {
       })
     }
 
-    return () => socket.close()
+    return () => {
+      ws.close()
+      setSocket(null)
+    }
   }, [accessToken])
 
   const createInvite = useCallback(async () => {
@@ -94,5 +104,5 @@ export function useFriends(accessToken: string): UseFriendsResult {
 
   const friends = remoteFriends.map((f) => toFriend(f, onlineIds.has(f.accountId)))
 
-  return { friends, status, error, createInvite, redeemInvite }
+  return { friends, status, error, createInvite, redeemInvite, socket }
 }
