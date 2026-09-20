@@ -32,17 +32,30 @@ func (s *InviteStore) GetByCode(ctx context.Context, code string) (Invite, error
 	return s.scanOne(ctx, query, code)
 }
 
-// IncrementUses soma 1 ao contador de usos de um convite (ex.: ao aceitar o convite).
-func (s *InviteStore) IncrementUses(ctx context.Context, id string) (Invite, error) {
+// Redeem soma 1 ao contador de usos de um convite, de forma atômica: só
+// afeta uma linha que ainda não esteja expirada nem tenha atingido max_uses.
+// Devolve ErrConflict se outra requisição já tiver esgotado/expirado o
+// convite entre o GetByCode do chamador e esta chamada.
+func (s *InviteStore) Redeem(ctx context.Context, id string) (Invite, error) {
 	const query = `
 		UPDATE invites SET uses = uses + 1
 		WHERE id = $1
+			AND (expires_at IS NULL OR expires_at > now())
+			AND (max_uses IS NULL OR uses < max_uses)
 		RETURNING id, code, created_by_member_id, max_uses, uses, expires_at, created_at
 	`
-	return s.scanOne(ctx, query, id)
+	invite, err := s.scanOne(ctx, query, id)
+	if errors.Is(err, ErrNotFound) {
+		return Invite{}, ErrConflict
+	}
+	return invite, err
 }
 
-// Delete revoga um convite.
+// Delete revoga um convite. Autorização (ManageInvites, ver
+// internal/permissions) é checada por quem chama, não aqui — antes de
+// existir o sistema de permissões, esta query exigia ser o criador do
+// convite; agora qualquer membro com ManageInvites pode revogar qualquer
+// convite, mesmo comportamento do MANAGE_GUILD do Discord sobre convites.
 func (s *InviteStore) Delete(ctx context.Context, id string) error {
 	const query = `DELETE FROM invites WHERE id = $1`
 	tag, err := s.pool.Exec(ctx, query, id)

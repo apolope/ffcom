@@ -24,10 +24,22 @@ export interface RemoteChannel {
 export interface ChannelMessage {
   id: string
   channelId: string
+  // threadId vem preenchido só quando a mensagem é um post dentro de uma
+  // thread de canal forum (ver docs/architecture.md, "Canal forum:
+  // threads/posts"); nulo para mensagem de canal de texto.
+  threadId?: string
   authorMemberId: string
   content: string
   createdAt: string
   editedAt?: string
+}
+
+export interface RemoteThread {
+  id: string
+  channelId: string
+  title: string
+  authorMemberId: string
+  createdAt: string
 }
 
 export interface Me {
@@ -35,6 +47,13 @@ export interface Me {
   oidcSubject: string
   nickname?: string
   joinedAt: string
+  isOwner?: boolean
+  // Permissão base efetiva (roles + role default), sem overwrites de canal —
+  // ver docs/architecture.md, "Sistema de permissões/roles por servidor e
+  // por canal". Usada só para decidir se mostra UI de administração; a
+  // permissão de fato é sempre reforçada pelo servidor em cada rota.
+  permissions: number
+  roleIds?: string[]
 }
 
 async function parseJsonOrThrow<T>(res: Response): Promise<T> {
@@ -50,6 +69,58 @@ export async function fetchMe(baseUrl: string, accessToken: string): Promise<Me>
     headers: { Authorization: `Bearer ${accessToken}` },
   })
   return parseJsonOrThrow<Me>(res)
+}
+
+export interface JoinResult {
+  memberId: string
+  founder?: boolean
+}
+
+// POST /api/join — precisa ser chamado antes de qualquer outra rota deste
+// server-channel (ver docs/architecture.md, "Convites obrigatórios para
+// entrar em server-channel"). Sem `code`, só funciona se ninguém ainda for
+// membro (bootstrap do self-host) ou se o "sub" já tiver entrado antes.
+export async function joinServer(
+  baseUrl: string,
+  accessToken: string,
+  code?: string,
+): Promise<JoinResult> {
+  const res = await fetch(`${baseUrl}/api/join`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(code ? { code } : {}),
+  })
+  return parseJsonOrThrow<JoinResult>(res)
+}
+
+export interface RemoteInvite {
+  id: string
+  code: string
+  createdByMemberId: string
+  maxUses?: number
+  uses: number
+  expiresAt?: string
+  createdAt: string
+}
+
+// POST /api/invites — gera um código de convite para este server-channel
+// (qualquer membro pode gerar, ver docs/architecture.md).
+export async function createServerInvite(
+  baseUrl: string,
+  accessToken: string,
+): Promise<RemoteInvite> {
+  const res = await fetch(`${baseUrl}/api/invites`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({}),
+  })
+  return parseJsonOrThrow<RemoteInvite>(res)
 }
 
 export async function fetchCategories(
@@ -72,6 +143,92 @@ export async function fetchChannels(
   })
   const body = await parseJsonOrThrow<{ channels: RemoteChannel[] }>(res)
   return body.channels
+}
+
+export interface RemoteMember {
+  id: string
+  nickname?: string
+  joinedAt: string
+  isOwner?: boolean
+  roleIds?: string[]
+}
+
+// GET /api/members — lista os membros deste server-channel com suas roles
+// atribuídas (ver docs/architecture.md, "Sistema de permissões/roles por
+// servidor e por canal").
+export async function fetchMembers(baseUrl: string, accessToken: string): Promise<RemoteMember[]> {
+  const res = await fetch(`${baseUrl}/api/members`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  const body = await parseJsonOrThrow<{ members: RemoteMember[] }>(res)
+  return body.members
+}
+
+export interface RemoteRole {
+  id: string
+  name: string
+  color?: string
+  permissions: number
+  position: number
+  isDefault: boolean
+  createdAt: string
+}
+
+export async function fetchRoles(baseUrl: string, accessToken: string): Promise<RemoteRole[]> {
+  const res = await fetch(`${baseUrl}/api/roles`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  const body = await parseJsonOrThrow<{ roles: RemoteRole[] }>(res)
+  return body.roles
+}
+
+async function postJsonOrThrow<T>(
+  baseUrl: string,
+  path: string,
+  accessToken: string,
+  method: string,
+  body?: unknown,
+): Promise<T> {
+  const res = await fetch(`${baseUrl}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (res.status === 204) return undefined as T
+  return parseJsonOrThrow<T>(res)
+}
+
+export function createRole(
+  baseUrl: string,
+  accessToken: string,
+  role: { name: string; color?: string; permissions: number; position: number },
+): Promise<RemoteRole> {
+  return postJsonOrThrow(baseUrl, '/api/roles', accessToken, 'POST', role)
+}
+
+export function deleteRole(baseUrl: string, accessToken: string, roleId: string): Promise<void> {
+  return postJsonOrThrow(baseUrl, `/api/roles/${roleId}`, accessToken, 'DELETE')
+}
+
+export function assignRole(
+  baseUrl: string,
+  accessToken: string,
+  memberId: string,
+  roleId: string,
+): Promise<void> {
+  return postJsonOrThrow(baseUrl, `/api/members/${memberId}/roles/${roleId}`, accessToken, 'POST')
+}
+
+export function removeRole(
+  baseUrl: string,
+  accessToken: string,
+  memberId: string,
+  roleId: string,
+): Promise<void> {
+  return postJsonOrThrow(baseUrl, `/api/members/${memberId}/roles/${roleId}`, accessToken, 'DELETE')
 }
 
 const UNCATEGORIZED_ID = 'uncategorized'
@@ -117,6 +274,36 @@ export async function fetchChannelHistory(
 ): Promise<ChannelMessage[]> {
   const res = await fetch(
     `${baseUrl}/api/channels/${channelId}/messages?limit=${limit}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  )
+  const body = await parseJsonOrThrow<{ messages: ChannelMessage[] }>(res)
+  return body.messages.slice().reverse()
+}
+
+// GET /api/channels/{id}/threads — lista as threads de um canal forum, mais
+// recentes primeiro (mesma ordem devolvida pelo servidor).
+export async function fetchForumThreads(
+  baseUrl: string,
+  channelId: string,
+  accessToken: string,
+): Promise<RemoteThread[]> {
+  const res = await fetch(`${baseUrl}/api/channels/${channelId}/threads`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  const body = await parseJsonOrThrow<{ threads: RemoteThread[] }>(res)
+  return body.threads
+}
+
+// GET /api/threads/{id}/messages — histórico de posts de uma thread, na
+// mesma ordem cronológica já usada por fetchChannelHistory.
+export async function fetchThreadMessages(
+  baseUrl: string,
+  threadId: string,
+  accessToken: string,
+  limit = 50,
+): Promise<ChannelMessage[]> {
+  const res = await fetch(
+    `${baseUrl}/api/threads/${threadId}/messages?limit=${limit}`,
     { headers: { Authorization: `Bearer ${accessToken}` } },
   )
   const body = await parseJsonOrThrow<{ messages: ChannelMessage[] }>(res)
@@ -170,8 +357,29 @@ export function sendCreateMessage(socket: WebSocket, content: string): void {
   socket.send(JSON.stringify({ type: 'message.create', content }))
 }
 
+// Frames de canal forum, mesma conexão de WebSocket do canal (ver
+// docs/architecture.md, "Canal forum: threads/posts").
+export function sendCreateThread(socket: WebSocket, title: string, content: string): void {
+  socket.send(JSON.stringify({ type: 'thread.create', title, content }))
+}
+
+export function sendCreatePost(socket: WebSocket, threadId: string, content: string): void {
+  socket.send(JSON.stringify({ type: 'post.create', threadId, content }))
+}
+
 interface MessageCreatedFrame {
   type: 'message.created'
+  message: ChannelMessage
+}
+
+interface ThreadCreatedFrame {
+  type: 'thread.created'
+  thread: RemoteThread
+  message: ChannelMessage
+}
+
+interface PostCreatedFrame {
+  type: 'post.created'
   message: ChannelMessage
 }
 
@@ -180,12 +388,23 @@ interface ErrorFrame {
   error: string
 }
 
-export type ChannelSocketFrame = MessageCreatedFrame | ErrorFrame
+export type ChannelSocketFrame =
+  | MessageCreatedFrame
+  | ThreadCreatedFrame
+  | PostCreatedFrame
+  | ErrorFrame
+
+const CHANNEL_SOCKET_FRAME_TYPES = new Set([
+  'message.created',
+  'thread.created',
+  'post.created',
+  'error',
+])
 
 export function decodeChannelSocketFrame(raw: string): ChannelSocketFrame | null {
   try {
     const parsed = JSON.parse(raw) as { type?: string }
-    if (parsed.type === 'message.created' || parsed.type === 'error') {
+    if (parsed.type && CHANNEL_SOCKET_FRAME_TYPES.has(parsed.type)) {
       return parsed as ChannelSocketFrame
     }
     return null

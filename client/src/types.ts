@@ -22,10 +22,24 @@ export interface Category {
   channels: Channel[]
 }
 
+// Membro de um server-channel (ver hooks/useServerMembers.ts). Não há
+// presença/online por membro de server-channel ainda (diferente da lista de
+// amigos, que vem de server-central com presença via WebSocket) — só voz
+// tem um conceito de "quem está no canal agora", ver VoiceChannelView.
 export interface Member {
   id: string
   nickname: string
-  online: boolean
+  isOwner: boolean
+  roleIds: string[]
+}
+
+export interface Role {
+  id: string
+  name: string
+  color?: string
+  permissions: number
+  position: number
+  isDefault: boolean
 }
 
 // Amigo (via server-central, ver hooks/useFriends.ts). displayName cai para

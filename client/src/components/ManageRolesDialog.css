@@ -1,0 +1,94 @@
+.manage-roles-card {
+  width: 520px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.manage-roles-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.manage-roles-section:first-of-type {
+  padding-top: 0;
+  border-top: none;
+}
+
+.manage-roles-section h3 {
+  margin: 0;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text);
+}
+
+.role-list,
+.member-role-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.role-list li,
+.member-role-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-h);
+}
+
+.role-list .hint {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.role-list button {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.create-role-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.permission-checkboxes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.permission-checkboxes label,
+.member-role-toggles label {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.member-role-list li {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.member-role-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}

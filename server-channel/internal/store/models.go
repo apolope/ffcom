@@ -12,6 +12,11 @@ type Member struct {
 	OIDCSubject string
 	Nickname    *string
 	JoinedAt    time.Time
+	// IsOwner é quem entrou primeiro neste server-channel (bootstrap do
+	// self-host, ver internal/httpapi/join.go). Ignora toda checagem de
+	// permissão — não é uma role (ver docs/architecture.md, "Sistema de
+	// permissões/roles por servidor e por canal").
+	IsOwner bool
 }
 
 // Category agrupa canais. Não existe tabela "servers": cada server-channel
@@ -42,16 +47,28 @@ type Channel struct {
 	CreatedAt  time.Time
 }
 
-// Role é um papel do servidor. Os bits de Permissions ainda não têm
-// significado definido — isso é o TODO separado "Sistema de
-// permissões/roles por servidor e por canal".
+// Role é um papel do servidor. Os bits de Permissions estão definidos em
+// internal/permissions. IsDefault marca a role "@everyone", implícita a todo
+// membro sem precisar de linha em member_roles — só existe uma por servidor
+// (ver migration 0002_roles_permissions).
 type Role struct {
 	ID          string
 	Name        string
 	Color       *string
 	Permissions int64
 	Position    int
+	IsDefault   bool
 	CreatedAt   time.Time
+}
+
+// ChannelRoleOverwrite sobrescreve, só dentro de Channel, bits específicos
+// da permissão base de quem tiver Role atribuída (ver internal/permissions,
+// Effective).
+type ChannelRoleOverwrite struct {
+	ChannelID string
+	RoleID    string
+	Allow     int64
+	Deny      int64
 }
 
 // Thread é uma discussão dentro de um canal do tipo forum.

@@ -12,11 +12,35 @@
   flex: 0 0 48px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 0 16px;
   font-weight: 600;
   color: var(--text-h);
   border-bottom: 1px solid var(--border);
   box-sizing: border-box;
+}
+
+.server-name-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.invite-button {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.invite-button:hover {
+  color: var(--text-h);
+  border-color: var(--text-h);
 }
 
 .category-list {

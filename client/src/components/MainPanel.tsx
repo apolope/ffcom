@@ -1,4 +1,5 @@
 import type { Channel, ChannelType } from '../types'
+import { ForumChannelView } from './ForumChannelView'
 import { TextChannelView } from './TextChannelView'
 import { VoiceChannelView } from './VoiceChannelView'
 import './MainPanel.css'
@@ -35,8 +36,8 @@ export function MainPanel({ channel, serverBaseUrl }: MainPanelProps) {
         {channel?.type === 'voice' && (
           <VoiceChannelView key={channel.id} serverBaseUrl={serverBaseUrl} channel={channel} />
         )}
-        {channel && channel.type === 'forum' && (
-          <p className="placeholder">Conteúdo de "{channel.name}" ainda não implementado.</p>
+        {channel?.type === 'forum' && (
+          <ForumChannelView key={channel.id} serverBaseUrl={serverBaseUrl} channel={channel} />
         )}
       </div>
     </section>

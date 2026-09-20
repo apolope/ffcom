@@ -6,14 +6,28 @@ import (
 	"time"
 )
 
-// Frames trocados no WebSocket de um canal de texto seguem um envelope
-// "{type, ...payload}". Cliente -> servidor só emite "message.create"; o
-// servidor responde com "message.created" (broadcast, inclusive para o
-// autor) ou "error" (só para o client que causou o erro).
+// Frames trocados no WebSocket de um canal seguem um envelope
+// "{type, ...payload}". Num canal de texto, cliente -> servidor só emite
+// "message.create". Num canal forum (mesma rota de WS, ver
+// docs/architecture.md "Canal forum: threads/posts"), cliente -> servidor
+// emite "thread.create" (abre uma thread com o post inicial) ou
+// "post.create" (responde numa thread existente). O servidor responde com o
+// "*.created" correspondente (broadcast para todo o canal, inclusive para o
+// autor, para confirmar id/timestamp atribuídos pelo servidor) ou "error"
+// (só para o client que causou o erro).
 const (
 	typeMessageCreate  = "message.create"
 	typeMessageCreated = "message.created"
-	typeError          = "error"
+
+	// TypeThreadCreate e TypePostCreate são exportados porque
+	// internal/httpapi precisa comparar com FrameType antes de saber qual
+	// decoder chamar (um canal forum aceita os dois tipos na mesma conexão).
+	TypeThreadCreate  = "thread.create"
+	typeThreadCreated = "thread.created"
+	TypePostCreate    = "post.create"
+	typePostCreated   = "post.created"
+
+	typeError = "error"
 )
 
 // IncomingMessageCreate é o payload decodificado de um frame
@@ -22,18 +36,56 @@ type IncomingMessageCreate struct {
 	Content string `json:"content"`
 }
 
-// MessageView é a representação em fio de uma mensagem, usada no payload de
-// "message.created".
+// IncomingThreadCreate é o payload decodificado de um frame "thread.create":
+// abre uma thread num canal forum com o título e o post inicial.
+type IncomingThreadCreate struct {
+	Title   string `json:"title"`
+	Content string `json:"content"`
+}
+
+// IncomingPostCreate é o payload decodificado de um frame "post.create":
+// responde numa thread existente de um canal forum.
+type IncomingPostCreate struct {
+	ThreadID string `json:"threadId"`
+	Content  string `json:"content"`
+}
+
+// MessageView é a representação em fio de uma mensagem, usada tanto no
+// payload de "message.created" (canal de texto) quanto no de
+// "thread.created"/"post.created" (canal forum). ThreadID vem nulo para
+// mensagens de canal de texto.
 type MessageView struct {
 	ID             string     `json:"id"`
 	ChannelID      string     `json:"channelId"`
+	ThreadID       *string    `json:"threadId,omitempty"`
 	AuthorMemberID string     `json:"authorMemberId"`
 	Content        string     `json:"content"`
 	CreatedAt      time.Time  `json:"createdAt"`
 	EditedAt       *time.Time `json:"editedAt,omitempty"`
 }
 
+// ThreadView é a representação em fio de uma thread de forum, usada no
+// payload de "thread.created" e na listagem REST de threads de um canal.
+type ThreadView struct {
+	ID             string    `json:"id"`
+	ChannelID      string    `json:"channelId"`
+	Title          string    `json:"title"`
+	AuthorMemberID string    `json:"authorMemberId"`
+	CreatedAt      time.Time `json:"createdAt"`
+}
+
 type messageCreatedEnvelope struct {
+	Type    string      `json:"type"`
+	Message MessageView `json:"message"`
+}
+
+type threadCreatedEnvelope struct {
+	Type    string      `json:"type"`
+	Thread  ThreadView  `json:"thread"`
+	Message MessageView `json:"message"`
+}
+
+type postCreatedEnvelope struct {
 	Type    string      `json:"type"`
 	Message MessageView `json:"message"`
 }
@@ -47,16 +99,27 @@ type typeEnvelope struct {
 	Type string `json:"type"`
 }
 
+// FrameType lê só o campo "type" de raw, sem decodificar o resto do payload
+// — usado pelo canal forum para decidir se o frame é "thread.create" ou
+// "post.create" antes de chamar o decoder específico.
+func FrameType(raw []byte) (string, error) {
+	var t typeEnvelope
+	if err := json.Unmarshal(raw, &t); err != nil {
+		return "", fmt.Errorf("frame não é JSON válido: %w", err)
+	}
+	return t.Type, nil
+}
+
 // DecodeIncoming lê o campo "type" de raw e, se for "message.create",
 // decodifica o restante em IncomingMessageCreate. Tipos desconhecidos
 // devolvem erro para o chamador responder com SendError.
 func DecodeIncoming(raw []byte) (IncomingMessageCreate, error) {
-	var t typeEnvelope
-	if err := json.Unmarshal(raw, &t); err != nil {
-		return IncomingMessageCreate{}, fmt.Errorf("frame não é JSON válido: %w", err)
+	t, err := FrameType(raw)
+	if err != nil {
+		return IncomingMessageCreate{}, err
 	}
-	if t.Type != typeMessageCreate {
-		return IncomingMessageCreate{}, fmt.Errorf("tipo de frame desconhecido: %q", t.Type)
+	if t != typeMessageCreate {
+		return IncomingMessageCreate{}, fmt.Errorf("tipo de frame desconhecido: %q", t)
 	}
 
 	var m IncomingMessageCreate
@@ -66,9 +129,41 @@ func DecodeIncoming(raw []byte) (IncomingMessageCreate, error) {
 	return m, nil
 }
 
+// DecodeThreadCreate decodifica o payload de um frame "thread.create" já
+// identificado via FrameType.
+func DecodeThreadCreate(raw []byte) (IncomingThreadCreate, error) {
+	var m IncomingThreadCreate
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return IncomingThreadCreate{}, fmt.Errorf("payload de thread.create inválido: %w", err)
+	}
+	return m, nil
+}
+
+// DecodePostCreate decodifica o payload de um frame "post.create" já
+// identificado via FrameType.
+func DecodePostCreate(raw []byte) (IncomingPostCreate, error) {
+	var m IncomingPostCreate
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return IncomingPostCreate{}, fmt.Errorf("payload de post.create inválido: %w", err)
+	}
+	return m, nil
+}
+
 // EncodeMessageCreated serializa o envelope broadcast a cada novo message.
 func EncodeMessageCreated(m MessageView) ([]byte, error) {
 	return json.Marshal(messageCreatedEnvelope{Type: typeMessageCreated, Message: m})
+}
+
+// EncodeThreadCreated serializa o envelope broadcast quando uma thread de
+// forum é aberta, incluindo o post inicial.
+func EncodeThreadCreated(t ThreadView, m MessageView) ([]byte, error) {
+	return json.Marshal(threadCreatedEnvelope{Type: typeThreadCreated, Thread: t, Message: m})
+}
+
+// EncodePostCreated serializa o envelope broadcast a cada nova resposta numa
+// thread de forum.
+func EncodePostCreated(m MessageView) ([]byte, error) {
+	return json.Marshal(postCreatedEnvelope{Type: typePostCreated, Message: m})
 }
 
 func encodeError(message string) ([]byte, error) {

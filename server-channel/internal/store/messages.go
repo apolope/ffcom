@@ -58,6 +58,26 @@ func (s *MessageStore) ListThreads(ctx context.Context, channelID string) ([]Thr
 	return out, nil
 }
 
+// GetThread busca uma thread por id — usado para resolver o channel_id ao
+// checar permissão de quem lista/posta numa thread (ver internal/httpapi).
+func (s *MessageStore) GetThread(ctx context.Context, id string) (Thread, error) {
+	const query = `
+		SELECT id, channel_id, title, author_member_id, created_at
+		FROM threads
+		WHERE id = $1
+	`
+	var t Thread
+	err := s.pool.QueryRow(ctx, query, id).
+		Scan(&t.ID, &t.ChannelID, &t.Title, &t.AuthorMemberID, &t.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Thread{}, ErrNotFound
+	}
+	if err != nil {
+		return Thread{}, fmt.Errorf("messages: get thread: %w", err)
+	}
+	return t, nil
+}
+
 // Create grava uma mensagem. threadID nulo indica mensagem de canal de
 // texto; preenchido indica post dentro de uma thread de forum.
 func (s *MessageStore) Create(ctx context.Context, channelID string, threadID *string, authorMemberID, content string) (Message, error) {

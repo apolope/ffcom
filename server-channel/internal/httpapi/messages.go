@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
+	"a3sitsolutions.com/ffcom/server-channel/internal/permissions"
 	"a3sitsolutions.com/ffcom/server-channel/internal/realtime"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
 )
@@ -21,7 +23,7 @@ const (
 // recentes primeiro). Ver docs/architecture.md, "Decisão: protocolo entre
 // client, server-central e server-channel": histórico é REST, tempo real é
 // WebSocket.
-func handleListMessages(channels *store.ChannelStore, messages *store.MessageStore) http.Handler {
+func handleListMessages(channels *store.ChannelStore, roles *store.RoleStore, overwrites *store.ChannelOverwriteStore, messages *store.MessageStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		channelID := r.PathValue("id")
 
@@ -36,6 +38,21 @@ func handleListMessages(channels *store.ChannelStore, messages *store.MessageSto
 		}
 		if channel.Type != store.ChannelText {
 			http.Error(w, "canal não é de texto", http.StatusBadRequest)
+			return
+		}
+
+		member, ok := auth.MemberFromContext(r.Context())
+		if !ok {
+			http.Error(w, "membro não encontrado no contexto", http.StatusInternalServerError)
+			return
+		}
+		effective, err := channelPermission(r.Context(), roles, overwrites, member, channelID)
+		if err != nil {
+			http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+			return
+		}
+		if !permissions.Has(effective, permissions.ViewChannels) {
+			http.Error(w, "sem permissão para ver este canal", http.StatusForbidden)
 			return
 		}
 
@@ -83,6 +100,7 @@ func toMessageView(m store.Message) realtime.MessageView {
 	return realtime.MessageView{
 		ID:             m.ID,
 		ChannelID:      m.ChannelID,
+		ThreadID:       m.ThreadID,
 		AuthorMemberID: m.AuthorMemberID,
 		Content:        m.Content,
 		CreatedAt:      m.CreatedAt,

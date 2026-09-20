@@ -19,16 +19,22 @@ import (
 // ErrNotFound é devolvido pelos repositórios quando a linha buscada não existe.
 var ErrNotFound = errors.New("store: registro não encontrado")
 
+// ErrConflict é devolvido pelos repositórios quando a operação esbarra numa
+// condição atômica não satisfeita (ex.: convite já esgotado/expirado no
+// momento do resgate).
+var ErrConflict = errors.New("store: conflito, condição não satisfeita")
+
 // Store agrupa o pool de conexões e os repositórios de cada entidade.
 type Store struct {
 	pool *pgxpool.Pool
 
-	Members    *MemberStore
-	Categories *CategoryStore
-	Channels   *ChannelStore
-	Roles      *RoleStore
-	Messages   *MessageStore
-	Invites    *InviteStore
+	Members           *MemberStore
+	Categories        *CategoryStore
+	Channels          *ChannelStore
+	Roles             *RoleStore
+	Messages          *MessageStore
+	Invites           *InviteStore
+	ChannelOverwrites *ChannelOverwriteStore
 }
 
 // Open conecta ao Postgres em databaseURL, aplica as migrations pendentes e
@@ -50,13 +56,14 @@ func Open(ctx context.Context, databaseURL string) (*Store, error) {
 	}
 
 	return &Store{
-		pool:       pool,
-		Members:    &MemberStore{pool: pool},
-		Categories: &CategoryStore{pool: pool},
-		Channels:   &ChannelStore{pool: pool},
-		Roles:      &RoleStore{pool: pool},
-		Messages:   &MessageStore{pool: pool},
-		Invites:    &InviteStore{pool: pool},
+		pool:              pool,
+		Members:           &MemberStore{pool: pool},
+		Categories:        &CategoryStore{pool: pool},
+		Channels:          &ChannelStore{pool: pool},
+		Roles:             &RoleStore{pool: pool},
+		Messages:          &MessageStore{pool: pool},
+		Invites:           &InviteStore{pool: pool},
+		ChannelOverwrites: &ChannelOverwriteStore{pool: pool},
 	}, nil
 }
 

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -10,14 +11,18 @@ import (
 
 type contextKey int
 
-const memberContextKey contextKey = iota
+const (
+	subjectContextKey contextKey = iota
+	memberContextKey
+)
 
-// Middleware exige um Bearer token válido em cada requisição e garante (via
-// MemberStore.GetOrCreateByOIDCSubject, que já faz upsert por "sub") que o
-// membro local exista, anexando-o ao contexto da requisição. Não há
-// endpoint de "entrar no servidor" separado: a primeira requisição
-// autenticada de um "sub" novo já cria o membro.
-func Middleware(verifier *Verifier, members *store.MemberStore) func(http.Handler) http.Handler {
+// VerifyToken exige um Bearer token válido, sem exigir que o "sub" já seja
+// membro deste server-channel — usado por POST /api/join (que precisa
+// autenticar antes de saber se o "sub" ainda vai entrar) e, encadeado com
+// RequireMember, por toda rota que exige associação de fato (ver
+// docs/architecture.md, "Convites obrigatórios para entrar em
+// server-channel").
+func VerifyToken(verifier *Verifier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			rawToken, ok := bearerToken(r)
@@ -32,7 +37,31 @@ func Middleware(verifier *Verifier, members *store.MemberStore) func(http.Handle
 				return
 			}
 
-			member, err := members.GetOrCreateByOIDCSubject(r.Context(), claims.Subject)
+			ctx := context.WithValue(r.Context(), subjectContextKey, claims.Subject)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// RequireMember exige que o "sub" autenticado (anexado por VerifyToken, que
+// precisa vir antes na cadeia) já tenha entrado neste server-channel via
+// POST /api/join. Ao contrário do comportamento antigo, não cria o membro
+// implicitamente: um "sub" válido no Authentik central mas que nunca resgatou
+// um convite (ou não foi o primeiro a entrar, ver handleJoin) recebe 403.
+func RequireMember(members *store.MemberStore) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			subject, ok := SubjectFromContext(r.Context())
+			if !ok {
+				http.Error(w, "subject ausente no contexto", http.StatusInternalServerError)
+				return
+			}
+
+			member, err := members.GetByOIDCSubject(r.Context(), subject)
+			if errors.Is(err, store.ErrNotFound) {
+				http.Error(w, "é preciso entrar neste servidor (POST /api/join) antes", http.StatusForbidden)
+				return
+			}
 			if err != nil {
 				http.Error(w, "erro ao resolver membro", http.StatusInternalServerError)
 				return
@@ -82,7 +111,13 @@ func wsProtocolToken(r *http.Request) (string, bool) {
 	return token, token != ""
 }
 
-// MemberFromContext devolve o membro autenticado anexado pelo Middleware.
+// SubjectFromContext devolve o "sub" anexado pelo VerifyToken.
+func SubjectFromContext(ctx context.Context) (string, bool) {
+	subject, ok := ctx.Value(subjectContextKey).(string)
+	return subject, ok
+}
+
+// MemberFromContext devolve o membro autenticado anexado pelo RequireMember.
 func MemberFromContext(ctx context.Context) (store.Member, bool) {
 	member, ok := ctx.Value(memberContextKey).(store.Member)
 	return member, ok

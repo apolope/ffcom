@@ -12,6 +12,9 @@ interface ChannelSidebarProps {
   categories: Category[]
   selectedChannelId: string | undefined
   onSelectChannel: (channelId: string) => void
+  onInvite: () => void
+  canManageRoles: boolean
+  onManageRoles: () => void
 }
 
 export function ChannelSidebar({
@@ -19,10 +22,25 @@ export function ChannelSidebar({
   categories,
   selectedChannelId,
   onSelectChannel,
+  onInvite,
+  canManageRoles,
+  onManageRoles,
 }: ChannelSidebarProps) {
   return (
     <nav className="channel-sidebar" aria-label="Canais">
-      <div className="server-name">{server.name}</div>
+      <div className="server-name">
+        <span>{server.name}</span>
+        <div className="server-name-actions">
+          {canManageRoles && (
+            <button type="button" className="invite-button" onClick={onManageRoles}>
+              Roles
+            </button>
+          )}
+          <button type="button" className="invite-button" onClick={onInvite}>
+            Convidar
+          </button>
+        </div>
+      </div>
       <div className="category-list">
         {categories.map((category) => (
           <div className="category" key={category.id}>

@@ -7,6 +7,7 @@ import (
 
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
 	"a3sitsolutions.com/ffcom/server-channel/internal/livekit"
+	"a3sitsolutions.com/ffcom/server-channel/internal/permissions"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
 )
 
@@ -17,7 +18,7 @@ import (
 // próprio LiveKit no primeiro participante que entrar com um token válido
 // para aquele nome de sala — ver docs/architecture.md, "Decisão: integração
 // de voz com LiveKit".
-func handleVoiceToken(channels *store.ChannelStore, apiKey, apiSecret, publicURL string) http.Handler {
+func handleVoiceToken(channels *store.ChannelStore, roles *store.RoleStore, overwrites *store.ChannelOverwriteStore, apiKey, apiSecret, publicURL string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		channelID := r.PathValue("id")
 
@@ -38,6 +39,19 @@ func handleVoiceToken(channels *store.ChannelStore, apiKey, apiSecret, publicURL
 		member, ok := auth.MemberFromContext(r.Context())
 		if !ok {
 			http.Error(w, "membro não autenticado", http.StatusUnauthorized)
+			return
+		}
+
+		// Único nível de acesso hoje é o bit Voice (join + publicar áudio
+		// juntos) — ver docs/architecture.md, "Sistema de permissões/roles
+		// por servidor e por canal".
+		effective, err := channelPermission(r.Context(), roles, overwrites, member, channelID)
+		if err != nil {
+			http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+			return
+		}
+		if !permissions.Has(effective, permissions.Voice) {
+			http.Error(w, "sem permissão para entrar neste canal de voz", http.StatusForbidden)
 			return
 		}
 

@@ -5,6 +5,8 @@ import { MainPanel } from './components/MainPanel'
 import { MemberList } from './components/MemberList'
 import { LoginScreen } from './components/LoginScreen'
 import { AddServerDialog } from './components/AddServerDialog'
+import { InviteServerDialog } from './components/InviteServerDialog'
+import { ManageRolesDialog } from './components/ManageRolesDialog'
 import { FriendsView } from './components/FriendsView'
 import { AddFriendDialog } from './components/AddFriendDialog'
 import { DirectMessageView } from './components/DirectMessageView'
@@ -12,10 +14,11 @@ import { useAuth } from './auth/AuthProvider'
 import { useServerStructure } from './hooks/useServerStructure'
 import { useKnownServers } from './hooks/useKnownServers'
 import { useFriends } from './hooks/useFriends'
-import type { Member } from './types'
+import { useMe } from './hooks/useMe'
+import { useServerMembers } from './hooks/useServerMembers'
+import { createServerInvite } from './lib/serverChannelApi'
+import { PERMISSIONS, hasPermission } from './lib/permissions'
 import './App.css'
-
-const NO_MEMBERS: Member[] = []
 
 function App() {
   const { status, accessToken } = useAuth()
@@ -24,6 +27,8 @@ function App() {
   const [selectedServerId, setSelectedServerId] = useState<string>()
   const [showFriends, setShowFriends] = useState(false)
   const [showAddServer, setShowAddServer] = useState(false)
+  const [showInviteServer, setShowInviteServer] = useState(false)
+  const [showManageRoles, setShowManageRoles] = useState(false)
   const [showAddFriend, setShowAddFriend] = useState(false)
   const [selectedFriendId, setSelectedFriendId] = useState<string>()
 
@@ -35,11 +40,12 @@ function App() {
   }, [servers, selectedServerId])
 
   const server = servers.find((s) => s.id === selectedServerId)
-  // Lista de membros por servidor (server-channel) ainda não tem API real
-  // (diferente da lista de amigos/presença, que já vem de server-central via
-  // useFriends) — ver TODO.md, "Sistema de permissões/roles por servidor e
-  // por canal".
-  const members = NO_MEMBERS
+  const me = useMe(server?.baseUrl ?? '', accessToken ?? '')
+  const canManageRoles = me ? hasPermission(me.permissions, PERMISSIONS.ManageRoles) || !!me.isOwner : false
+  const { members, roles, createRole, deleteRole, assignRole, removeRole } = useServerMembers(
+    server?.baseUrl ?? '',
+    accessToken ?? '',
+  )
 
   const { categories } = useServerStructure(server?.baseUrl ?? '', accessToken ?? '')
 
@@ -105,9 +111,12 @@ function App() {
             categories={categories}
             selectedChannelId={selectedChannelId}
             onSelectChannel={setSelectedChannelId}
+            onInvite={() => setShowInviteServer(true)}
+            canManageRoles={canManageRoles}
+            onManageRoles={() => setShowManageRoles(true)}
           />
           <MainPanel channel={channel} serverBaseUrl={server.baseUrl} />
-          <MemberList members={members} />
+          <MemberList members={members} roles={roles} />
         </>
       ) : (
         <div className="empty-state">
@@ -116,6 +125,27 @@ function App() {
       )}
       {showAddServer && (
         <AddServerDialog onAdd={addServer} onClose={() => setShowAddServer(false)} />
+      )}
+      {showInviteServer && server && (
+        <InviteServerDialog
+          serverName={server.name}
+          onCreateInvite={async () => {
+            const invite = await createServerInvite(server.baseUrl, accessToken ?? '')
+            return invite.code
+          }}
+          onClose={() => setShowInviteServer(false)}
+        />
+      )}
+      {showManageRoles && (
+        <ManageRolesDialog
+          members={members}
+          roles={roles}
+          onCreateRole={createRole}
+          onDeleteRole={deleteRole}
+          onAssignRole={assignRole}
+          onRemoveRole={removeRole}
+          onClose={() => setShowManageRoles(false)}
+        />
       )}
       {showAddFriend && (
         <AddFriendDialog

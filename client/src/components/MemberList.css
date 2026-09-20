@@ -30,11 +30,6 @@
   color: var(--text-h);
 }
 
-.member.offline {
-  color: var(--text);
-  opacity: 0.6;
-}
-
 .member-status {
   width: 8px;
   height: 8px;
@@ -43,6 +38,10 @@
   flex: 0 0 8px;
 }
 
-.member.offline .member-status {
-  background: var(--text);
+.member-badge {
+  margin-left: auto;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text);
 }

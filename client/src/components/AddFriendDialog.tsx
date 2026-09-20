@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import './Dialog.css'
-import './AddFriendDialog.css'
+import './InviteCode.css'
 
 interface AddFriendDialogProps {
   onCreateInvite: () => Promise<string>
@@ -66,10 +66,10 @@ export function AddFriendDialog({ onCreateInvite, onRedeemInvite, onClose }: Add
       <div className="dialog-card" onClick={(e) => e.stopPropagation()}>
         <h2>Adicionar amigo</h2>
 
-        <section className="friend-invite-section">
-          <p className="friend-invite-hint">Gere um código e compartilhe com quem você quer adicionar.</p>
+        <section className="invite-section">
+          <p className="invite-hint">Gere um código e compartilhe com quem você quer adicionar.</p>
           {invite ? (
-            <div className="friend-invite-code">
+            <div className="invite-code">
               <code>{invite}</code>
               <button type="button" onClick={handleCopyInvite}>
                 {copied ? 'Copiado!' : 'Copiar'}
@@ -83,7 +83,7 @@ export function AddFriendDialog({ onCreateInvite, onRedeemInvite, onClose }: Add
           {inviteError && <p className="dialog-error">{inviteError}</p>}
         </section>
 
-        <form className="friend-invite-section" onSubmit={handleRedeem}>
+        <form className="invite-section" onSubmit={handleRedeem}>
           <label>
             Já tenho um código
             <input

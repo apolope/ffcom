@@ -5,6 +5,7 @@ import {
   removeKnownServer,
   type RemoteKnownServer,
 } from '../lib/serverCentralApi'
+import { joinServer } from '../lib/serverChannelApi'
 import type { KnownServer } from '../types'
 
 export type KnownServersStatus = 'loading' | 'ready' | 'error'
@@ -13,7 +14,7 @@ interface UseKnownServersResult {
   servers: KnownServer[]
   status: KnownServersStatus
   error: string | undefined
-  addServer: (address: string, name: string) => Promise<void>
+  addServer: (address: string, name: string, inviteCode?: string) => Promise<void>
   removeServer: (id: string) => Promise<void>
 }
 
@@ -60,7 +61,12 @@ export function useKnownServers(accessToken: string): UseKnownServersResult {
   }, [load])
 
   const addServer = useCallback(
-    async (address: string, name: string) => {
+    async (address: string, name: string, inviteCode?: string) => {
+      // Entra no server-channel antes de registrar no diretório: se o
+      // convite for inválido/ausente, o servidor nem chega a ser adicionado
+      // (ver docs/architecture.md, "Convites obrigatórios para entrar em
+      // server-channel").
+      await joinServer(address, accessToken, inviteCode)
       await addKnownServer(accessToken, address, name)
       await load()
     },

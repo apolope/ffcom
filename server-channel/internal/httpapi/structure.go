@@ -1,27 +1,90 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
 
+	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
+	"a3sitsolutions.com/ffcom/server-channel/internal/permissions"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
 )
 
-// GET /api/categories — lista todas as categorias do servidor, ordenadas por
-// posição. Ver TODO.md ("API REST em server-channel para o client listar
-// categorias/canais reais").
-func handleListCategories(categories *store.CategoryStore) http.Handler {
+// visibleChannels devolve, dos canais informados, só os que member consegue
+// ver (ViewChannels efetivo, já considerando overwrites de canal) — ver
+// docs/architecture.md, "Sistema de permissões/roles por servidor e por
+// canal". Dono do servidor sempre vê tudo, sem consultar overwrites.
+func visibleChannels(ctx context.Context, roles *store.RoleStore, overwrites *store.ChannelOverwriteStore, member store.Member, channels []store.Channel) ([]store.Channel, error) {
+	if member.IsOwner {
+		return channels, nil
+	}
+
+	base, roleIDs, err := memberBasePermission(ctx, roles, member)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := overwrites.ListForRoleIDs(ctx, roleIDs)
+	if err != nil {
+		return nil, err
+	}
+	byChannel := make(map[string][]permissions.Overwrite, len(rows))
+	for _, o := range rows {
+		byChannel[o.ChannelID] = append(byChannel[o.ChannelID], permissions.Overwrite{RoleID: o.RoleID, Allow: o.Allow, Deny: o.Deny})
+	}
+
+	visible := make([]store.Channel, 0, len(channels))
+	for _, c := range channels {
+		effective := permissions.Effective(base, roleIDs, byChannel[c.ID])
+		if permissions.Has(effective, permissions.ViewChannels) {
+			visible = append(visible, c)
+		}
+	}
+	return visible, nil
+}
+
+// GET /api/categories — lista as categorias do servidor que tenham pelo
+// menos um canal visível ao membro autenticado (ver visibleChannels), na
+// mesma ordem por posição. Categoria sem nenhum canal visível não aparece —
+// do contrário o nome de uma categoria privada vazaria mesmo com todo canal
+// dentro dela restrito.
+func handleListCategories(categories *store.CategoryStore, channels *store.ChannelStore, roles *store.RoleStore, overwrites *store.ChannelOverwriteStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rows, err := categories.List(r.Context())
+		member, ok := auth.MemberFromContext(r.Context())
+		if !ok {
+			http.Error(w, "membro não encontrado no contexto", http.StatusInternalServerError)
+			return
+		}
+
+		allCategories, err := categories.List(r.Context())
 		if err != nil {
 			http.Error(w, "erro ao buscar categorias", http.StatusInternalServerError)
 			return
 		}
+		allChannels, err := channels.List(r.Context())
+		if err != nil {
+			http.Error(w, "erro ao buscar canais", http.StatusInternalServerError)
+			return
+		}
+		visible, err := visibleChannels(r.Context(), roles, overwrites, member, allChannels)
+		if err != nil {
+			http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+			return
+		}
 
-		out := make([]categoryView, len(rows))
-		for i, c := range rows {
-			out[i] = toCategoryView(c)
+		withVisibleChannel := make(map[string]bool, len(visible))
+		for _, c := range visible {
+			if c.CategoryID != nil {
+				withVisibleChannel[*c.CategoryID] = true
+			}
+		}
+
+		out := make([]categoryView, 0, len(allCategories))
+		for _, c := range allCategories {
+			if withVisibleChannel[c.ID] {
+				out = append(out, toCategoryView(c))
+			}
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -29,19 +92,30 @@ func handleListCategories(categories *store.CategoryStore) http.Handler {
 	})
 }
 
-// GET /api/channels — lista todos os canais do servidor (todos os tipos),
-// ordenados por categoria e posição. O client agrupa por categoryId; canais
-// sem categoria vêm com categoryId nulo.
-func handleListChannels(channels *store.ChannelStore) http.Handler {
+// GET /api/channels — lista os canais visíveis ao membro autenticado (todos
+// os tipos), ordenados por categoria e posição. O client agrupa por
+// categoryId; canais sem categoria vêm com categoryId nulo.
+func handleListChannels(channels *store.ChannelStore, roles *store.RoleStore, overwrites *store.ChannelOverwriteStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		member, ok := auth.MemberFromContext(r.Context())
+		if !ok {
+			http.Error(w, "membro não encontrado no contexto", http.StatusInternalServerError)
+			return
+		}
+
 		rows, err := channels.List(r.Context())
 		if err != nil {
 			http.Error(w, "erro ao buscar canais", http.StatusInternalServerError)
 			return
 		}
+		visible, err := visibleChannels(r.Context(), roles, overwrites, member, rows)
+		if err != nil {
+			http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+			return
+		}
 
-		out := make([]channelView, len(rows))
-		for i, c := range rows {
+		out := make([]channelView, len(visible))
+		for i, c := range visible {
 			out[i] = toChannelView(c)
 		}
 
