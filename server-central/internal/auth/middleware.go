@@ -44,13 +44,40 @@ func Middleware(verifier *Verifier, accounts *store.AccountStore) func(http.Hand
 	}
 }
 
+// wsAuthSubprotocol é o subprotocolo usado para carregar o access token no
+// handshake de WebSocket (rota de presença) — a API WebSocket do navegador
+// não permite setar headers customizados, então o client manda o token via
+// `new WebSocket(url, [wsAuthSubprotocol, token])`, que vira o header
+// Sec-WebSocket-Protocol. Mesmo mecanismo já usado em server-channel (ver
+// docs/architecture.md, "Decisão: canal de texto em server-channel"). O
+// upgrader (ver internal/httpapi/presence.go) precisa declarar este mesmo
+// nome em Upgrader.Subprotocols para o handshake ser aceito.
+const wsAuthSubprotocol = "access_token"
+
 func bearerToken(r *http.Request) (string, bool) {
 	const prefix = "Bearer "
 	header := r.Header.Get("Authorization")
-	if !strings.HasPrefix(header, prefix) {
+	if strings.HasPrefix(header, prefix) {
+		token := strings.TrimSpace(strings.TrimPrefix(header, prefix))
+		if token != "" {
+			return token, true
+		}
+	}
+	return wsProtocolToken(r)
+}
+
+// wsProtocolToken extrai o token de "Sec-WebSocket-Protocol: access_token,
+// <token>" — usado só pela rota de WebSocket de presença.
+func wsProtocolToken(r *http.Request) (string, bool) {
+	header := r.Header.Get("Sec-WebSocket-Protocol")
+	if header == "" {
 		return "", false
 	}
-	token := strings.TrimSpace(strings.TrimPrefix(header, prefix))
+	parts := strings.Split(header, ",")
+	if len(parts) != 2 || strings.TrimSpace(parts[0]) != wsAuthSubprotocol {
+		return "", false
+	}
+	token := strings.TrimSpace(parts[1])
 	return token, token != ""
 }
 

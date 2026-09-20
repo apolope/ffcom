@@ -219,6 +219,18 @@ Não existe endpoint de cadastro separado: `internal/auth/middleware.go` (`auth.
 
 **Revisitar quando:** um mecanismo de convite (TODO "Convites" em `server-channel`) precisar resolver o endereço automaticamente a partir de um código, em vez do usuário digitá-lo — nesse ponto vale considerar separar esquema/host/porta ou validar o formato no backend.
 
+## Decisão: gateway de presença em server-central — hub em memória + WebSocket dedicado
+
+**Alternativas consideradas:** reaproveitar uma conexão WebSocket já existente (não havia nenhuma em `server-central` antes deste item — DMs, o outro consumidor natural de WebSocket ali, ainda é TODO), coluna `last_seen_at`/heartbeat via REST (poll periódico), hub em memória com WebSocket dedicado (mesmo padrão de `server-channel`), Redis pub/sub para presença.
+
+**Decisão:** WebSocket dedicado (`GET /api/presence/ws`) com um `realtime.Hub` em memória em `server-central/internal/realtime` (estrutura irmã da de `server-channel`, mas particionada por `account_id` em vez de por canal — uma conta pode ter várias conexões simultâneas, ex. várias abas, e só é considerada offline quando a última cai). `GET /api/presence` (REST) devolve o snapshot atual de quem, entre os amigos aceitos (`FriendshipStore.AcceptedFriendIDs`, novo), está online — usado pelo client para popular a lista ao abrir, antes do primeiro evento chegar pelo WebSocket. Ao conectar/desconectar (só na transição, não a cada conexão redundante), o servidor emite `presence.update` só para os amigos aceitos que estiverem online agora.
+
+**Razão:** poll periódico via REST adicionaria latência perceptível (ficar "online" ou "offline" levaria até um ciclo de poll para refletir) e carga constante de requisições mesmo sem mudança de estado — errado para algo que o Discord e equivalentes tratam como praticamente instantâneo. Redis pub/sub resolveria o caso de múltiplas réplicas de `server-central`, mas hoje a instância central é um processo único (mesma razão já registrada no Hub de `server-channel`); adicionar Redis só para presença, sem outro consumidor, não paga a complexidade agora. Reaproveitar o mesmo mecanismo de autenticação via subprotocolo WebSocket (`wsAuthSubprotocol`, replicado de `server-channel` para `server-central/internal/auth/middleware.go`) evita reinventar como carregar o Bearer token num handshake que não aceita headers customizados.
+
+**Escopo do broadcast:** só amigos com `status = 'accepted'` recebem o evento — desconhecidos e pedidos pendentes não veem presença de ninguém. Isso é o motivo de `handlePresenceWS` reconsultar `AcceptedFriendIDs` a cada conexão/desconexão em vez de cachear a lista de amigos: a lista pode ter mudado desde a última conexão da conta.
+
+**Revisitar quando:** `server-central` precisar rodar em múltiplas réplicas (mesmo gatilho já registrado no Hub de `server-channel`) — nesse ponto Redis pub/sub (ou equivalente) passa a ser necessário para presença ser consistente entre réplicas. Também revisitar quando "Lista de amigos + presença" no client for implementado — hoje só existe o endpoint, sem consumidor.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

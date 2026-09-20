@@ -61,6 +61,35 @@ func (s *FriendshipStore) ListForAccount(ctx context.Context, accountID string) 
 	return out, nil
 }
 
+// AcceptedFriendIDs lista o account_id do outro lado de cada amizade aceita
+// de accountID — usado pelo gateway de presença para saber a quem notificar
+// (ou responder, na rota REST) quando o status online de alguém muda.
+func (s *FriendshipStore) AcceptedFriendIDs(ctx context.Context, accountID string) ([]string, error) {
+	const query = `
+		SELECT CASE WHEN requester_id = $1 THEN addressee_id ELSE requester_id END
+		FROM friendships
+		WHERE status = 'accepted' AND (requester_id = $1 OR addressee_id = $1)
+	`
+	rows, err := s.pool.Query(ctx, query, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("friendships: accepted friend ids: %w", err)
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var friendID string
+		if err := rows.Scan(&friendID); err != nil {
+			return nil, fmt.Errorf("friendships: scan friend id: %w", err)
+		}
+		out = append(out, friendID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("friendships: iterar linhas: %w", err)
+	}
+	return out, nil
+}
+
 func (s *FriendshipStore) scanOne(ctx context.Context, query string, args ...any) (Friendship, error) {
 	var f Friendship
 	err := s.pool.QueryRow(ctx, query, args...).
