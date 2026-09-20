@@ -1,6 +1,25 @@
-// Cliente HTTP/WebSocket para a API de canal de texto de um server-channel.
-// Ver docs/architecture.md, "Decisão: canal de texto em server-channel" —
-// REST para histórico paginado, WebSocket para tempo real.
+// Cliente HTTP/WebSocket para a API de um server-channel: estrutura do
+// servidor (categorias/canais) e canal de texto (histórico + WebSocket). Ver
+// docs/architecture.md, "Decisão: canal de texto em server-channel" — REST
+// para operações CRUD/stateless, WebSocket para tempo real.
+
+import type { Category, ChannelType } from '../types'
+
+export interface RemoteCategory {
+  id: string
+  name: string
+  position: number
+  createdAt: string
+}
+
+export interface RemoteChannel {
+  id: string
+  categoryId?: string
+  name: string
+  type: ChannelType
+  position: number
+  createdAt: string
+}
 
 export interface ChannelMessage {
   id: string
@@ -31,6 +50,60 @@ export async function fetchMe(baseUrl: string, accessToken: string): Promise<Me>
     headers: { Authorization: `Bearer ${accessToken}` },
   })
   return parseJsonOrThrow<Me>(res)
+}
+
+export async function fetchCategories(
+  baseUrl: string,
+  accessToken: string,
+): Promise<RemoteCategory[]> {
+  const res = await fetch(`${baseUrl}/api/categories`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  const body = await parseJsonOrThrow<{ categories: RemoteCategory[] }>(res)
+  return body.categories
+}
+
+export async function fetchChannels(
+  baseUrl: string,
+  accessToken: string,
+): Promise<RemoteChannel[]> {
+  const res = await fetch(`${baseUrl}/api/channels`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  const body = await parseJsonOrThrow<{ channels: RemoteChannel[] }>(res)
+  return body.channels
+}
+
+const UNCATEGORIZED_ID = 'uncategorized'
+
+// Agrupa categorias e canais crus da API em Category[] (formato usado pelo
+// client), preservando a ordem por posição já aplicada pelo servidor. Canais
+// sem categoria (categoryId nulo) vão para uma categoria sintética no topo,
+// só quando existir pelo menos um.
+export function groupIntoCategories(
+  categories: RemoteCategory[],
+  channels: RemoteChannel[],
+): Category[] {
+  const byCategory = new Map<string, Category>(
+    categories.map((c) => [c.id, { id: c.id, name: c.name, channels: [] }]),
+  )
+
+  const uncategorized: Category = { id: UNCATEGORIZED_ID, name: 'Canais', channels: [] }
+  let hasUncategorized = false
+
+  for (const channel of channels) {
+    const target = channel.categoryId ? byCategory.get(channel.categoryId) : undefined
+    const entry = { id: channel.id, name: channel.name, type: channel.type }
+    if (target) {
+      target.channels.push(entry)
+    } else {
+      uncategorized.channels.push(entry)
+      hasUncategorized = true
+    }
+  }
+
+  const grouped = categories.map((c) => byCategory.get(c.id)!)
+  return hasUncategorized ? [uncategorized, ...grouped] : grouped
 }
 
 // Histórico devolvido pelo servidor vem mais recente primeiro (keyset por

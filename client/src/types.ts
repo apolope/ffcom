@@ -4,9 +4,9 @@ export interface KnownServer {
   id: string
   name: string
   initials: string
-  // Endereço base do server-channel desta comunidade (REST + WebSocket).
-  // Preenchimento manual por enquanto — a tela de "adicionar servidor via
-  // IP/DNS" (TODO.md) ainda não existe.
+  // Endereço base do server-channel desta comunidade (REST + WebSocket),
+  // vindo do diretório de server-channel conhecidos em server-central (ver
+  // hooks/useKnownServers.ts).
   baseUrl: string
 }
 
@@ -26,9 +26,4 @@ export interface Member {
   id: string
   nickname: string
   online: boolean
-}
-
-export interface ServerDetail {
-  categories: Category[]
-  members: Member[]
 }

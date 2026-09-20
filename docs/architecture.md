@@ -207,6 +207,18 @@ Não existe endpoint de cadastro separado: `internal/auth/middleware.go` (`auth.
 
 **Revisitar quando:** o domínio de produção do client (web/PWA) e o esquema de callback do Electron empacotado forem decididos (mesmo gatilho do ajuste de `redirect_uris` do Authentik) — nesse ponto o `CORS_ALLOWED_ORIGINS` de produção precisa incluir esse domínio.
 
+**Extensão a server-central (2026-09-20):** ao implementar a API REST de diretório de servidores conhecidos (`GET/POST/DELETE /api/servers`), o mesmo problema surgiu em `server-central` — o client passou a chamá-lo de uma origem diferente pela primeira vez (antes, `server-central` não tinha nenhuma rota chamada pelo client). Aplicado exatamente o mesmo mecanismo (`internal/httpapi/cors.go` copiado de `server-channel`, variável `CORS_ALLOWED_ORIGINS`, vazia por padrão), sem WebSocket a considerar neste componente ainda.
+
+## Decisão: diretório de servidores conhecidos — `address` é a base URL completa
+
+**Contexto:** ao implementar `GET/POST/DELETE /api/servers` em `server-central` e a tela "Adicionar servidor" no client (`client/src/components/AddServerDialog.tsx`), era preciso decidir o formato do campo `address` da tabela `known_servers` (`TEXT` livre, sem validação de formato definida no schema).
+
+**Decisão:** `address` é a base URL completa do `server-channel` (ex. `http://localhost:8080`, `https://chat.minhacomunidade.com`), o mesmo valor usado diretamente em `KnownServer.baseUrl` no client para montar as chamadas REST/WebSocket (`client/src/lib/serverChannelApi.ts`, `serverCentralApi.ts`). O campo `name` (nome de exibição) é enviado separadamente pelo formulário, não derivado do endereço.
+
+**Razão:** evita qualquer lógica de composição de URL (esquema, porta) no client ou no servidor — o self-hoster informa exatamente o endereço que os membros devem usar, e o client usa esse valor sem transformação. Consistente com a decisão já registrada de não ter descoberta automática: quem cadastra sabe o endereço completo (de um convite ou digitado manualmente).
+
+**Revisitar quando:** um mecanismo de convite (TODO "Convites" em `server-channel`) precisar resolver o endereço automaticamente a partir de um código, em vez do usuário digitá-lo — nesse ponto vale considerar separar esquema/host/porta ou validar o formato no backend.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

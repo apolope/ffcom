@@ -3,14 +3,16 @@ import './ServerRail.css'
 
 interface ServerRailProps {
   servers: KnownServer[]
-  selectedServerId: string
+  selectedServerId: string | undefined
   onSelectServer: (serverId: string) => void
+  onAddServer: () => void
 }
 
 export function ServerRail({
   servers,
   selectedServerId,
   onSelectServer,
+  onAddServer,
 }: ServerRailProps) {
   return (
     <nav className="server-rail" aria-label="Servidores">
@@ -34,6 +36,7 @@ export function ServerRail({
         type="button"
         className="server-icon add-server"
         title="Adicionar servidor"
+        onClick={onAddServer}
       >
         +
       </button>

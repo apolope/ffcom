@@ -1,0 +1,79 @@
+import { useCallback, useEffect, useState } from 'react'
+import {
+  addKnownServer,
+  fetchKnownServers,
+  removeKnownServer,
+  type RemoteKnownServer,
+} from '../lib/serverCentralApi'
+import type { KnownServer } from '../types'
+
+export type KnownServersStatus = 'loading' | 'ready' | 'error'
+
+interface UseKnownServersResult {
+  servers: KnownServer[]
+  status: KnownServersStatus
+  error: string | undefined
+  addServer: (address: string, name: string) => Promise<void>
+  removeServer: (id: string) => Promise<void>
+}
+
+function deriveInitials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return '?'
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase()
+  return (words[0][0] + words[1][0]).toUpperCase()
+}
+
+function toKnownServer(remote: RemoteKnownServer): KnownServer {
+  return {
+    id: remote.id,
+    name: remote.name,
+    initials: deriveInitials(remote.name),
+    baseUrl: remote.address,
+  }
+}
+
+// Carrega e gerencia o diretório de server-channel conhecidos pela conta
+// autenticada (server-central). Ver TODO.md ("API para o client listar/
+// adicionar/remover servidores conhecidos").
+export function useKnownServers(accessToken: string): UseKnownServersResult {
+  const [servers, setServers] = useState<KnownServer[]>([])
+  const [status, setStatus] = useState<KnownServersStatus>('loading')
+  const [error, setError] = useState<string>()
+
+  const load = useCallback(() => {
+    setStatus('loading')
+    setError(undefined)
+    return fetchKnownServers(accessToken)
+      .then((remote) => {
+        setServers(remote.map(toKnownServer))
+        setStatus('ready')
+      })
+      .catch((err) => {
+        setStatus('error')
+        setError(err instanceof Error ? err.message : 'falha ao carregar servidores')
+      })
+  }, [accessToken])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const addServer = useCallback(
+    async (address: string, name: string) => {
+      await addKnownServer(accessToken, address, name)
+      await load()
+    },
+    [accessToken, load],
+  )
+
+  const removeServer = useCallback(
+    async (id: string) => {
+      await removeKnownServer(accessToken, id)
+      await load()
+    },
+    [accessToken, load],
+  )
+
+  return { servers, status, error, addServer, removeServer }
+}

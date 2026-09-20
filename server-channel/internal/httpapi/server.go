@@ -29,6 +29,8 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string
 
 	protected := auth.Middleware(verifier, db.Members)
 	mux.Handle("GET /api/me", protected(handleMe()))
+	mux.Handle("GET /api/categories", protected(handleListCategories(db.Categories)))
+	mux.Handle("GET /api/channels", protected(handleListChannels(db.Channels)))
 	mux.Handle("GET /api/channels/{id}/messages", protected(handleListMessages(db.Channels, db.Messages)))
 	mux.Handle("GET /api/channels/{id}/ws", protected(handleChannelWS(hub, db.Channels, db.Messages, upgrader)))
 

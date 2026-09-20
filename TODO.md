@@ -32,7 +32,7 @@ Todas as decisões abaixo foram tomadas — ver `docs/architecture.md` para o de
 - [x] Cadastro/login de conta via Authentik
 - [ ] Endpoint/gateway de presença (quem está online)
 - [ ] Implementar DMs: `server-central` como gateway de mensagens (armazenamento em Postgres + entrega via WebSocket)
-- [ ] API para o client listar/adicionar/remover servidores conhecidos (adição manual via IP/DNS ou convite — sem discovery automático)
+- [x] API para o client listar/adicionar/remover servidores conhecidos (adição manual via IP/DNS ou convite — sem discovery automático)
 
 ## server-channel
 
@@ -49,8 +49,8 @@ Todas as decisões abaixo foram tomadas — ver `docs/architecture.md` para o de
 
 - [x] Layout base: rail de servidores → categorias → canais → lista de membros (estilo Discord)
 - [x] Login OIDC (Authorization Code + PKCE, `oidc-client-ts`) contra o Authentik central — tela de login antes do shell principal
-- [ ] Tela de adicionar servidor via IP/DNS (hoje `KnownServer.baseUrl` é fixo em `mockData.ts`)
-- [ ] API REST em `server-channel` para o client listar categorias/canais reais (hoje a navegação de canais continua com dados mock; só o conteúdo de canal de texto — histórico + WebSocket — já é real)
+- [x] Tela de adicionar servidor via IP/DNS (`client/src/components/AddServerDialog.tsx`, via API de `server-central`; ver `client/src/hooks/useKnownServers.ts`)
+- [x] API REST em `server-channel` para o client listar categorias/canais reais
 - [ ] Integração de voz/vídeo via `livekit-client`
 - [ ] Compartilhamento de tela
 - [x] Chat de texto em tempo real (histórico via REST + WebSocket, ver `client/src/hooks/useChannelChat.ts`)
