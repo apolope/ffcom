@@ -114,6 +114,24 @@ func (s *FriendshipStore) AcceptedFriendIDs(ctx context.Context, accountID strin
 	return out, nil
 }
 
+// AreFriends diz se accountA e accountB têm uma amizade aceita entre si, em
+// qualquer direção — usado para autorizar DMs (ver docs/architecture.md,
+// "Decisão: DMs restritas a amigos aceitos").
+func (s *FriendshipStore) AreFriends(ctx context.Context, accountA, accountB string) (bool, error) {
+	const query = `
+		SELECT EXISTS (
+			SELECT 1 FROM friendships
+			WHERE status = 'accepted'
+			AND ((requester_id = $1 AND addressee_id = $2) OR (requester_id = $2 AND addressee_id = $1))
+		)
+	`
+	var ok bool
+	if err := s.pool.QueryRow(ctx, query, accountA, accountB).Scan(&ok); err != nil {
+		return false, fmt.Errorf("friendships: are friends: %w", err)
+	}
+	return ok, nil
+}
+
 func (s *FriendshipStore) scanOne(ctx context.Context, query string, args ...any) (Friendship, error) {
 	var f Friendship
 	err := s.pool.QueryRow(ctx, query, args...).

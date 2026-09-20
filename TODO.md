@@ -31,7 +31,7 @@ Todas as decisões abaixo foram tomadas — ver `docs/architecture.md` para o de
 - [ ] Atualizar `redirect_uris` em `providers-ffcom.yaml` (repo `abs-3d-printer`) quando o domínio de produção do `client` (web/PWA) e o esquema de callback do build Electron empacotado forem decididos — usar um prompt dedicado para o agente daquele repo, mesmo molde do que registrou o app (ver `docs/architecture.md`)
 - [x] Cadastro/login de conta via Authentik
 - [x] Endpoint/gateway de presença (quem está online)
-- [ ] Implementar DMs: `server-central` como gateway de mensagens (armazenamento em Postgres + entrega via WebSocket)
+- [x] Implementar DMs: `server-central` como gateway de mensagens (armazenamento em Postgres + entrega via WebSocket)
 - [x] API para o client listar/adicionar/remover servidores conhecidos (adição manual via IP/DNS ou convite — sem discovery automático)
 
 ## server-channel
@@ -56,7 +56,7 @@ Todas as decisões abaixo foram tomadas — ver `docs/architecture.md` para o de
 - [x] Chat de texto em tempo real (histórico via REST + WebSocket, ver `client/src/hooks/useChannelChat.ts`)
 - [ ] Canal forum (UI de threads)
 - [x] Lista de amigos + presença (via `server-central`)
-- [ ] DMs (depende da decisão de design acima)
+- [ ] DMs (API de `server-central` pronta — `GET/POST` via WebSocket de presença e `GET /api/dms/{accountId}/messages`, ver `docs/architecture.md`; falta UI no client)
 - [ ] Build Electron para Windows/macOS/Linux
 - [ ] Build web/PWA
 

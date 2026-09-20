@@ -68,9 +68,12 @@ func handlePresenceSnapshot(hub *realtime.Hub, friendships *store.FriendshipStor
 // GET /api/presence/ws — o client mantém esta conexão aberta enquanto
 // online. Ao conectar (primeira conexão da conta) e ao desconectar (última
 // conexão da conta), o servidor emite "presence.update" para cada amigo
-// aceito que estiver online agora, via realtime.Hub.SendTo. Não há frames
-// esperados vindos do client.
-func handlePresenceWS(hub *realtime.Hub, friendships *store.FriendshipStore, upgrader websocket.Upgrader) http.Handler {
+// aceito que estiver online agora, via realtime.Hub.SendTo. Além de
+// presença, esta mesma conexão carrega as DMs em tempo real (ver
+// docs/architecture.md, "Decisão: DMs entregues no WebSocket de
+// presença"): o único frame aceito vindo do client é "dm.create",
+// processado em handleIncomingDM (internal/httpapi/dms.go).
+func handlePresenceWS(hub *realtime.Hub, friendships *store.FriendshipStore, directMessages *store.DirectMessageStore, upgrader websocket.Upgrader) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
@@ -91,7 +94,9 @@ func handlePresenceWS(hub *realtime.Hub, friendships *store.FriendshipStore, upg
 		}
 
 		go client.WritePump()
-		client.ReadPump()
+		client.ReadPump(func(raw []byte) {
+			handleIncomingDM(r.Context(), hub, friendships, directMessages, account.ID, client, raw)
+		})
 
 		wentOffline := hub.Unregister(account.ID, client)
 		if wentOffline {

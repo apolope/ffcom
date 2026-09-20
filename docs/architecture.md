@@ -245,6 +245,26 @@ Não existe endpoint de cadastro separado: `internal/auth/middleware.go` (`auth.
 
 **Revisitar quando:** o volume de convites simultâneos por conta precisar de limite/expiração de fato (hoje `expires_at` existe na coluna mas nenhum endpoint o define — todo convite é "sem expiração, só de uso único") — mesmo padrão do TODO aberto "Convites (geração e validação)" em `server-channel`, que também não implementa expiração ainda.
 
+## Decisão: DMs entregues no mesmo WebSocket de presença, restritas a amigos aceitos
+
+**Contexto:** implementar "Implementar DMs: server-central como gateway de mensagens" (TODO.md) esbarrou em duas decisões não detalhadas pela decisão original ("Decisão: modelo de DMs — server-central medeia diretamente"): por qual conexão WebSocket a entrega em tempo real acontece, e quem pode mandar DM para quem.
+
+**Alternativas consideradas (transporte):** WebSocket dedicado (`GET /api/dms/ws`), registrado no mesmo `realtime.Hub` já usado por presença; reaproveitar a própria conexão `GET /api/presence/ws` que o client já mantém aberta, aceitando também frames `dm.create` nela.
+
+**Decisão:** reaproveitar a conexão de `GET /api/presence/ws`. `realtime.Client.ReadPump` (antes só descartava frames recebidos, já que presença não aceita nada do client) passou a receber um `onMessage func([]byte)`, mesmo formato já usado em `server-channel`. O único frame aceito é `dm.create` (`internal/httpapi/dms.go`, `handleIncomingDM`); o servidor responde `dm.created` (broadcast para destinatário e remetente, mesmo padrão de `message.created` em `server-channel` — o remetente recebe de volta para confirmar id/timestamp atribuídos pelo servidor) ou `error`.
+
+**Razão:** o client já abre e mantém uma única conexão de `server-central` por sessão (a de presença); pedir uma segunda conexão WebSocket só para DMs duplicaria handshake/reconexão/heartbeat sem nenhum ganho, já que `realtime.Hub` já particiona por `account_id` e já suporta múltiplos clients por conta (múltiplas abas). Consequência prática: abrir a conexão de DM (que hoje é a mesma de presença) já conta como "online" para efeito de presença — não existe hoje um jeito de mandar/receber DM sem também aparecer online para os amigos, o que é o comportamento esperado (a pessoa está com o client aberto).
+
+**Alternativas consideradas (autorização):** qualquer conta pode mandar DM para qualquer outra (bastando saber o `accountId`); restrita a amigos com amizade aceita (`FriendshipStore.AreFriends`, nova).
+
+**Decisão:** só amigos com `status = 'accepted'` podem trocar DMs entre si — aplicado tanto no envio via WebSocket (`handleIncomingDM`) quanto na leitura de histórico (`GET /api/dms/{accountId}/messages`, `handleListDMs`).
+
+**Razão:** consistente com a mesma filosofia já registrada em "Decisão: adicionar amigos via convite" e no escopo do broadcast de presença (só amigos aceitos se veem) — não há diretório de contas pesquisável, então não faz sentido permitir DM para alguém que a conta nem consegue descobrir por conta própria. Sem essa checagem, `accountId` na URL/no frame seria só um UUID adivinhável.
+
+**Modelo de dados criado (migration `0003_direct_messages`):** tabela `direct_messages` (`sender_id`, `recipient_id`, `content`, `created_at`, `edited_at`), índice funcional em `(LEAST(sender_id, recipient_id), GREATEST(sender_id, recipient_id), created_at DESC)` para a leitura da conversa nos dois sentidos. `DirectMessageStore.ListConversation` faz keyset pagination por `created_at`, mesmo padrão de `MessageStore.ListForChannel` em `server-channel`.
+
+**Revisitar quando:** um fluxo de pedido de amizade explícito (`Request`/`SetStatus`, hoje sem endpoint) entrar em uso — nesse ponto vale decidir se uma amizade `pending` já permite DM ou só `accepted` (hoje a resposta é só `accepted`, já que é o único status alcançável na prática via convite).
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

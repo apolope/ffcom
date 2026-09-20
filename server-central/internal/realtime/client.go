@@ -10,7 +10,7 @@ const (
 	writeWait      = 10 * time.Second
 	pongWait       = 60 * time.Second
 	pingPeriod     = pongWait * 9 / 10
-	maxMessageSize = 1024
+	maxMessageSize = 4096
 )
 
 // Client é uma conexão WebSocket registrada no gateway de presença. send é
@@ -57,13 +57,14 @@ func (c *Client) WritePump() {
 	}
 }
 
-// ReadPump só existe para detectar a desconexão do client e responder aos
-// pings do WritePump com pong (mantendo o read deadline vivo) — o gateway
-// de presença não aceita nenhum frame vindo do client, então os payloads
-// lidos aqui são descartados. Bloqueia até a conexão fechar. O chamador
-// deve rodar ReadPump na goroutine que fez o Upgrade e garantir
+// ReadPump lê frames de texto da conexão e chama onMessage para cada um —
+// hoje só frames "dm.create" (ver internal/httpapi/dms.go), já que o
+// gateway de presença em si não aceita nenhum frame vindo do client. Além
+// disso, detecta a desconexão do client e responde aos pings do WritePump
+// com pong (mantendo o read deadline vivo). Bloqueia até a conexão fechar.
+// O chamador deve rodar ReadPump na goroutine que fez o Upgrade e garantir
 // Hub.Unregister quando ela retornar.
-func (c *Client) ReadPump() {
+func (c *Client) ReadPump(onMessage func([]byte)) {
 	c.conn.SetReadLimit(maxMessageSize)
 	c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.conn.SetPongHandler(func(string) error {
@@ -72,8 +73,22 @@ func (c *Client) ReadPump() {
 	})
 
 	for {
-		if _, _, err := c.conn.ReadMessage(); err != nil {
+		_, payload, err := c.conn.ReadMessage()
+		if err != nil {
 			return
 		}
+		onMessage(payload)
+	}
+}
+
+// SendError envia um envelope de erro só para este client, sem broadcast.
+func (c *Client) SendError(message string) {
+	payload, err := EncodeError(message)
+	if err != nil {
+		return
+	}
+	select {
+	case c.send <- payload:
+	default:
 	}
 }

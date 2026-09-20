@@ -20,11 +20,12 @@ import (
 type Store struct {
 	pool *pgxpool.Pool
 
-	Accounts      *AccountStore
-	Profiles      *ProfileStore
-	Friendships   *FriendshipStore
-	KnownServers  *KnownServerStore
-	FriendInvites *FriendInviteStore
+	Accounts       *AccountStore
+	Profiles       *ProfileStore
+	Friendships    *FriendshipStore
+	KnownServers   *KnownServerStore
+	FriendInvites  *FriendInviteStore
+	DirectMessages *DirectMessageStore
 }
 
 // Open conecta ao Postgres em databaseURL, aplica as migrations pendentes e
@@ -46,12 +47,13 @@ func Open(ctx context.Context, databaseURL string) (*Store, error) {
 	}
 
 	return &Store{
-		pool:          pool,
-		Accounts:      &AccountStore{pool: pool},
-		Profiles:      &ProfileStore{pool: pool},
-		Friendships:   &FriendshipStore{pool: pool},
-		KnownServers:  &KnownServerStore{pool: pool},
-		FriendInvites: &FriendInviteStore{pool: pool},
+		pool:           pool,
+		Accounts:       &AccountStore{pool: pool},
+		Profiles:       &ProfileStore{pool: pool},
+		Friendships:    &FriendshipStore{pool: pool},
+		KnownServers:   &KnownServerStore{pool: pool},
+		FriendInvites:  &FriendInviteStore{pool: pool},
+		DirectMessages: &DirectMessageStore{pool: pool},
 	}, nil
 }
 

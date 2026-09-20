@@ -49,6 +49,18 @@ type KnownServer struct {
 	AddedAt   time.Time
 }
 
+// DirectMessage é uma mensagem trocada diretamente entre duas contas, sem
+// passar por nenhum server-channel (ver docs/architecture.md, "Decisão:
+// modelo de DMs").
+type DirectMessage struct {
+	ID          string
+	SenderID    string
+	RecipientID string
+	Content     string
+	CreatedAt   time.Time
+	EditedAt    *time.Time
+}
+
 // FriendInvite é um código de uso único gerado por uma conta para outra
 // resgatar e virar amiga (ver docs/architecture.md, "Decisão: adicionar
 // amigos via convite"). RedeemedByAccountID/RedeemedAt ficam nulos até o
