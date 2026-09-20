@@ -4,18 +4,32 @@ import './ServerRail.css'
 interface ServerRailProps {
   servers: KnownServer[]
   selectedServerId: string | undefined
+  friendsSelected: boolean
   onSelectServer: (serverId: string) => void
+  onSelectFriends: () => void
   onAddServer: () => void
 }
 
 export function ServerRail({
   servers,
   selectedServerId,
+  friendsSelected,
   onSelectServer,
+  onSelectFriends,
   onAddServer,
 }: ServerRailProps) {
   return (
     <nav className="server-rail" aria-label="Servidores">
+      <button
+        type="button"
+        className={friendsSelected ? 'server-icon active' : 'server-icon'}
+        onClick={onSelectFriends}
+        title="Amigos"
+      >
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">
+          <path d="M12 3 2 12h3v8h6v-6h2v6h6v-8h3L12 3z" />
+        </svg>
+      </button>
       <ul>
         {servers.map((server) => (
           <li key={server.id}>

@@ -12,6 +12,10 @@ import (
 // ErrNotFound é devolvido pelos repositórios quando a linha buscada não existe.
 var ErrNotFound = errors.New("store: registro não encontrado")
 
+// ErrConflict é devolvido pelos repositórios quando a operação esbarra num
+// estado já existente (ex.: amizade duplicada, convite já resgatado).
+var ErrConflict = errors.New("store: conflito, registro já existe")
+
 type AccountStore struct {
 	pool *pgxpool.Pool
 }

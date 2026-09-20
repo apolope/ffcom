@@ -229,7 +229,21 @@ Não existe endpoint de cadastro separado: `internal/auth/middleware.go` (`auth.
 
 **Escopo do broadcast:** só amigos com `status = 'accepted'` recebem o evento — desconhecidos e pedidos pendentes não veem presença de ninguém. Isso é o motivo de `handlePresenceWS` reconsultar `AcceptedFriendIDs` a cada conexão/desconexão em vez de cachear a lista de amigos: a lista pode ter mudado desde a última conexão da conta.
 
-**Revisitar quando:** `server-central` precisar rodar em múltiplas réplicas (mesmo gatilho já registrado no Hub de `server-channel`) — nesse ponto Redis pub/sub (ou equivalente) passa a ser necessário para presença ser consistente entre réplicas. Também revisitar quando "Lista de amigos + presença" no client for implementado — hoje só existe o endpoint, sem consumidor.
+**Revisitar quando:** `server-central` precisar rodar em múltiplas réplicas (mesmo gatilho já registrado no Hub de `server-channel`) — nesse ponto Redis pub/sub (ou equivalente) passa a ser necessário para presença ser consistente entre réplicas.
+
+## Decisão: adicionar amigos via convite (código de uso único), não username pesquisável
+
+**Contexto:** implementar "Lista de amigos + presença" no client esbarrou num buraco não documentado: o modelo de dados de `friendships` e o gateway de presença já existiam, mas nenhuma API permitia criar a amizade em primeiro lugar — sem isso a lista ficaria sempre vazia.
+
+**Alternativas consideradas:** adicionar por ID de conta (UUID) copiado/colado manualmente; adicionar por código/link de convite de uso único; adicionar um campo de username/handle único ao `Profile` com endpoint de busca.
+
+**Decisão:** convite por código de uso único. `POST /api/friends/invites` gera um código (`friend_invites.code`, 10 caracteres base32 aleatórios, ver `internal/httpapi/friends.go`) associado à conta que o criou; `POST /api/friends/invites/{code}/redeem` é chamado pela outra conta e, atomicamente, marca o convite como resgatado (`FriendInviteStore.Redeem`, `UPDATE ... WHERE redeemed_at IS NULL`) e cria a amizade já com `status = 'accepted'` (`FriendshipStore.CreateAccepted`) — resgatar o código já é o consentimento mútuo, não há uma etapa extra de aprovação como em `Request`/`SetStatus` (que continuam existindo no store para um fluxo de pedido explícito futuro, hoje sem endpoint). `CreateAccepted` verifica as duas direções (`requester_id`/`addressee_id`) antes de inserir, para não duplicar uma amizade já existente por outro caminho.
+
+**Razão:** mantém a mesma filosofia já registrada em "Decisão: descoberta de server-channel" — sem diretório pesquisável, só convite explícito compartilhado por fora. Um username pesquisável exigiria migration nova, validação de unicidade e um endpoint de busca que vira, na prática, um diretório de contas pesquisável — o tipo de superfície que o projeto já decidiu não ter para servidores, e que abriria a mesma discussão de moderação/opt-in registrada ali. UUID copiado/colado não exige infra nova, mas é pior UX sem ganhar nada em troca do convite (que também não exige infra além de uma tabela).
+
+**Implicação de UI:** `client/src/components/AddFriendDialog.tsx` reúne as duas pontas — gerar um código pra compartilhar, ou colar um código recebido — no mesmo diálogo, reaproveitando `Dialog.css` (renomeado de `AddServerDialog.css`, que não tinha nada específico de servidor).
+
+**Revisitar quando:** o volume de convites simultâneos por conta precisar de limite/expiração de fato (hoje `expires_at` existe na coluna mas nenhum endpoint o define — todo convite é "sem expiração, só de uso único") — mesmo padrão do TODO aberto "Convites (geração e validação)" em `server-channel`, que também não implementa expiração ainda.
 
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 

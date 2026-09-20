@@ -29,6 +29,38 @@ func (s *ProfileStore) GetByAccountID(ctx context.Context, accountID string) (Pr
 	return p, nil
 }
 
+// GetManyByAccountIDs busca o perfil de várias contas de uma vez (ex.: lista
+// de amigos). Contas sem perfil preenchido (ainda não passaram por Upsert)
+// simplesmente não aparecem no mapa devolvido — não é erro.
+func (s *ProfileStore) GetManyByAccountIDs(ctx context.Context, accountIDs []string) (map[string]Profile, error) {
+	out := make(map[string]Profile, len(accountIDs))
+	if len(accountIDs) == 0 {
+		return out, nil
+	}
+
+	const query = `
+		SELECT account_id, display_name, avatar_url, updated_at
+		FROM profiles WHERE account_id = ANY($1)
+	`
+	rows, err := s.pool.Query(ctx, query, accountIDs)
+	if err != nil {
+		return nil, fmt.Errorf("profiles: get many por account_id: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var p Profile
+		if err := rows.Scan(&p.AccountID, &p.DisplayName, &p.AvatarURL, &p.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("profiles: scan: %w", err)
+		}
+		out[p.AccountID] = p
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("profiles: iterar linhas: %w", err)
+	}
+	return out, nil
+}
+
 // Upsert cria ou atualiza o perfil de uma conta.
 func (s *ProfileStore) Upsert(ctx context.Context, accountID, displayName string, avatarURL *string) (Profile, error) {
 	const query = `

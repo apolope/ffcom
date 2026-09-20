@@ -5,9 +5,12 @@ import { MainPanel } from './components/MainPanel'
 import { MemberList } from './components/MemberList'
 import { LoginScreen } from './components/LoginScreen'
 import { AddServerDialog } from './components/AddServerDialog'
+import { FriendsView } from './components/FriendsView'
+import { AddFriendDialog } from './components/AddFriendDialog'
 import { useAuth } from './auth/AuthProvider'
 import { useServerStructure } from './hooks/useServerStructure'
 import { useKnownServers } from './hooks/useKnownServers'
+import { useFriends } from './hooks/useFriends'
 import type { Member } from './types'
 import './App.css'
 
@@ -16,8 +19,11 @@ const NO_MEMBERS: Member[] = []
 function App() {
   const { status, accessToken } = useAuth()
   const { servers, addServer } = useKnownServers(accessToken ?? '')
+  const { friends, createInvite, redeemInvite } = useFriends(accessToken ?? '')
   const [selectedServerId, setSelectedServerId] = useState<string>()
+  const [showFriends, setShowFriends] = useState(false)
   const [showAddServer, setShowAddServer] = useState(false)
+  const [showAddFriend, setShowAddFriend] = useState(false)
 
   useEffect(() => {
     if (selectedServerId && servers.some((s) => s.id === selectedServerId)) return
@@ -25,9 +31,10 @@ function App() {
   }, [servers, selectedServerId])
 
   const server = servers.find((s) => s.id === selectedServerId)
-  // Membros/presença ainda não têm API real (depende de "Endpoint/gateway
-  // de presença" em server-central, ver TODO.md) — só categorias/canais e o
-  // diretório de servidores já vêm de API real.
+  // Lista de membros por servidor (server-channel) ainda não tem API real
+  // (diferente da lista de amigos/presença, que já vem de server-central via
+  // useFriends) — ver TODO.md, "Sistema de permissões/roles por servidor e
+  // por canal".
   const members = NO_MEMBERS
 
   const { categories } = useServerStructure(server?.baseUrl ?? '', accessToken ?? '')
@@ -58,10 +65,17 @@ function App() {
       <ServerRail
         servers={servers}
         selectedServerId={selectedServerId}
-        onSelectServer={setSelectedServerId}
+        friendsSelected={showFriends}
+        onSelectServer={(id) => {
+          setShowFriends(false)
+          setSelectedServerId(id)
+        }}
+        onSelectFriends={() => setShowFriends(true)}
         onAddServer={() => setShowAddServer(true)}
       />
-      {server ? (
+      {showFriends ? (
+        <FriendsView friends={friends} onAddFriend={() => setShowAddFriend(true)} />
+      ) : server ? (
         <>
           <ChannelSidebar
             server={server}
@@ -79,6 +93,13 @@ function App() {
       )}
       {showAddServer && (
         <AddServerDialog onAdd={addServer} onClose={() => setShowAddServer(false)} />
+      )}
+      {showAddFriend && (
+        <AddFriendDialog
+          onCreateInvite={createInvite}
+          onRedeemInvite={redeemInvite}
+          onClose={() => setShowAddFriend(false)}
+        />
       )}
     </div>
   )

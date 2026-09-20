@@ -58,3 +58,88 @@ export async function removeKnownServer(accessToken: string, id: string): Promis
     throw new Error(`server-central: ${res.status} ${res.statusText}`)
   }
 }
+
+// Amigos + presença (ver docs/architecture.md, "Decisão: adicionar amigos
+// via convite" e "Decisão: gateway de presença em server-central").
+
+export interface RemoteFriend {
+  accountId: string
+  displayName?: string
+  avatarUrl?: string
+}
+
+export interface FriendPresence {
+  accountId: string
+  online: boolean
+}
+
+export interface FriendInvite {
+  code: string
+  createdAt: string
+}
+
+export async function fetchFriends(accessToken: string): Promise<RemoteFriend[]> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/friends`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  const body = await parseJsonOrThrow<{ friends: RemoteFriend[] }>(res)
+  return body.friends
+}
+
+export async function fetchPresenceSnapshot(accessToken: string): Promise<FriendPresence[]> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/presence`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  const body = await parseJsonOrThrow<{ friends: FriendPresence[] }>(res)
+  return body.friends
+}
+
+export async function createFriendInvite(accessToken: string): Promise<FriendInvite> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/friends/invites`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  return parseJsonOrThrow<FriendInvite>(res)
+}
+
+export async function redeemFriendInvite(accessToken: string, code: string): Promise<void> {
+  const res = await fetch(
+    `${SERVER_CENTRAL_URL}/api/friends/invites/${encodeURIComponent(code)}/redeem`,
+    { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` } },
+  )
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(text || `server-central: ${res.status} ${res.statusText}`)
+  }
+}
+
+function toPresenceWebSocketUrl(): string {
+  const url = new URL(`${SERVER_CENTRAL_URL}/api/presence/ws`)
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  return url.toString()
+}
+
+// Mesmo mecanismo de auth via subprotocolo usado no WebSocket de canal de
+// texto (ver serverChannelApi.ts e docs/architecture.md) — a API WebSocket
+// do navegador não permite header Authorization no handshake.
+export function openPresenceSocket(accessToken: string): WebSocket {
+  return new WebSocket(toPresenceWebSocketUrl(), ['access_token', accessToken])
+}
+
+interface PresenceUpdateFrame {
+  type: 'presence.update'
+  accountId: string
+  online: boolean
+}
+
+export function decodePresenceFrame(raw: string): PresenceUpdateFrame | null {
+  try {
+    const parsed = JSON.parse(raw) as { type?: string }
+    if (parsed.type === 'presence.update') {
+      return parsed as PresenceUpdateFrame
+    }
+    return null
+  } catch {
+    return null
+  }
+}

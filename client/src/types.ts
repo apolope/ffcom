@@ -27,3 +27,13 @@ export interface Member {
   nickname: string
   online: boolean
 }
+
+// Amigo (via server-central, ver hooks/useFriends.ts). displayName cai para
+// o accountId quando a conta ainda não preencheu o perfil (ver
+// ProfileStore.GetManyByAccountIDs em server-central).
+export interface Friend {
+  accountId: string
+  displayName: string
+  avatarUrl?: string
+  online: boolean
+}

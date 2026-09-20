@@ -55,7 +55,7 @@ Todas as decisões abaixo foram tomadas — ver `docs/architecture.md` para o de
 - [ ] Compartilhamento de tela
 - [x] Chat de texto em tempo real (histórico via REST + WebSocket, ver `client/src/hooks/useChannelChat.ts`)
 - [ ] Canal forum (UI de threads)
-- [ ] Lista de amigos + presença (via `server-central`)
+- [x] Lista de amigos + presença (via `server-central`)
 - [ ] DMs (depende da decisão de design acima)
 - [ ] Build Electron para Windows/macOS/Linux
 - [ ] Build web/PWA

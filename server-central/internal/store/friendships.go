@@ -61,6 +61,30 @@ func (s *FriendshipStore) ListForAccount(ctx context.Context, accountID string) 
 	return out, nil
 }
 
+// CreateAccepted cria uma amizade já com status "accepted" entre
+// requesterID e addresseeID — usado ao resgatar um convite de amizade (ver
+// docs/architecture.md, "Decisão: adicionar amigos via convite"):
+// resgatar o código já é o consentimento mútuo, não há etapa extra de
+// aprovação como em Request/SetStatus. Devolve ErrConflict se já existir
+// uma amizade entre as duas contas, em qualquer direção.
+func (s *FriendshipStore) CreateAccepted(ctx context.Context, requesterID, addresseeID string) (Friendship, error) {
+	const query = `
+		INSERT INTO friendships (requester_id, addressee_id, status)
+		SELECT $1, $2, 'accepted'
+		WHERE NOT EXISTS (
+			SELECT 1 FROM friendships
+			WHERE (requester_id = $1 AND addressee_id = $2)
+			   OR (requester_id = $2 AND addressee_id = $1)
+		)
+		RETURNING id, requester_id, addressee_id, status, created_at, updated_at
+	`
+	f, err := s.scanOne(ctx, query, requesterID, addresseeID)
+	if errors.Is(err, ErrNotFound) {
+		return Friendship{}, ErrConflict
+	}
+	return f, err
+}
+
 // AcceptedFriendIDs lista o account_id do outro lado de cada amizade aceita
 // de accountID — usado pelo gateway de presença para saber a quem notificar
 // (ou responder, na rota REST) quando o status online de alguém muda.

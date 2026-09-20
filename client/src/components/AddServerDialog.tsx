@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import './AddServerDialog.css'
+import './Dialog.css'
 
 interface AddServerDialogProps {
   onAdd: (address: string, name: string) => Promise<void>

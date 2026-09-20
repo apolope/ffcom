@@ -1,0 +1,55 @@
+.friend-invite-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.friend-invite-section:first-of-type {
+  padding-top: 0;
+  border-top: none;
+}
+
+.friend-invite-hint {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.friend-invite-section > button {
+  align-self: flex-start;
+  font: inherit;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+.friend-invite-section > button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.friend-invite-code {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.friend-invite-code code {
+  flex: 1;
+  font-size: 16px;
+  letter-spacing: 1px;
+}
+
+.friend-invite-code button {
+  font: inherit;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-h);
+  cursor: pointer;
+}

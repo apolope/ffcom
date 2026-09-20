@@ -48,3 +48,17 @@ type KnownServer struct {
 	IconURL   *string
 	AddedAt   time.Time
 }
+
+// FriendInvite é um código de uso único gerado por uma conta para outra
+// resgatar e virar amiga (ver docs/architecture.md, "Decisão: adicionar
+// amigos via convite"). RedeemedByAccountID/RedeemedAt ficam nulos até o
+// código ser resgatado; depois disso o código não pode ser usado de novo.
+type FriendInvite struct {
+	ID                  string
+	Code                string
+	CreatedByAccountID  string
+	ExpiresAt           *time.Time
+	RedeemedByAccountID *string
+	RedeemedAt          *time.Time
+	CreatedAt           time.Time
+}
