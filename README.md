@@ -47,4 +47,4 @@ Alternativa self-hosted ao Discord: organização em servidores, categorias e ca
 
 ## Status
 
-Fase de planejamento/scaffolding (setembro de 2026). Nenhum componente tem código funcional ainda — ver `TODO.md` para o próximo passo.
+Implantação de teste no ar desde 2026-09-21 (`app.ffcom.a3sitsolutions.com.br`, infra do `a3s-network`), com login OIDC, chat de texto, voz/vídeo, forum, roles/permissões, convites e DMs funcionando ponta a ponta. Restam principalmente testes com múltiplos usuários reais e a decisão do domínio de produção definitivo (`.com` vs `.com.br`) — ver `TODO.md` para o detalhe.

@@ -19,7 +19,7 @@ O "servidor" propriamente dito do FFCom: categorias, canais de texto/voz/forum. 
 - Convites.
 - Orquestração do LiveKit: criação de sala por canal de voz, emissão de token de acesso por permissão.
 
-Ver [`../TODO.md`](../TODO.md), seção "server-channel", para o que falta. Implementado até aqui: modelo de dados completo, autenticação (validação local de JWT contra o Authentik central), `GET /api/me`, e canal de texto (`GET /api/channels/{id}/messages` para histórico REST paginado, `GET /api/channels/{id}/ws` para envio/recebimento em tempo real via WebSocket).
+Ver [`../TODO.md`](../TODO.md), seção "server-channel", para o estado atual item a item — hoje já cobre canais de texto/voz/forum, permissões/roles, overwrites por canal, convites e lista de membros; o que resta é principalmente teste de ponta a ponta com múltiplos usuários reais (ver seção "Primeira implantação de teste" do TODO).
 
 ## Rodando via Docker Compose
 
@@ -32,6 +32,33 @@ docker compose up -d
 
 Sobe quatro serviços: `postgres`, `livekit`, `coturn` e `app` (o binário
 `server-channel` em si, buildado a partir do `Dockerfile` local).
+
+## TLS / HTTPS
+
+O `app` deste compose fala HTTP puro na porta `8080` (mesmo valendo para
+`livekit`/`coturn`) — não há terminação TLS embutida no binário. Para expor
+publicamente (fora de teste em LAN), coloque um proxy reverso na frente que
+termine TLS e encaminhe para `localhost:8080`. Quem não tem preferência
+formada, [Caddy](https://caddyserver.com/) é o caminho mais simples: emite e
+renova certificado Let's Encrypt sozinho, sem passo manual, a partir de um
+`Caddyfile` de poucas linhas:
+
+```
+seu-host.duckdns.org {
+	reverse_proxy localhost:8080
+}
+```
+
+(Nginx Proxy Manager ou Traefik funcionam igual se você já usa um deles para
+outros serviços — a única exigência é que o WebSocket de `GET
+/api/channels/{id}/ws` seja repassado com upgrade de conexão, o que os três
+fazem por padrão.)
+
+Depois de trocar para HTTPS, atualize dois lugares que passam a apontar para
+o novo esquema/host: `CORS_ALLOWED_ORIGINS` (se o `client` também mudar de
+origem) e o endereço divulgado aos membros ao gerar convites
+(`InviteServerDialog` no client usa o que estiver na barra de endereço/base
+URL configurada, não precisa de variável própria aqui).
 
 ## Hospedando atrás de NAT (ex. em casa)
 

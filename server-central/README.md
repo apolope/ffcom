@@ -26,15 +26,14 @@ Modelo de dados implementado (`internal/store`): `accounts`, `profiles`,
 `friendships`, `known_servers` — migrations em `migrations/`, aplicadas
 automaticamente na inicialização (embutidas no binário, sem passo manual).
 
-Servidor HTTP básico no ar (`internal/httpapi` + `internal/auth`):
 `auth.Middleware` valida o Bearer JWT contra o JWKS do Authentik
 (`internal/auth`, biblioteca `coreos/go-oidc/v3`) e garante a conta local
 via `AccountStore.GetOrCreateBySubject` a cada requisição autenticada — não
 há endpoint de "cadastro" separado, a primeira requisição de um `sub` novo
-já cria a conta. Primeira rota protegida: `GET /api/me` (devolve conta +
-perfil, se existir). Restante dos endpoints (presença, amigos, DMs,
-diretório de servidores) ainda por fazer — ver [`../TODO.md`](../TODO.md),
-seção "server-central".
+já cria a conta. Hoje já cobre `GET /api/me`, presença (WebSocket), lista de
+amigos, diretório de servidores conhecidos e DMs (REST + WebSocket) — ver
+[`../TODO.md`](../TODO.md), seção "server-central", para o detalhe item a
+item.
 
 ## Rodando via Docker Compose
 

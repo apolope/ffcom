@@ -84,7 +84,7 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [x] Convites de server-channel na UI: `AddServerDialog` ganhou campo opcional de código (chama `POST /api/join` antes de registrar o servidor no diretório) e `ChannelSidebar` ganhou botão "Convidar" (`InviteServerDialog`, gera código via `POST /api/invites`)
 - [x] Lista de membros real (`MemberList` via `hooks/useServerMembers.ts`, `GET /api/members`) e painel de administração de roles (`ManageRolesDialog`, botão "Roles" na `ChannelSidebar`, visível só com `ManageRoles`/dono) — overwrite de canal por role ainda não tem UI, só a API (ver server-channel acima)
 - [x] Build Electron para Windows/macOS/Linux — `electron-builder` (`client/package.json`, campo `"build"`), scripts `package`/`package:win`/`package:mac`/`package:linux`; sem ícone customizado nem assinatura de código ainda. Ver `docs/architecture.md`
-- [ ] Build web/PWA
+- [x] Build web/PWA — `vite-plugin-pwa` (manifest + service worker via Workbox), ícones gerados por `@vite-pwa/assets-generator` a partir de `favicon.svg`, desligado no build Electron; ver `docs/architecture.md`
 
 ## Segurança
 
@@ -95,9 +95,9 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 
 ## Documentação
 
-- [ ] Guia de self-hosting de `server-channel` (Docker Compose, TURN, DNS dinâmico)
+- [x] Guia de self-hosting de `server-channel` (Docker Compose, TURN, DNS dinâmico, TLS via proxy reverso) — `server-channel/README.md`; READMEs de `server-central`/`client`/raiz também atualizados (estavam desatualizados, ainda descreviam o projeto como scaffolding sem código funcional). Ver `docs/architecture.md`
 - [ ] Guia de contribuição (CONTRIBUTING.md)
-- [ ] Documentar protocolo/API entre os três componentes assim que definido
+- [x] Documentar protocolo/API entre os três componentes assim que definido — `docs/protocol.md`: endpoints REST, frames de WebSocket, autenticação, CORS e convenções dos dois servidores
 
 ## Fora de escopo da v1 (registrado para não esquecer)
 

@@ -11,9 +11,11 @@ Interface gráfica do FFCom. Mesma base de código para web (PWA) e desktop (Ele
 
 ## Responsabilidade
 
-- Conectar-se ao `server-central` (login, lista de amigos, lista de servidores).
+- Conectar-se ao `server-central` (login, lista de amigos, lista de servidores, DMs).
 - Conectar-se a um ou mais `server-channel` via IP ou DNS informado pelo usuário.
-- Renderizar a organização servidor → categoria → canal (texto/voz/forum).
+- Renderizar a organização servidor → categoria → canal (texto/voz/forum), com administração de roles/permissões e convites.
+
+Estado atual: todos os itens acima implementados — ver [`../TODO.md`](../TODO.md), seção "client", para o detalhe item a item.
 
 ## Scripts
 
