@@ -22,6 +22,7 @@ interface UseServerMembersResult {
   deleteRole: (roleId: string) => Promise<void>
   assignRole: (memberId: string, roleId: string) => Promise<void>
   removeRole: (memberId: string, roleId: string) => Promise<void>
+  refresh: () => Promise<void>
 }
 
 function toMember(remote: RemoteMember): Member {
@@ -96,5 +97,6 @@ export function useServerMembers(serverBaseUrl: string, accessToken: string): Us
       await removeRole(serverBaseUrl, accessToken, memberId, roleId)
       await load()
     },
+    refresh: load,
   }
 }

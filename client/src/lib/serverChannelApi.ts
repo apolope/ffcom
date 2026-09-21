@@ -71,6 +71,25 @@ export async function fetchMe(baseUrl: string, accessToken: string): Promise<Me>
   return parseJsonOrThrow<Me>(res)
 }
 
+// PATCH /api/me — define (ou limpa, passando undefined) o apelido exibido
+// neste server-channel. Ver docs/architecture.md, endpoint novo em
+// server-channel/internal/httpapi/me.go.
+export async function updateMyNickname(
+  baseUrl: string,
+  accessToken: string,
+  nickname: string | undefined,
+): Promise<Me> {
+  const res = await fetch(`${baseUrl}/api/me`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ nickname: nickname ?? null }),
+  })
+  return parseJsonOrThrow<Me>(res)
+}
+
 export interface JoinResult {
   memberId: string
   founder?: boolean

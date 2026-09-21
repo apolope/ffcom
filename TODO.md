@@ -37,9 +37,15 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [x] Checar portas livres em `SVRUBS24IPS0101` (via SSH, `ss -tuln`, 2026-09-20) — `3478/3479/5349/5350` já ocupados em `10.20.4.10` pelo coturn do stack VoIP/FreeSWITCH existente; `TURN_LISTEN_PORT` ajustado para `33478` em `deploy/channel/.env.example` (o container continua escutando `3478` internamente). Faixas de relay do coturn (`49160-49200`) e RTC do LiveKit (`50000-50100`) livres, sem mudança.
 - [x] `.env` reais criados em `/opt/ffcom/envs/ffcom-{central,channel}.env` no host, com segredos gerados (Postgres, LiveKit, TURN)
 - [x] `TURN_EXTERNAL_IP` confirmado pelo agente de infra: `137.131.249.145` (IP público fixo de `VMSUBS24OCI0102` — não um IP do site IPS01, ver correção em `docs/architecture.md`), preenchido em `/opt/ffcom/envs/ffcom-channel.env`
-- [ ] Agente de infra: proxy reverso/certificado/DNS em `VMSUBS24OCI0102` para os 4 hostnames (`app.`, `central.`, `channel-test.`, `livekit-test.ffcom.a3sitsolutions.com.br` → `137.131.249.145`) + encaminhamento das portas de mídia (RTC do LiveKit, STUN/TURN do coturn) até `SVRUBS24IPS0101`
-- [ ] Atualizar `redirect_uris` do blueprint Authentik (`abs-3d-printer/infra/authentik/blueprints/providers-ffcom.yaml`) para incluir `https://app.ffcom.a3sitsolutions.com.br/auth/callback`
-- [ ] Subir os containers em `SVRUBS24IPS0101` (via os workflows `deploy-ffcom-*` ou manualmente) e avisar o lado operacional para finalizar proxy hosts/certificado/encaminhamento
+- [x] Agente de infra: proxy reverso/certificado/DNS em `VMSUBS24OCI0102` para os 4 hostnames (`app.`, `central.`, `channel-test.`, `livekit-test.ffcom.a3sitsolutions.com.br` → `137.131.249.145`) + encaminhamento das portas de mídia (RTC do LiveKit, STUN/TURN do coturn) até `SVRUBS24IPS0101`
+- [x] Atualizar `redirect_uris` do blueprint Authentik (`abs-3d-printer/infra/authentik/blueprints/providers-ffcom.yaml`) para incluir `https://app.ffcom.a3sitsolutions.com.br/auth/callback`
+- [x] Subir os containers em `SVRUBS24IPS0101` — todos `healthy`
+- [x] Validação ponta a ponta (2026-09-21): DNS, TLS (Let's Encrypt), `/healthz`, upgrade de WebSocket e login OIDC completo, todos confirmados via `curl`/`openssl` e teste manual no client
+- [x] Bug: lista de membros mostrava UUID truncado — apelido configurável adicionado (`PATCH /api/me` em `server-channel`, `NicknameDialog.tsx` no client). Ver `docs/architecture.md`
+- [x] Bug: 401 visível no console logo após navegar pro client — `useFriends`/`useKnownServers` disparavam fetch com token vazio antes do login OIDC terminar; corrigido com a mesma guarda `if (!accessToken) return` já usada em outros hooks. Ver `docs/architecture.md`
+- [ ] Testar canal de voz com pelo menos 2 pessoas em redes diferentes (validação real do TURN em `33478`/relay `49160-49200`)
+- [ ] Testar convite/entrada de um segundo membro no `channel-test` de ponta a ponta (não só o fundador)
+- [ ] Testar roles/permissões negando `ViewChannels` a um membro de teste
 
 ## server-central
 

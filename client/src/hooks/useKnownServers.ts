@@ -43,6 +43,11 @@ export function useKnownServers(accessToken: string): UseKnownServersResult {
   const [error, setError] = useState<string>()
 
   const load = useCallback(() => {
+    // accessToken só existe depois que o login OIDC termina (ver
+    // AuthProvider) — sem essa guarda, o primeiro render (ainda em
+    // 'loading' no App) já dispara fetch com token vazio, gerando 401
+    // visível no console antes do token real chegar.
+    if (!accessToken) return Promise.resolve()
     setStatus('loading')
     setError(undefined)
     return fetchKnownServers(accessToken)

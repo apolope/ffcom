@@ -15,6 +15,7 @@ interface ChannelSidebarProps {
   onInvite: () => void
   canManageRoles: boolean
   onManageRoles: () => void
+  onEditNickname: () => void
 }
 
 export function ChannelSidebar({
@@ -25,6 +26,7 @@ export function ChannelSidebar({
   onInvite,
   canManageRoles,
   onManageRoles,
+  onEditNickname,
 }: ChannelSidebarProps) {
   return (
     <nav className="channel-sidebar" aria-label="Canais">
@@ -36,6 +38,9 @@ export function ChannelSidebar({
               Roles
             </button>
           )}
+          <button type="button" className="invite-button" onClick={onEditNickname}>
+            Apelido
+          </button>
           <button type="button" className="invite-button" onClick={onInvite}>
             Convidar
           </button>

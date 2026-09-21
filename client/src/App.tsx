@@ -10,6 +10,7 @@ import { ManageRolesDialog } from './components/ManageRolesDialog'
 import { FriendsView } from './components/FriendsView'
 import { AddFriendDialog } from './components/AddFriendDialog'
 import { DirectMessageView } from './components/DirectMessageView'
+import { NicknameDialog } from './components/NicknameDialog'
 import { useAuth } from './auth/AuthProvider'
 import { useServerStructure } from './hooks/useServerStructure'
 import { useKnownServers } from './hooks/useKnownServers'
@@ -30,6 +31,7 @@ function App() {
   const [showInviteServer, setShowInviteServer] = useState(false)
   const [showManageRoles, setShowManageRoles] = useState(false)
   const [showAddFriend, setShowAddFriend] = useState(false)
+  const [showEditNickname, setShowEditNickname] = useState(false)
   const [selectedFriendId, setSelectedFriendId] = useState<string>()
 
   const selectedFriend = friends.find((f) => f.accountId === selectedFriendId)
@@ -40,12 +42,10 @@ function App() {
   }, [servers, selectedServerId])
 
   const server = servers.find((s) => s.id === selectedServerId)
-  const me = useMe(server?.baseUrl ?? '', accessToken ?? '')
+  const { me, setNickname } = useMe(server?.baseUrl ?? '', accessToken ?? '')
   const canManageRoles = me ? hasPermission(me.permissions, PERMISSIONS.ManageRoles) || !!me.isOwner : false
-  const { members, roles, createRole, deleteRole, assignRole, removeRole } = useServerMembers(
-    server?.baseUrl ?? '',
-    accessToken ?? '',
-  )
+  const { members, roles, createRole, deleteRole, assignRole, removeRole, refresh: refreshMembers } =
+    useServerMembers(server?.baseUrl ?? '', accessToken ?? '')
 
   const { categories } = useServerStructure(server?.baseUrl ?? '', accessToken ?? '')
 
@@ -114,6 +114,7 @@ function App() {
             onInvite={() => setShowInviteServer(true)}
             canManageRoles={canManageRoles}
             onManageRoles={() => setShowManageRoles(true)}
+            onEditNickname={() => setShowEditNickname(true)}
           />
           <MainPanel channel={channel} serverBaseUrl={server.baseUrl} />
           <MemberList members={members} roles={roles} />
@@ -152,6 +153,16 @@ function App() {
           onCreateInvite={createInvite}
           onRedeemInvite={redeemInvite}
           onClose={() => setShowAddFriend(false)}
+        />
+      )}
+      {showEditNickname && (
+        <NicknameDialog
+          currentNickname={me?.nickname}
+          onSave={async (nickname) => {
+            await setNickname(nickname)
+            await refreshMembers()
+          }}
+          onClose={() => setShowEditNickname(false)}
         />
       )}
     </div>
