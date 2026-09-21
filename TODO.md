@@ -21,7 +21,7 @@ Todas as decisões abaixo foram tomadas — ver `docs/architecture.md` para o de
 - [x] Docker Compose de referência para `server-central` (app Go + Postgres — Authentik é a instância central do `abs-3d-printer`, não roda aqui)
 - [ ] Documentar port-forwarding / DNS dinâmico para quem for self-hostear `server-channel` atrás de NAT
 - [x] Pipeline de deploy (build + push GHCR + deploy) para os três componentes — `.github/workflows/deploy-ffcom-{central,channel,client}.yml`, ver `docs/architecture.md` ("Decisão: primeira implantação de teste"); ainda sem etapa de testes automatizados (só lint de Dockerfile via Hadolint e scan de segredo via Gitleaks)
-- [ ] Definir versionamento e forma de release dos binários (`server-central`, `server-channel`, `client`)
+- [x] Definir versionamento e forma de release dos binários (`server-central`, `server-channel`, `client`) — semver independente por componente, disparado por push de git tag (`central-v*`/`channel-v*`/`client-v*`); imagem GHCR ganha a tag de versão além do sha; `server-central`/`server-channel` expõem a versão em `GET /healthz`. Ver `docs/architecture.md`
 - [ ] Provisionar `ffcom.a3sitsolutions.com` (DNS + certificado) para a instância oficial do `server-central` — domínio a confirmar (`.com` vs `.com.br`); primeira implantação de teste usa `*.ffcom.a3sitsolutions.com.br` na infra do `a3s-network` como passo intermediário, ver `docs/architecture.md`
 
 ## Primeira implantação de teste (infra `a3s-network`, `SVRUBS24IPS0101`)

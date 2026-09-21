@@ -446,6 +446,22 @@ Há bastante espaço sobrando no `BIGINT` para bits futuros (canal forum, gerenc
 
 **Revisitar quando:** o build Electron empacotado (TODO em aberto) existir e o produto quiser que clicar no link abra o app direto (em vez de só facilitar copiar/colar) — nesse ponto vale registrar um esquema customizado, com o link `http(s)://…?invite=` continuando como fallback pro client web/PWA.
 
+## Decisão: versionamento e release dos binários — semver independente por componente, disparado por git tag
+
+**Contexto:** os três workflows de deploy (`deploy-ffcom-{central,channel,client}.yml`) só tinham `workflow_dispatch` manual, taggeando a imagem GHCR só com o sha curto do commit (`git rev-parse --short HEAD`) — nenhum conceito de versão, changelog ou release existia (TODO "Definir versionamento e forma de release dos binários").
+
+**Alternativas consideradas:** versão única compartilhada pelos três componentes vs. versão independente por componente; disparo por push de git tag vs. input manual no `workflow_dispatch`.
+
+**Decisão:**
+1. **Versão independente por componente**, não uma versão única do repositório. Tags no formato `central-vX.Y.Z`, `channel-vX.Y.Z`, `client-vX.Y.Z`.
+2. **Push de git tag** dispara o workflow do componente correspondente (`on.push.tags: ['central-v*']` etc.), além do `workflow_dispatch` manual que continua existindo para redeploy ad-hoc do commit atual.
+3. Ao rodar por um push de tag, a imagem GHCR recebe **duas** tags: a de sempre (sha curto) e a versão semântica extraída da tag (`central-v0.1.0` → imagem `ghcr.io/apolope/ffcom-central:0.1.0`). Rodando via `workflow_dispatch` manual, só a tag de sha é publicada (comportamento inalterado). O passo de deploy continua usando o sha, não a versão — nenhuma mudança no mecanismo de deploy em si.
+4. `server-central` e `server-channel` (binários Go) agora embutem a versão via `-ldflags "-X main.version=${VERSION}"` no build (`ARG VERSION=dev` no Dockerfile, `dev` fora de um build versionado) e expõem em `GET /healthz` (`{"status":"ok","version":"..."}`), útil para quem autohospeda `server-channel` confirmar qual versão está rodando. `client` (SPA estática servida por nginx) recebe a mesma tag de imagem por consistência, mas não expõe a versão em runtime hoje — não há uma tela "Sobre" ou endpoint equivalente para mostrá-la.
+
+**Razão:** `server-channel` é autohospedado por terceiros e evolui fora de sincronia com a instância única oficial de `server-central` — faz sentido cada um ter seu próprio número de versão e seu próprio ritmo de release, em vez de forçar os três a subirem de versão juntos só porque vivem no mesmo repositório. Git tag como gatilho é o padrão mais comum para isso no ecossistema (versão fica registrada no histórico do git, `git tag`/`git describe` funcionam sem ferramenta extra) e evita ter que lembrar de digitar a versão certa toda vez que alguém aperta "Run workflow" na UI do Actions.
+
+**Revisitar quando:** o build Electron/PWA (TODOs em aberto) existir — nesse ponto vale decidir como a versão do `client` aparece para o usuário final (tela "Sobre", rodapé, etc.) e se o instalador do Electron usa a mesma tag `client-vX.Y.Z` para nomear o artefato de release no GitHub Releases.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

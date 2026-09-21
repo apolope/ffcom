@@ -2,6 +2,9 @@ name: deploy-ffcom-central
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'central-v*'
 
 permissions:
   contents: read
@@ -42,11 +45,24 @@ jobs:
       - name: Login no GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
+      - name: Determinar versão
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/central-v* ]]; then
+            echo "value=${GITHUB_REF#refs/tags/central-}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=dev" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build e push da imagem
         working-directory: server-central
         run: |
-          IMAGE_TAG="${IMAGE}:$(git rev-parse --short HEAD)"
-          docker buildx build -t "$IMAGE_TAG" -f Dockerfile --push .
+          VERSION="${{ steps.version.outputs.value }}"
+          TAGS=(-t "${IMAGE}:$(git rev-parse --short HEAD)")
+          if [ "$VERSION" != "dev" ]; then
+            TAGS+=(-t "${IMAGE}:${VERSION}")
+          fi
+          docker buildx build "${TAGS[@]}" --build-arg VERSION="$VERSION" -f Dockerfile --push .
 
       - name: Carregar env file
         working-directory: deploy/central

@@ -18,7 +18,7 @@ import (
 // server-channel, ver docs/architecture.md, "Decisão: CORS em
 // server-channel") — origens do client (web/PWA, Electron) autorizadas a
 // chamar esta instância de uma origem diferente.
-func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string) http.Handler {
+func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string, version string) http.Handler {
 	mux := http.NewServeMux()
 	hub := realtime.NewHub()
 
@@ -28,7 +28,7 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string
 	}
 	upgrader := newPresenceUpgrader(allowed)
 
-	mux.HandleFunc("GET /healthz", handleHealthz)
+	mux.HandleFunc("GET /healthz", handleHealthz(version))
 
 	protected := auth.Middleware(verifier, db.Accounts)
 	mux.Handle("GET /api/me", protected(handleMe(db)))

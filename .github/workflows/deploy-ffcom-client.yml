@@ -2,6 +2,9 @@ name: deploy-ffcom-client
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'client-v*'
 
 permissions:
   contents: read
@@ -46,13 +49,26 @@ jobs:
       - name: Login no GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
+      - name: Determinar versão
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/client-v* ]]; then
+            echo "value=${GITHUB_REF#refs/tags/client-}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=dev" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build e push da imagem
         working-directory: client
         run: |
-          IMAGE_TAG="${IMAGE}:$(git rev-parse --short HEAD)"
-          docker buildx build \
+          VERSION="${{ steps.version.outputs.value }}"
+          TAGS=(-t "${IMAGE}:$(git rev-parse --short HEAD)")
+          if [ "$VERSION" != "dev" ]; then
+            TAGS+=(-t "${IMAGE}:${VERSION}")
+          fi
+          docker buildx build "${TAGS[@]}" \
             --build-arg VITE_SERVER_CENTRAL_URL="${VITE_SERVER_CENTRAL_URL}" \
-            -t "$IMAGE_TAG" -f Dockerfile --push .
+            -f Dockerfile --push .
 
       - name: Deploy ffcom-client
         working-directory: deploy/client

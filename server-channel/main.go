@@ -12,6 +12,11 @@ import (
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
 )
 
+// version é sobrescrito em tempo de build via ldflags (-X main.version=...,
+// ver Dockerfile e docs/architecture.md, "Decisão: versionamento e release
+// dos binários"). "dev" fora de um build versionado (ex. go run local).
+var version = "dev"
+
 func main() {
 	databaseURL := requireEnv("DATABASE_URL")
 	issuerURL := requireEnv("OIDC_ISSUER_URL")
@@ -47,9 +52,10 @@ func main() {
 		liveKitAPIKey,
 		liveKitAPISecret,
 		liveKitPublicURL,
+		version,
 	)
 
-	log.Printf("server-channel: ouvindo em :%s (OIDC issuer: %s)", port, issuerURL)
+	log.Printf("server-channel: versão %s, ouvindo em :%s (OIDC issuer: %s)", version, port, issuerURL)
 	if err := http.ListenAndServe(":"+port, router); err != nil {
 		log.Fatalf("server-channel: %v", err)
 	}

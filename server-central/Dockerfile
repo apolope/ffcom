@@ -3,7 +3,8 @@ WORKDIR /src
 COPY go.mod ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /out/server-central .
+ARG VERSION=dev
+RUN CGO_ENABLED=0 go build -ldflags "-X main.version=${VERSION}" -o /out/server-central .
 
 FROM alpine:3.20
 # hadolint ignore=DL3018

@@ -23,7 +23,7 @@ import (
 // allowedOrigins vem de CORS_ALLOWED_ORIGINS (ver docs/architecture.md,
 // "Decisão: CORS em server-channel") — origens do client (web/PWA,
 // Electron) autorizadas a chamar esta instância de uma origem diferente.
-func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string, liveKitAPIKey, liveKitAPISecret, liveKitPublicURL string) http.Handler {
+func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string, liveKitAPIKey, liveKitAPISecret, liveKitPublicURL, version string) http.Handler {
 	mux := http.NewServeMux()
 	hub := realtime.NewHub()
 
@@ -33,7 +33,7 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string
 	}
 	upgrader := newUpgrader(allowed)
 
-	mux.HandleFunc("GET /healthz", handleHealthz)
+	mux.HandleFunc("GET /healthz", handleHealthz(version))
 
 	authenticated := auth.VerifyToken(verifier)
 	requireMember := auth.RequireMember(db.Members)
