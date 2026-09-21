@@ -8,7 +8,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE: ghcr.io/a3sitsolutions/ffcom-channel
+  IMAGE: ghcr.io/apolope/ffcom-channel
 
 jobs:
   lint-dockerfile:

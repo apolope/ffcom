@@ -25,7 +25,7 @@ services:
       retries: 10
 
   app:
-    image: ghcr.io/a3sitsolutions/ffcom-central:${IMAGE_TAG}
+    image: ghcr.io/apolope/ffcom-central:${IMAGE_TAG}
     container_name: ffcom-central-app
     restart: unless-stopped
     depends_on:

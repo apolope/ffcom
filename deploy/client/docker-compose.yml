@@ -5,7 +5,7 @@
 # overlay a3s-services.
 services:
   app:
-    image: ghcr.io/a3sitsolutions/ffcom-client:${IMAGE_TAG}
+    image: ghcr.io/apolope/ffcom-client:${IMAGE_TAG}
     container_name: ffcom-client
     restart: unless-stopped
     networks:

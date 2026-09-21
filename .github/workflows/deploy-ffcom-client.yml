@@ -8,7 +8,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE: ghcr.io/a3sitsolutions/ffcom-client
+  IMAGE: ghcr.io/apolope/ffcom-client
   # VITE_* é embutido no bundle em tempo de build (ver client/Dockerfile) —
   # precisa ser o domínio público de server-central roteado via NPM, não
   # localhost. Ajustar aqui se o subdomínio mudar.

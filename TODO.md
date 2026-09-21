@@ -32,6 +32,8 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [x] `Dockerfile`/`nginx.conf` do `client` (build da SPA + serve estático) — não existia até esta rodada
 - [x] `GET /healthz` sem autenticação em `server-central` e `server-channel`, para o `HEALTHCHECK` do Docker
 - [x] Workflows `deploy-ffcom-{central,channel,client}.yml`
+- [x] Corrigido ao rodar pela primeira vez (2026-09-20): `ffcom` é repositório pessoal (`apolope/ffcom`), não da organização `a3sitsolutions` — runner de organização `[self-hosted, a3s-network]` não é visível a ele (corrigido com runner dedicado ao repo, mesma máquina) e `GITHUB_TOKEN` não publica em `ghcr.io/a3sitsolutions/*` (corrigido trocando as 3 imagens para `ghcr.io/apolope/ffcom-*`). Ver `docs/architecture.md`.
+- [x] Corrigido: `hadolint` barrando o pipeline por `DL3018` (apk sem versão fixa) em `server-central`/`server-channel` — `# hadolint ignore=DL3018` adicionado nos dois Dockerfiles
 - [x] Checar portas livres em `SVRUBS24IPS0101` (via SSH, `ss -tuln`, 2026-09-20) — `3478/3479/5349/5350` já ocupados em `10.20.4.10` pelo coturn do stack VoIP/FreeSWITCH existente; `TURN_LISTEN_PORT` ajustado para `33478` em `deploy/channel/.env.example` (o container continua escutando `3478` internamente). Faixas de relay do coturn (`49160-49200`) e RTC do LiveKit (`50000-50100`) livres, sem mudança.
 - [x] `.env` reais criados em `/opt/ffcom/envs/ffcom-{central,channel}.env` no host, com segredos gerados (Postgres, LiveKit, TURN)
 - [x] `TURN_EXTERNAL_IP` confirmado pelo agente de infra: `137.131.249.145` (IP público fixo de `VMSUBS24OCI0102` — não um IP do site IPS01, ver correção em `docs/architecture.md`), preenchido em `/opt/ffcom/envs/ffcom-channel.env`

@@ -56,7 +56,7 @@ services:
       - a3s-services
 
   app:
-    image: ghcr.io/a3sitsolutions/ffcom-channel:${IMAGE_TAG}
+    image: ghcr.io/apolope/ffcom-channel:${IMAGE_TAG}
     container_name: ffcom-channel-app
     restart: unless-stopped
     depends_on:
