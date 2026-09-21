@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -41,24 +42,45 @@ type roleRequest struct {
 }
 
 // requireManageRoles resolve a permissão base do membro autenticado e
-// devolve false (já com a resposta HTTP escrita) se ele não tiver
-// ManageRoles nem for dono do servidor.
-func requireManageRoles(w http.ResponseWriter, r *http.Request, roles *store.RoleStore) bool {
+// devolve (0, false) (já com a resposta HTTP escrita) se ele não tiver
+// ManageRoles nem for dono do servidor. A permissão base devolvida é usada
+// por quem chama para checar, via permissions.Grants, que ManageRoles
+// sozinho não está sendo usado para conceder um bit que o requisitante não
+// possui (ver "Decisão: ManageRoles não concede permissões além das
+// próprias" em docs/architecture.md).
+func requireManageRoles(w http.ResponseWriter, r *http.Request, roles *store.RoleStore) (int64, bool) {
 	member, ok := auth.MemberFromContext(r.Context())
 	if !ok {
 		http.Error(w, "membro não encontrado no contexto", http.StatusInternalServerError)
-		return false
+		return 0, false
 	}
 	base, _, err := memberBasePermission(r.Context(), roles, member)
 	if err != nil {
 		http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
-		return false
+		return 0, false
 	}
 	if !permissions.Has(base, permissions.ManageRoles) {
 		http.Error(w, "requer a permissão ManageRoles", http.StatusForbidden)
-		return false
+		return 0, false
 	}
-	return true
+	return base, true
+}
+
+// findRole busca uma role por id entre todas as roles do servidor. Não há
+// query dedicada (RoleStore não expõe GetByID) porque List já é usado por
+// vários chamadores próximos (rejectDefaultRole, handleDeleteRole) e o
+// número de roles por servidor é pequeno.
+func findRole(ctx context.Context, roles *store.RoleStore, id string) (store.Role, error) {
+	rows, err := roles.List(ctx)
+	if err != nil {
+		return store.Role{}, err
+	}
+	for _, role := range rows {
+		if role.ID == id {
+			return role, nil
+		}
+	}
+	return store.Role{}, store.ErrNotFound
 }
 
 // GET /api/roles — lista todas as roles do servidor. Aberto a qualquer
@@ -85,7 +107,8 @@ func handleListRoles(roles *store.RoleStore) http.Handler {
 // POST /api/roles — cria uma role nova. Requer ManageRoles.
 func handleCreateRole(roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !requireManageRoles(w, r, roles) {
+		base, ok := requireManageRoles(w, r, roles)
+		if !ok {
 			return
 		}
 
@@ -96,6 +119,10 @@ func handleCreateRole(roles *store.RoleStore) http.Handler {
 		}
 		if body.Name == "" {
 			http.Error(w, "name é obrigatório", http.StatusBadRequest)
+			return
+		}
+		if !permissions.Grants(base, body.Permissions) {
+			http.Error(w, "não é possível conceder permissões que você mesmo não possui", http.StatusForbidden)
 			return
 		}
 
@@ -115,7 +142,8 @@ func handleCreateRole(roles *store.RoleStore) http.Handler {
 // da role default. Requer ManageRoles.
 func handleUpdateRole(roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !requireManageRoles(w, r, roles) {
+		base, ok := requireManageRoles(w, r, roles)
+		if !ok {
 			return
 		}
 
@@ -126,6 +154,10 @@ func handleUpdateRole(roles *store.RoleStore) http.Handler {
 		}
 		if body.Name == "" {
 			http.Error(w, "name é obrigatório", http.StatusBadRequest)
+			return
+		}
+		if !permissions.Grants(base, body.Permissions) {
+			http.Error(w, "não é possível conceder permissões que você mesmo não possui", http.StatusForbidden)
 			return
 		}
 
@@ -149,7 +181,7 @@ func handleUpdateRole(roles *store.RoleStore) http.Handler {
 // todo membro). Requer ManageRoles.
 func handleDeleteRole(roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !requireManageRoles(w, r, roles) {
+		if _, ok := requireManageRoles(w, r, roles); !ok {
 			return
 		}
 
@@ -182,11 +214,25 @@ func handleDeleteRole(roles *store.RoleStore) http.Handler {
 // membro. Requer ManageRoles.
 func handleAssignRole(members *store.MemberStore, roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !requireManageRoles(w, r, roles) {
+		base, ok := requireManageRoles(w, r, roles)
+		if !ok {
 			return
 		}
 		if err := rejectDefaultRole(r, roles); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		target, err := findRole(r.Context(), roles, r.PathValue("roleId"))
+		if errors.Is(err, store.ErrNotFound) {
+			http.Error(w, "role não encontrada", http.StatusNotFound)
+			return
+		} else if err != nil {
+			http.Error(w, "erro ao buscar role", http.StatusInternalServerError)
+			return
+		}
+		if !permissions.Grants(base, target.Permissions) {
+			http.Error(w, "não é possível atribuir uma role com permissões que você mesmo não possui", http.StatusForbidden)
 			return
 		}
 
@@ -211,7 +257,7 @@ func handleAssignRole(members *store.MemberStore, roles *store.RoleStore) http.H
 // membro. Requer ManageRoles.
 func handleRemoveRole(roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !requireManageRoles(w, r, roles) {
+		if _, ok := requireManageRoles(w, r, roles); !ok {
 			return
 		}
 

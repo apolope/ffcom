@@ -54,6 +54,19 @@ type Overwrite struct {
 // deny de outro só se vier depois; aqui, com um overwrite por role, deny
 // sempre vence porque é aplicado por último). base == Owner (todos os bits)
 // ignora overwrites por completo.
+// Grants reports whether base already holds every bit set in target —
+// Administrator (or Owner) trivially grants anything. Used to stop
+// ManageRoles from being, by itself, enough to hand out a permission (most
+// dangerously Administrator) that the holder doesn't actually have: role
+// creation/edit and role assignment must check the requester's own base
+// permission against the bits being granted before applying them.
+func Grants(base, target int64) bool {
+	if base&Administrator != 0 {
+		return true
+	}
+	return target&^base == 0
+}
+
 func Effective(base int64, memberRoleIDs []string, overwrites []Overwrite) int64 {
 	if base&Administrator != 0 {
 		return base

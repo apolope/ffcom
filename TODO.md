@@ -90,7 +90,7 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 
 - [ ] Criptografia em trânsito (TLS) obrigatória entre client e ambos os tipos de servidor
 - [x] Rate limiting / proteção contra abuso em `server-central` (cadastro, login) — limite geral por IP (token bucket em memória, `internal/httpapi/ratelimit.go`), já que não há endpoint de cadastro/login próprio (conta é criada implicitamente no `auth.Middleware`); configurável via `RATE_LIMIT_RPM`/`RATE_LIMIT_BURST`, padrão 120 req/min e burst 20; `/healthz` isento. Ver `docs/architecture.md`
-- [ ] Política de permissões/roles em `server-channel` revisada contra escalonamento de privilégio
+- [x] Política de permissões/roles em `server-channel` revisada contra escalonamento de privilégio — achado: `ManageRoles` sozinho permitia auto-conceder `Administrator` (criar role com esse bit + se auto-atribuir); corrigido com `permissions.Grants` (bits concedidos via criação/edição de role, atribuição de role e `Allow` de overwrite de canal não podem exceder a permissão base de quem chama). Ver `docs/architecture.md`
 - [ ] Avaliar necessidade de criptografia ponta-a-ponta em DMs
 
 ## Documentação

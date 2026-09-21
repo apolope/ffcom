@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"a3sitsolutions.com/ffcom/server-channel/internal/permissions"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
 )
 
@@ -19,7 +20,7 @@ type overwriteView struct {
 // motivo para membros comuns verem o bitmask cru de outras roles.
 func handleListChannelOverwrites(channels *store.ChannelStore, roles *store.RoleStore, overwrites *store.ChannelOverwriteStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !requireManageRoles(w, r, roles) {
+		if _, ok := requireManageRoles(w, r, roles); !ok {
 			return
 		}
 
@@ -60,7 +61,8 @@ type setOverwriteRequest struct {
 // bits da permissão base de quem tiver essa role. Requer ManageRoles.
 func handleSetChannelOverwrite(channels *store.ChannelStore, roles *store.RoleStore, overwrites *store.ChannelOverwriteStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !requireManageRoles(w, r, roles) {
+		base, ok := requireManageRoles(w, r, roles)
+		if !ok {
 			return
 		}
 
@@ -76,6 +78,10 @@ func handleSetChannelOverwrite(channels *store.ChannelStore, roles *store.RoleSt
 		var body setOverwriteRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			return
+		}
+		if !permissions.Grants(base, body.Allow) {
+			http.Error(w, "não é possível liberar (allow) uma permissão que você mesmo não possui", http.StatusForbidden)
 			return
 		}
 
@@ -94,7 +100,7 @@ func handleSetChannelOverwrite(channels *store.ChannelStore, roles *store.RoleSt
 // existir. Requer ManageRoles.
 func handleDeleteChannelOverwrite(roles *store.RoleStore, overwrites *store.ChannelOverwriteStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !requireManageRoles(w, r, roles) {
+		if _, ok := requireManageRoles(w, r, roles); !ok {
 			return
 		}
 
