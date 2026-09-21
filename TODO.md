@@ -76,7 +76,7 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [x] Tela de adicionar servidor via IP/DNS (`client/src/components/AddServerDialog.tsx`, via API de `server-central`; ver `client/src/hooks/useKnownServers.ts`)
 - [x] API REST em `server-channel` para o client listar categorias/canais reais
 - [x] Integração de voz/vídeo via `livekit-client` (`client/src/components/VoiceChannelView.tsx` + `client/src/hooks/useVoiceChannel.ts`; vídeo em si — publicar câmera — ainda não tem controle na UI, só áudio)
-- [ ] Compartilhamento de tela
+- [x] Compartilhamento de tela — `toggleScreenShare`/`screenShareContainerRef` em `client/src/hooks/useVoiceChannel.ts`, botão "Compartilhar tela" em `VoiceChannelView.tsx`; ver `docs/architecture.md`
 - [x] Chat de texto em tempo real (histórico via REST + WebSocket, ver `client/src/hooks/useChannelChat.ts`)
 - [x] Canal forum (UI de threads) — `client/src/components/ForumChannelView.tsx` + `client/src/hooks/useForumChannel.ts`, ligado em `MainPanel.tsx`; ver `docs/architecture.md`
 - [x] Lista de amigos + presença (via `server-central`)

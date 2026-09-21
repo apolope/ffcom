@@ -13,11 +13,18 @@ interface VoiceChannelViewProps {
 // pede um token novo em server-channel (hooks/useVoiceChannel.ts).
 export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewProps) {
   const { accessToken } = useAuth()
-  const { status, error, participants, micEnabled, join, leave, toggleMic } = useVoiceChannel(
-    serverBaseUrl,
-    channel.id,
-    accessToken!,
-  )
+  const {
+    status,
+    error,
+    participants,
+    micEnabled,
+    screenSharing,
+    screenShareContainerRef,
+    join,
+    leave,
+    toggleMic,
+    toggleScreenShare,
+  } = useVoiceChannel(serverBaseUrl, channel.id, accessToken!)
 
   return (
     <div className="voice-channel">
@@ -43,6 +50,7 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
 
       {status === 'connected' && (
         <>
+          <div className="screen-share-grid" ref={screenShareContainerRef} />
           <ul className="voice-participant-list">
             {participants.map((p) => (
               <li key={p.identity} className="voice-participant">
@@ -52,6 +60,7 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
                 <span>
                   {p.name}
                   {p.isLocal ? ' (você)' : ''}
+                  {p.screenSharing ? ' 🖥️' : ''}
                 </span>
               </li>
             ))}
@@ -59,6 +68,9 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
           <div className="voice-controls">
             <button type="button" onClick={toggleMic}>
               {micEnabled ? 'Silenciar microfone' : 'Ativar microfone'}
+            </button>
+            <button type="button" onClick={toggleScreenShare}>
+              {screenSharing ? 'Parar compartilhamento' : 'Compartilhar tela'}
             </button>
             <button type="button" onClick={leave}>
               Sair do canal de voz
