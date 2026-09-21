@@ -23,7 +23,7 @@ import (
 // allowedOrigins vem de CORS_ALLOWED_ORIGINS (ver docs/architecture.md,
 // "Decisão: CORS em server-channel") — origens do client (web/PWA,
 // Electron) autorizadas a chamar esta instância de uma origem diferente.
-func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string, liveKitAPIKey, liveKitAPISecret, liveKitPublicURL, version string) http.Handler {
+func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string, liveKitAPIKey, liveKitAPISecret, liveKitPublicURL, version string, requireTLS bool) http.Handler {
 	mux := http.NewServeMux()
 	hub := realtime.NewHub()
 
@@ -65,5 +65,5 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string
 	mux.Handle("POST /api/members/{memberId}/roles/{roleId}", protected(handleAssignRole(db.Members, db.Roles)))
 	mux.Handle("DELETE /api/members/{memberId}/roles/{roleId}", protected(handleRemoveRole(db.Roles)))
 
-	return withCORS(allowed, mux)
+	return withRequireTLS(requireTLS, withCORS(allowed, mux))
 }

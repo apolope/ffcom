@@ -45,7 +45,8 @@ func main() {
 
 	rateLimitRPM := envInt("RATE_LIMIT_RPM", 120)
 	rateLimitBurst := envInt("RATE_LIMIT_BURST", 20)
-	router := httpapi.NewRouter(verifier, db, parseAllowedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS")), version, rateLimitRPM, rateLimitBurst)
+	requireTLS := envBool("REQUIRE_TLS", false)
+	router := httpapi.NewRouter(verifier, db, parseAllowedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS")), version, rateLimitRPM, rateLimitBurst, requireTLS)
 
 	log.Printf("server-central: versão %s, ouvindo em :%s (OIDC issuer: %s)", version, port, issuerURL)
 	if err := http.ListenAndServe(":"+port, router); err != nil {
@@ -75,6 +76,17 @@ func envInt(name string, fallback int) int {
 		return fallback
 	}
 	return value
+}
+
+// envBool lê uma variável de ambiente booleana opcional ("true"/"1" ligam),
+// com fallback se ausente (REQUIRE_TLS — ver
+// internal/httpapi/requiretls.go).
+func envBool(name string, fallback bool) bool {
+	raw := os.Getenv(name)
+	if raw == "" {
+		return fallback
+	}
+	return raw == "true" || raw == "1"
 }
 
 // parseAllowedOrigins lê CORS_ALLOWED_ORIGINS (lista separada por vírgula,

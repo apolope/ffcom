@@ -42,6 +42,11 @@ services:
       # limiting em server-central".
       RATE_LIMIT_RPM: ${RATE_LIMIT_RPM:-}
       RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-}
+      # Exige X-Forwarded-Proto: https em toda requisição — ver
+      # docs/architecture.md, "Criptografia em trânsito obrigatória". Só
+      # ligar depois de confirmar que o Nginx Proxy Manager na frente
+      # (VMSUBS24OCI0102) realmente seta esse header.
+      REQUIRE_TLS: ${REQUIRE_TLS:-}
     networks:
       - internal
       - a3s-services

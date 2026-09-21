@@ -53,6 +53,7 @@ func main() {
 		liveKitAPISecret,
 		liveKitPublicURL,
 		version,
+		envBool("REQUIRE_TLS", false),
 	)
 
 	log.Printf("server-channel: versão %s, ouvindo em :%s (OIDC issuer: %s)", version, port, issuerURL)
@@ -67,6 +68,17 @@ func requireEnv(name string) string {
 		log.Fatalf("server-channel: variável de ambiente %s não definida", name)
 	}
 	return value
+}
+
+// envBool lê uma variável de ambiente booleana opcional ("true"/"1" ligam),
+// com fallback se ausente (REQUIRE_TLS — ver
+// internal/httpapi/requiretls.go).
+func envBool(name string, fallback bool) bool {
+	raw := os.Getenv(name)
+	if raw == "" {
+		return fallback
+	}
+	return raw == "true" || raw == "1"
 }
 
 // parseAllowedOrigins lê CORS_ALLOWED_ORIGINS (lista separada por vírgula,

@@ -54,3 +54,14 @@ instância central de Authentik (blueprint declarativo no repositório
 `abs-3d-printer`, mesmo procedimento usado por outros projetos que reusam
 essa instância — ver
 `D:\Dev\a3s-network\docs\procedures\integrar-app-com-authentik.md`).
+
+## TLS / HTTPS
+
+Mesmo caso de `server-channel` (ver
+[`../server-channel/README.md`](../server-channel/README.md#tls--https)):
+o `app` fala HTTP puro, sem terminação TLS embutida — coloque um proxy
+reverso (Caddy, Nginx Proxy Manager, Traefik) na frente para expor
+publicamente. Com o proxy no ar, ligue `REQUIRE_TLS=true` no `.env` para o
+`app` recusar (`426 Upgrade Required`) qualquer requisição sem
+`X-Forwarded-Proto: https`. Padrão desligado, para não quebrar quem estiver
+testando sem proxy.

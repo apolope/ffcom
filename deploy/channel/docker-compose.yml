@@ -68,6 +68,11 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-ffcom}:${POSTGRES_PASSWORD}@ffcom-channel-db:5432/${POSTGRES_DB:-ffcom_channel}?sslmode=disable
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:?defina OIDC_ISSUER_URL no .env}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?defina CORS_ALLOWED_ORIGINS no .env}
+      # Exige X-Forwarded-Proto: https em toda requisição — ver
+      # docs/architecture.md, "Criptografia em trânsito obrigatória". Só
+      # ligar depois de confirmar que o Nginx Proxy Manager na frente
+      # (VMSUBS24OCI0102) realmente seta esse header.
+      REQUIRE_TLS: ${REQUIRE_TLS:-}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
       LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:?defina LIVEKIT_PUBLIC_URL no .env (wss://livekit-test.ffcom.a3sitsolutions.com.br)}

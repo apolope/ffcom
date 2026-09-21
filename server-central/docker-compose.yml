@@ -47,6 +47,10 @@ services:
       # limiting em server-central".
       RATE_LIMIT_RPM: ${RATE_LIMIT_RPM:-}
       RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-}
+      # Exige X-Forwarded-Proto: https quando ligado — ver README.md, "TLS /
+      # HTTPS". Padrão desligado (vazio), para não quebrar dev local sem
+      # proxy na frente.
+      REQUIRE_TLS: ${REQUIRE_TLS:-}
     ports:
       - "${SERVER_CENTRAL_PORT:-8081}:8080"
     networks:

@@ -541,6 +541,25 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** o TODO "Criptografia em trânsito (TLS) obrigatória entre client e ambos os tipos de servidor" for atacado — hoje TLS é recomendado no guia mas não é tecnicamente exigido (nada no `client` ou nos servidores recusa conexão HTTP pura); tornar obrigatório exigiria decidir onde essa checagem vive (client recusa endereço `http://`? servidor recusa iniciar sem certificado configurado?), o que é escopo daquele TODO separado, não deste guia.
 
+## Decisão: criptografia em trânsito obrigatória — client recusa `http://` fora de localhost, servidor exige `X-Forwarded-Proto: https`
+
+**Contexto:** implementar o TODO "Criptografia em trânsito (TLS) obrigatória entre client e ambos os tipos de servidor", deixado em aberto na decisão anterior (guia de self-hosting). Nenhum dos dois binários Go termina TLS (delegado a um proxy reverso, ver decisão acima) — "obrigatório" não pode significar "o binário recusa iniciar sem certificado", porque ele nunca tem um certificado para checar.
+
+**Alternativas consideradas:** (a) só o client recusar `http://` na UI; (b) só o servidor exigir `X-Forwarded-Proto: https`; (c) as duas coisas; (d) adiar, sem mudança de código agora.
+
+**Decisão:** as duas camadas, escolhidas pelo usuário (Apolonio) quando questionado sobre onde a checagem deveria viver:
+
+1. **Client** (`AddServerDialog.tsx`, `isAddressSecure`): recusa registrar um `server-central`/`server-channel` cujo endereço não seja `https://`, exceto `localhost`/`127.0.0.1`/`::1` (dev local). Cobre o caso de alguém colar um endereço `http://` de produção por engano.
+2. **Servidor** (`internal/httpapi/requiretls.go`, idêntico nos dois — mesmo padrão de duplicação já usado em `cors.go`): middleware `withRequireTLS`, controlado por `REQUIRE_TLS` (env var booleana, **padrão desligado**), que rejeita com `426 Upgrade Required` qualquer requisição sem `X-Forwarded-Proto: https`, exceto `/healthz` (mesma exceção já aplicada a `withRateLimit`, porque o `HEALTHCHECK` do Docker chama `http://127.0.0.1:8080/healthz` de dentro do próprio container, sem passar pelo proxy).
+
+**Por que `REQUIRE_TLS` tem padrão desligado, e não ligado:** os `docker-compose.yml` de referência (`server-central/`, `server-channel/`) são usados tanto para produção (atrás de um proxy externo) quanto para dev local direto — sem a flag desligada por padrão, `docker compose up` local (fluxo documentado nos dois `README.md`) quebraria imediatamente, já que nada envia `X-Forwarded-Proto` sem um proxy na frente. A instância de teste real (`a3s-network`) já tem TLS+proxy validados ponta a ponta (ver "Validação ponta a ponta" no TODO), mas ligar `REQUIRE_TLS=true` lá é uma mudança de infra fora deste repositório (o `.env` real vive em `/opt/ffcom/envs/`, fora do git) — documentado como próximo passo em `deploy/{central,channel}/.env.example`, condicionado a confirmar antes que o Nginx Proxy Manager em `VMSUBS24OCI0102` realmente sete esse header (não verificado nesta sessão).
+
+**Razão:** mesma filosofia de "não reinventar o que o proxy já resolve" das decisões anteriores — o servidor não tenta validar certificado nem terminar TLS, só desconfia da ausência do sinal que só um proxy TLS-terminating envia. Duas camadas (client + servidor) porque cobrem falhas diferentes: o client evita o erro humano de digitar `http://`; o servidor cobre o caso de alguém expor a porta diretamente (sem proxy nenhum, ou um client de terceiros que ignore a checagem da UI).
+
+**Verificado nesta sessão (2026-09-21):** `go build ./...` limpo em `server-central` e `server-channel` após a mudança de assinatura de `NewRouter`. Não testado contra um proxy real setando `X-Forwarded-Proto` nem contra a instância de produção — `REQUIRE_TLS` segue desligado em todo `.env`/`.env.example` deste repositório, incluindo os de `deploy/`.
+
+**Revisitar quando:** alguém confirmar que o NPM de `VMSUBS24OCI0102` seta `X-Forwarded-Proto` corretamente para os 4 hostnames do FFCom — nesse momento, ligar `REQUIRE_TLS=true` nos `.env` reais em `/opt/ffcom/envs/` e redeployar; ou se surgir um self-hoster usando um proxy que não sete esse header (exigiria documentar exceção ou um header alternativo).
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

@@ -60,6 +60,12 @@ origem) e o endereço divulgado aos membros ao gerar convites
 (`InviteServerDialog` no client usa o que estiver na barra de endereço/base
 URL configurada, não precisa de variável própria aqui).
 
+Com o proxy no ar, ligue `REQUIRE_TLS=true` no `.env` — o `app` passa a
+recusar (`426 Upgrade Required`) qualquer requisição em que o proxy não
+sinalize `X-Forwarded-Proto: https` (Caddy, Nginx Proxy Manager e Traefik
+fazem isso por padrão), fechando o caso de alguém expor `8080` direto sem
+TLS nenhum. Deixe desligado (padrão) enquanto testar em LAN sem proxy.
+
 ## Hospedando atrás de NAT (ex. em casa)
 
 A maioria de quem autohospedar um `server-channel` vai estar numa rede

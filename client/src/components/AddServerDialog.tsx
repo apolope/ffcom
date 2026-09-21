@@ -33,6 +33,22 @@ function parseInviteLink(value: string): { address: string; inviteCode: string }
   return { address: url.toString().replace(/\/+$/, ''), inviteCode: code }
 }
 
+// TLS obrigatório fora de localhost (ver docs/architecture.md, "Criptografia
+// em trânsito obrigatória") — http:// só é aceito contra a própria máquina,
+// caso de desenvolvimento local; qualquer outro endereço precisa ser https://.
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1'])
+
+function isAddressSecure(address: string): boolean {
+  let url: URL
+  try {
+    url = new URL(address)
+  } catch {
+    return false
+  }
+  if (url.protocol === 'https:') return true
+  return url.protocol === 'http:' && LOCAL_HOSTNAMES.has(url.hostname)
+}
+
 export function AddServerDialog({ onAdd, onClose }: AddServerDialogProps) {
   const [address, setAddress] = useState('')
   const [name, setName] = useState('')
@@ -53,9 +69,14 @@ export function AddServerDialog({ onAdd, onClose }: AddServerDialogProps) {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError(undefined)
+    const trimmedAddress = address.trim()
+    if (!isAddressSecure(trimmedAddress)) {
+      setError('Endereço precisa usar https:// (http:// só é aceito para localhost)')
+      return
+    }
     setSubmitting(true)
     try {
-      await onAdd(address.trim(), name.trim(), inviteCode.trim() || undefined)
+      await onAdd(trimmedAddress, name.trim(), inviteCode.trim() || undefined)
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'falha ao adicionar servidor')
