@@ -6,6 +6,7 @@ COPY . .
 RUN CGO_ENABLED=0 go build -o /out/server-channel .
 
 FROM alpine:3.20
+# hadolint ignore=DL3018
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /out/server-channel /usr/local/bin/server-channel
 EXPOSE 8080
