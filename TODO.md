@@ -83,7 +83,7 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [x] DMs (API de `server-central` pronta — `GET/POST` via WebSocket de presença e `GET /api/dms/{accountId}/messages`, ver `docs/architecture.md`; UI no client via `client/src/components/DirectMessageView.tsx`)
 - [x] Convites de server-channel na UI: `AddServerDialog` ganhou campo opcional de código (chama `POST /api/join` antes de registrar o servidor no diretório) e `ChannelSidebar` ganhou botão "Convidar" (`InviteServerDialog`, gera código via `POST /api/invites`)
 - [x] Lista de membros real (`MemberList` via `hooks/useServerMembers.ts`, `GET /api/members`) e painel de administração de roles (`ManageRolesDialog`, botão "Roles" na `ChannelSidebar`, visível só com `ManageRoles`/dono) — overwrite de canal por role ainda não tem UI, só a API (ver server-channel acima)
-- [ ] Build Electron para Windows/macOS/Linux
+- [x] Build Electron para Windows/macOS/Linux — `electron-builder` (`client/package.json`, campo `"build"`), scripts `package`/`package:win`/`package:mac`/`package:linux`; sem ícone customizado nem assinatura de código ainda. Ver `docs/architecture.md`
 - [ ] Build web/PWA
 
 ## Segurança

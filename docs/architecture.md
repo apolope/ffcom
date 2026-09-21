@@ -491,6 +491,25 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** o produto quiser impedir também que um `ManageRoles` sem `Administrator` edite/remova/desatribua uma role cujas permissões ele não teria como conceder (hoje isso continua permitido) — nesse ponto vale portar a mesma checagem `Grants` para `handleDeleteRole`/`handleRemoveRole`, ou adotar hierarquia por `Position` (opção 1) para cobrir também renomear/mover uma role sem tocar no bitmask.
 
+## Decisão: empacotamento Electron — `electron-builder`, sem assinatura de código ainda
+
+**Contexto:** implementar o TODO "Build Electron para Windows/macOS/Linux". O wrapper Electron já existia (`vite-plugin-electron`, ver "Decisão: wrapper Electron" acima), mas só rodava em modo dev/unpacked (`npm run electron`) — nenhum instalador distribuível.
+
+**Alternativas consideradas:** `electron-builder` (padrão de facto, config declarativa via `package.json`, suporta NSIS/DMG/AppImage entre outros); `electron-forge` (mais opinativo, própria CLI de scaffolding, redundante já que o scaffolding via `vite-plugin-electron` já existe); scripts manuais chamando `@electron/packager` + ferramentas de instalador separadas por plataforma.
+
+**Decisão:** `electron-builder`, configurado no bloco `"build"` de `client/package.json` (não em arquivo `electron-builder.yml` separado, mesma filosofia de manter config num único lugar já usada para o restante do projeto). Alvo por plataforma: NSIS (`.exe`) no Windows, DMG no macOS, AppImage no Linux — os três formatos mais comuns/de menor fricção para instalação manual em cada SO, sem exigir loja de aplicativos. Scripts novos em `package.json`: `package` (plataforma do host atual), `package:win`/`package:mac`/`package:linux` (força uma plataforma). Saída em `release/` (já estava no `.gitignore`).
+
+**Verificado nesta sessão (2026-09-21):** build completo (`npm run build:electron` + `electron-builder`) e execução do artefato final para Windows (nativo, neste host) e Linux (AppImage, via container `electronuserland/builder:22`, já que builds Linux exigem toolchain nativo — `@electron/rebuild`/gcc/python — não presente por padrão num host Windows). macOS **não verificado**: `electron-builder` exige rodar em host macOS de verdade para o alvo `mac` (assinatura/notarização dependem de ferramentas da Apple — `codesign`/`iconutil` — que não existem em Linux/Windows, nem mesmo via Docker); a config para `mac` está em `package.json` mas fica sem teste real até haver acesso a uma máquina macOS.
+
+**Deliberadamente fora de escopo desta rodada:**
+- **Ícone customizado:** hoje usa o ícone padrão do Electron (só existe `client/public/favicon.svg`, usado no `<link rel="icon">` do web/PWA — `electron-builder` precisa de `.ico`/`.icns`/PNGs em resoluções específicas, não do SVG direto). Ícone segue o padrão do Electron até existir arte própria.
+- **Assinatura de código:** sem certificado Authenticode (Windows) nem Apple Developer ID (macOS) — instalador Windows vai disparar aviso do SmartScreen, e o app macOS (quando existir) vai exigir bypass do Gatekeeper. Aceitável para uso pessoal/self-host nesta fase; certificados custam dinheiro/processo de verificação, não faz sentido adquirir antes de haver usuários reais fora do autor.
+- **CI/GitHub Releases:** nenhum workflow novo publica os instaladores automaticamente. O workflow `deploy-ffcom-client.yml` existente só builda a imagem Docker (web/PWA) — construir os 3 instaladores desktop em CI exigiria runners macOS (não existe no `a3s-network`, que é só `SVRUBS24IPS0101`, Linux) e ficou fora do escopo deste item. Empacotar continua manual (`npm run package:*`) até haver demanda real de distribuição para terceiros.
+
+**Razão:** `electron-builder` é a escolha padrão do ecossistema (documentação extensa, suporta os 3 alvos com uma única config declarativa) e evita reimplementar orquestração de instalador que ele já resolve — mesma filosofia de "não reinventar o que uma lib madura já cobre" aplicada em outras decisões deste projeto (LiveKit para SFU, `oidc-client-ts` para OIDC). Testar via Docker (`electronuserland/builder`) em vez de só confiar na config, mesmo sem CI dedicado, porque a alternativa (declarar o TODO concluído sem rodar o build nenhuma vez) teria risco real de a config estar quebrada e só ser descoberta na hora de precisar de um instalador de verdade.
+
+**Revisitar quando:** houver usuários reais fora do autor pedindo instaladores assinados (nesse ponto, comprar certificado Authenticode/Apple Developer ID) e/ou builds automatizados via tag `client-vX.Y.Z` publicando em GitHub Releases (precisaria de um runner macOS, hospedado ou GitHub-hosted, para o alvo `mac` — os alvos `win`/`linux` já podem migrar para o `deploy-ffcom-client.yml` existente ou um workflow irmão a qualquer momento, sem essa dependência).
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.
