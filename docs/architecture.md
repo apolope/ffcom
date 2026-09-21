@@ -414,6 +414,8 @@ Há bastante espaço sobrando no `BIGINT` para bits futuros (canal forum, gerenc
 
 **Revisitar quando:** essa instância de teste for promovida a "oficial" (domínio de produção definitivo, ver TODO "Provisionar `ffcom.a3sitsolutions.com`") — nesse ponto vale decidir se ela continua na infra do `a3s-network` ou migra para infra dedicada.
 
+**3 runners dedicados, não 1 (2026-09-21):** rodar os 3 workflows juntos (fluxo normal quando várias mudanças tocam mais de um componente) serializava no único runner registrado — lint/scan de cada workflow rodam em paralelo entre si (sem dependência), mas as 3 etapas "Build, push e deploy" competiam pelo mesmo runner. Registrados mais dois (`SVRUBS24IPS0101-ffcom-02`, `-03`, mesma máquina, mesmo processo de `config.sh`/`svc.sh install`, mesma label `a3s-network`) — número escolhido para bater exatamente com os 3 workflows independentes que existem hoje (`deploy-ffcom-{central,channel,client}`), não mais que isso, já que não há um quarto workflow pra usar a capacidade extra. Host tinha folga de sobra pra isso (8 vCPU, ~16GB livres, load ~2-3 antes de adicionar).
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

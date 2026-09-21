@@ -43,6 +43,7 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [x] Validação ponta a ponta (2026-09-21): DNS, TLS (Let's Encrypt), `/healthz`, upgrade de WebSocket e login OIDC completo, todos confirmados via `curl`/`openssl` e teste manual no client
 - [x] Bug: lista de membros mostrava UUID truncado — apelido configurável adicionado (`PATCH /api/me` em `server-channel`, `NicknameDialog.tsx` no client). Ver `docs/architecture.md`
 - [x] Bug: 401 visível no console logo após navegar pro client — `useFriends`/`useKnownServers` disparavam fetch com token vazio antes do login OIDC terminar; corrigido com a mesma guarda `if (!accessToken) return` já usada em outros hooks. Ver `docs/architecture.md`
+- [x] 3 runners dedicados (`SVRUBS24IPS0101-ffcom{,-02,-03}`) em vez de 1 — os 3 workflows agora rodam de verdade em paralelo. Ver `docs/architecture.md`
 - [ ] Testar canal de voz com pelo menos 2 pessoas em redes diferentes (validação real do TURN em `33478`/relay `49160-49200`)
 - [ ] Testar convite/entrada de um segundo membro no `channel-test` de ponta a ponta (não só o fundador)
 - [ ] Testar roles/permissões negando `ViewChannels` a um membro de teste
