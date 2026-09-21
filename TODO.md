@@ -96,7 +96,7 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 ## Documentação
 
 - [x] Guia de self-hosting de `server-channel` (Docker Compose, TURN, DNS dinâmico, TLS via proxy reverso) — `server-channel/README.md`; READMEs de `server-central`/`client`/raiz também atualizados (estavam desatualizados, ainda descreviam o projeto como scaffolding sem código funcional). Ver `docs/architecture.md`
-- [ ] Guia de contribuição (CONTRIBUTING.md)
+- [x] Guia de contribuição (`CONTRIBUTING.md`) — estrutura do repo, ambiente de dev (Docker Compose por componente / `go run .` local), convenções de código (aponta para as decisões já registradas em `docs/architecture.md` em vez de duplicá-las), como rodar testes/lint localmente (CI ainda não roda nenhum dos dois — ver `TODO.md` acima), estilo de commit observado no `git log`, e o processo de marcar item do TODO + registrar decisão em `docs/architecture.md`
 - [x] Documentar protocolo/API entre os três componentes assim que definido — `docs/protocol.md`: endpoints REST, frames de WebSocket, autenticação, CORS e convenções dos dois servidores
 
 ## Fora de escopo da v1 (registrado para não esquecer)

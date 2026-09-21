@@ -43,7 +43,9 @@ Alternativa self-hosted ao Discord: organização em servidores, categorias e ca
 ## Documentação
 
 - [`docs/architecture.md`](docs/architecture.md) — decisões técnicas, alternativas consideradas e por quê (formato ADR).
+- [`docs/protocol.md`](docs/protocol.md) — protocolo/API entre `client`, `server-central` e `server-channel`.
 - [`TODO.md`](TODO.md) — backlog unificado por tema.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — ambiente de desenvolvimento, convenções de código, testes/lint e processo de contribuição.
 
 ## Status
 
