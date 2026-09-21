@@ -462,6 +462,18 @@ Há bastante espaço sobrando no `BIGINT` para bits futuros (canal forum, gerenc
 
 **Revisitar quando:** o build Electron/PWA (TODOs em aberto) existir — nesse ponto vale decidir como a versão do `client` aparece para o usuário final (tela "Sobre", rodapé, etc.) e se o instalador do Electron usa a mesma tag `client-vX.Y.Z` para nomear o artefato de release no GitHub Releases.
 
+## Decisão: rate limiting em server-central — token bucket em memória por IP
+
+**Contexto:** implementar o item de TODO "Rate limiting / proteção contra abuso em `server-central` (cadastro, login)". `server-central` não tem endpoint de "cadastro" ou "login" próprio — é Resource Server puro contra o Authentik central (ver "Decisão: autenticação em server-central"), e a conta local é criada implicitamente na primeira requisição autenticada válida (`auth.Middleware` → `AccountStore.GetOrCreateBySubject`, ver "Decisão: validação de JWT em server-central"). Não há, portanto, uma rota específica de auth para proteger isoladamente.
+
+**Alternativas consideradas:** `golang.org/x/time/rate` (token bucket por IP, biblioteca padrão do ecossistema Go); rate limiting no proxy reverso (NPM) na frente da instância, fora do repositório; limite em memória implementado à mão, sem dependência nova.
+
+**Decisão:** limite geral por IP sobre toda a API (exceto `/healthz`), com um token bucket em memória implementado à mão (`internal/httpapi/ratelimit.go`, tipo `rateLimiter`), sem depender de `golang.org/x/time/rate` nem de configuração no proxy reverso. Chave é o IP do cliente (primeiro valor de `X-Forwarded-For` quando presente — a implantação de referência roda atrás de proxy reverso, ver "Decisão: primeira implantação de teste" — senão `RemoteAddr`). Configurável via `RATE_LIMIT_RPM` (padrão 120) e `RATE_LIMIT_BURST` (padrão 20); excesso responde `429 Too Many Requests` com `Retry-After`. Buckets ociosos por mais de 10 minutos são varridos periodicamente para não crescer sem limite.
+
+**Razão:** a lógica de um token bucket é pequena o suficiente (~60 linhas) para não justificar puxar `golang.org/x/time/rate` só por isso — mesma filosofia de dependências enxutas já registrada em várias decisões anteriores (token do LiveKit assinado à mão, pgx sem ORM). Fazer isso no proxy reverso moveria a decisão para fora deste repositório (infra de outro projeto, `a3s-network`) e deixaria de proteger quem roda `server-central` sem esse proxy na frente (ex. outro self-hoster futuro, se a instância única deixar de ser premissa). Limite geral por IP (em vez de só num endpoint de "login") é a escolha certa aqui precisamente porque não existe um endpoint de auth isolado para mirar.
+
+**Revisitar quando:** `server-central` precisar rodar em múltiplas réplicas (mesmo gatilho já registrado no Hub de presença) — nesse ponto um bucket em memória por processo deixa de ser suficiente (cada réplica teria seu próprio orçamento) e valeria a pena mover para Redis ou para o proxy reverso compartilhado.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

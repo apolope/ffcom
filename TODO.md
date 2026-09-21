@@ -89,7 +89,7 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 ## Segurança
 
 - [ ] Criptografia em trânsito (TLS) obrigatória entre client e ambos os tipos de servidor
-- [ ] Rate limiting / proteção contra abuso em `server-central` (cadastro, login)
+- [x] Rate limiting / proteção contra abuso em `server-central` (cadastro, login) — limite geral por IP (token bucket em memória, `internal/httpapi/ratelimit.go`), já que não há endpoint de cadastro/login próprio (conta é criada implicitamente no `auth.Middleware`); configurável via `RATE_LIMIT_RPM`/`RATE_LIMIT_BURST`, padrão 120 req/min e burst 20; `/healthz` isento. Ver `docs/architecture.md`
 - [ ] Política de permissões/roles em `server-channel` revisada contra escalonamento de privilégio
 - [ ] Avaliar necessidade de criptografia ponta-a-ponta em DMs
 

@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"a3sitsolutions.com/ffcom/server-central/internal/auth"
@@ -42,7 +43,9 @@ func main() {
 		log.Fatalf("server-central: %v", err)
 	}
 
-	router := httpapi.NewRouter(verifier, db, parseAllowedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS")), version)
+	rateLimitRPM := envInt("RATE_LIMIT_RPM", 120)
+	rateLimitBurst := envInt("RATE_LIMIT_BURST", 20)
+	router := httpapi.NewRouter(verifier, db, parseAllowedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS")), version, rateLimitRPM, rateLimitBurst)
 
 	log.Printf("server-central: versão %s, ouvindo em :%s (OIDC issuer: %s)", version, port, issuerURL)
 	if err := http.ListenAndServe(":"+port, router); err != nil {
@@ -54,6 +57,22 @@ func requireEnv(name string) string {
 	value := os.Getenv(name)
 	if value == "" {
 		log.Fatalf("server-central: variável de ambiente %s não definida", name)
+	}
+	return value
+}
+
+// envInt lê uma variável de ambiente inteira opcional, com fallback se
+// ausente ou inválida (RATE_LIMIT_RPM / RATE_LIMIT_BURST — ver
+// internal/httpapi/ratelimit.go).
+func envInt(name string, fallback int) int {
+	raw := os.Getenv(name)
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		log.Printf("server-central: %s inválido (%q), usando padrão %d", name, raw, fallback)
+		return fallback
 	}
 	return value
 }

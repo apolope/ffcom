@@ -37,6 +37,11 @@ services:
       # Domínio público do client (ex. https://app.ffcom.a3sitsolutions.com.br)
       # — sem isso o navegador bloqueia as chamadas REST/WebSocket por CORS.
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?defina CORS_ALLOWED_ORIGINS no .env}
+      # Rate limiting por IP — opcionais, o binário já tem padrão (120 req/min,
+      # burst 20) se omitidas. Ver docs/architecture.md, "Decisão: rate
+      # limiting em server-central".
+      RATE_LIMIT_RPM: ${RATE_LIMIT_RPM:-}
+      RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-}
     networks:
       - internal
       - a3s-services

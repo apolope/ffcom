@@ -18,7 +18,7 @@ import (
 // server-channel, ver docs/architecture.md, "Decisão: CORS em
 // server-channel") — origens do client (web/PWA, Electron) autorizadas a
 // chamar esta instância de uma origem diferente.
-func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string, version string) http.Handler {
+func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string, version string, rateLimitRPM, rateLimitBurst int) http.Handler {
 	mux := http.NewServeMux()
 	hub := realtime.NewHub()
 
@@ -42,5 +42,6 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string
 	mux.Handle("POST /api/friends/invites/{code}/redeem", protected(handleRedeemFriendInvite(db.FriendInvites, db.Friendships)))
 	mux.Handle("GET /api/dms/{accountId}/messages", protected(handleListDMs(db.Friendships, db.DirectMessages)))
 
-	return withCORS(allowed, mux)
+	limiter := newRateLimiter(rateLimitRPM, rateLimitBurst)
+	return withCORS(allowed, withRateLimit(limiter, mux))
 }
