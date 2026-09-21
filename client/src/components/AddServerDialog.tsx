@@ -15,12 +15,40 @@ interface AddServerDialogProps {
 // docs/architecture.md, "Convites obrigatórios para entrar em
 // server-channel". O campo de código é opcional na UI porque cobre os dois
 // casos sem exigir que quem está configurando um servidor novo saiba disso.
+//
+// O campo "Endereço" também aceita colar o link gerado por
+// InviteServerDialog (endereço + `?invite=CODE`) — parseInviteLink separa os
+// dois de volta, para quem só tem o link não precisar copiar/colar duas
+// vezes. Ver docs/architecture.md, "Decisão: convite auto-contido".
+function parseInviteLink(value: string): { address: string; inviteCode: string } | undefined {
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    return undefined
+  }
+  const code = url.searchParams.get('invite')
+  if (!code) return undefined
+  url.search = ''
+  return { address: url.toString().replace(/\/+$/, ''), inviteCode: code }
+}
+
 export function AddServerDialog({ onAdd, onClose }: AddServerDialogProps) {
   const [address, setAddress] = useState('')
   const [name, setName] = useState('')
   const [inviteCode, setInviteCode] = useState('')
   const [error, setError] = useState<string>()
   const [submitting, setSubmitting] = useState(false)
+
+  function handleAddressChange(value: string) {
+    const parsed = parseInviteLink(value)
+    if (parsed) {
+      setAddress(parsed.address)
+      setInviteCode(parsed.inviteCode)
+      return
+    }
+    setAddress(value)
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -48,9 +76,9 @@ export function AddServerDialog({ onAdd, onClose }: AddServerDialogProps) {
           Endereço
           <input
             type="text"
-            placeholder="http://localhost:8080"
+            placeholder="http://localhost:8080 ou um link de convite"
             value={address}
-            onChange={(e) => setAddress(e.target.value)}
+            onChange={(e) => handleAddressChange(e.target.value)}
             required
             autoFocus
           />

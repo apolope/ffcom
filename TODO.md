@@ -67,7 +67,7 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [x] Canal forum: threads/posts — mesma rota `GET /api/channels/{id}/ws` do canal de texto, frames `thread.create`/`post.create`, REST só para listagem (`GET /api/channels/{id}/threads`, `GET /api/threads/{id}/messages`); reaproveita `ViewChannels`/`SendMessages`, sem bit de permissão próprio; ver `docs/architecture.md`
 - [x] Sistema de permissões/roles por servidor e por canal — bits em `internal/permissions` (ViewChannels/SendMessages/Voice/ManageInvites/ManageRoles/Administrator), role default "@everyone" implícita, dono do bootstrap ignora tudo, overwrites de canal por role (`internal/store/channel_overwrites.go`); API: `GET/POST/PATCH/DELETE /api/roles`, `POST/DELETE /api/members/{memberId}/roles/{roleId}`, `GET/PUT/DELETE /api/channels/{id}/overwrites[/{roleId}]`, `GET /api/members`; ver `docs/architecture.md`
 - [x] Convites (geração e validação) — `POST/GET /api/invites`, `DELETE /api/invites/{id}`; entrar no servidor (`POST /api/join`) passou a exigir um convite válido, exceto o primeiro membro (fundador/bootstrap do self-host); agora exige a permissão `ManageInvites` em vez de "é membro"; ver `docs/architecture.md`
-- [ ] Registro do endereço do servidor (para o dono divulgar IP/DNS aos membros)
+- [x] Registro do endereço do servidor (para o dono divulgar IP/DNS aos membros) — sem mudança de backend: `InviteServerDialog` gera um link com endereço embutido (`<baseUrl>/?invite=<code>`), `AddServerDialog` reconhece e separa endereço/código de volta; ver `docs/architecture.md`
 
 ## client
 

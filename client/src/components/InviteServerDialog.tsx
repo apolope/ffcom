@@ -4,15 +4,31 @@ import './InviteCode.css'
 
 interface InviteServerDialogProps {
   serverName: string
+  serverBaseUrl: string
   onCreateInvite: () => Promise<string>
   onClose: () => void
+}
+
+// Monta um link de convite auto-contido (endereço + código) para não exigir
+// que o dono divulgue o endereço do servidor por um canal separado do
+// código — ver docs/architecture.md, "Decisão: convite auto-contido". O
+// resgate acontece do outro lado, em AddServerDialog, que reconhece esse
+// formato e separa endereço/código de volta.
+function buildInviteLink(serverBaseUrl: string, code: string): string {
+  const base = serverBaseUrl.replace(/\/+$/, '')
+  return `${base}/?invite=${code}`
 }
 
 // Gera um código de convite para este server-channel (ver
 // docs/architecture.md, "Convites obrigatórios para entrar em
 // server-channel"). O resgate acontece do outro lado, em
 // AddServerDialog, junto com o endereço do servidor.
-export function InviteServerDialog({ serverName, onCreateInvite, onClose }: InviteServerDialogProps) {
+export function InviteServerDialog({
+  serverName,
+  serverBaseUrl,
+  onCreateInvite,
+  onClose,
+}: InviteServerDialogProps) {
   const [invite, setInvite] = useState<string>()
   const [error, setError] = useState<string>()
   const [generating, setGenerating] = useState(false)
@@ -23,7 +39,7 @@ export function InviteServerDialog({ serverName, onCreateInvite, onClose }: Invi
     setGenerating(true)
     try {
       const code = await onCreateInvite()
-      setInvite(code)
+      setInvite(buildInviteLink(serverBaseUrl, code))
       setCopied(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'falha ao gerar convite')
@@ -49,8 +65,8 @@ export function InviteServerDialog({ serverName, onCreateInvite, onClose }: Invi
 
         <section className="invite-section">
           <p className="invite-hint">
-            Gere um código e compartilhe com quem você quer convidar. Quem entrar vai precisar
-            também do endereço deste servidor.
+            Gere um link e compartilhe com quem você quer convidar. O link já leva o endereço
+            deste servidor, então basta colar em "Adicionar servidor".
           </p>
           {invite ? (
             <div className="invite-code">

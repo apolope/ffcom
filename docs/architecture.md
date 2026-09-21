@@ -434,6 +434,18 @@ Há bastante espaço sobrando no `BIGINT` para bits futuros (canal forum, gerenc
 
 **Revisitar quando:** o produto quiser preview local (mostrar pro usuário o que está sendo compartilhado) ou suportar múltiplas tracks de tela simultâneas por participante (hoje `setScreenShareEnabled` assume uma única track de `Track.Source.ScreenShare` por participante, suficiente pra v1).
 
+## Decisão: convite auto-contido — link com endereço embutido, sem mudança de backend
+
+**Contexto:** implementar o TODO "Registro do endereço do servidor (para o dono divulgar IP/DNS aos membros)" em `server-channel`. Até aqui, `InviteServerDialog` só gerava o código (`POST /api/invites`) e o próprio texto da UI avisava "quem entrar vai precisar também do endereço deste servidor" — o dono tinha que divulgar código e endereço por dois canais separados (ex. link do convite numa mensagem, IP/DNS em outra), e quem resgatava precisava colar os dois campos em `AddServerDialog` manualmente.
+
+**Alternativas consideradas:** (1) `server-channel` ganhar uma variável de ambiente tipo `PUBLIC_ADDRESS` e devolver o endereço num endpoint/no corpo do convite, para o client não depender de já saber o endereço; (2) esquema de deep link customizado (`ffcom://join?...`) para abrir o client empacotado direto a partir do link; (3) montar o link inteiramente no client, já que quem gera o convite (`InviteServerDialog`) já está conectado ao `server-channel` e conhece `server.baseUrl` exatamente como o usuário o cadastrou — sem precisar que o backend "descubra" seu próprio endereço público.
+
+**Decisão:** opção 3, sem nenhuma mudança de backend/API. `InviteServerDialog` (`client/src/components/InviteServerDialog.tsx`) monta `buildInviteLink(serverBaseUrl, code)` → `${baseUrl sem barra final}/?invite=${code}` e passa a copiar/exibir esse link em vez do código cru. Do outro lado, `AddServerDialog` (`client/src/components/AddServerDialog.tsx`) ganhou `parseInviteLink`, chamado a cada mudança no campo "Endereço": se o valor colado é uma URL válida com query `invite`, separa endereço e código de volta e preenche os dois campos automaticamente; se não for (endereço puro, como antes), o campo se comporta exatamente como antes. Os dois campos continuam existindo e aceitando entrada manual — colar só endereço, ou só digitar o código à parte, continua funcionando.
+
+**Razão:** o backend não tem, e não precisa ganhar, noção do seu próprio endereço público — quem sabe esse endereço é sempre quem o digitou no client (seja o dono, ao rodar `server-channel` atrás de um proxy, seja quem cadastrou via `AddServerDialog`), consistente com a decisão já registrada em "diretório de servidores conhecidos: `address` é a base URL completa" (self-hoster informa o endereço, sem composição automática de esquema/host/porta). Uma variável `PUBLIC_ADDRESS` no servidor duplicaria essa informação e criaria uma segunda fonte de verdade para o mesmo dado (o endereço que o proxy reverso expõe, não necessariamente igual ao que o binário enxerga). Deep link customizado foi descartado por escopo: o build Electron (TODO separado) ainda não existe, não haveria como registrar o protocolo ainda, e o link `http(s)://` já resolve o problema real (divulgar os dois dados juntos) sem essa dependência.
+
+**Revisitar quando:** o build Electron empacotado (TODO em aberto) existir e o produto quiser que clicar no link abra o app direto (em vez de só facilitar copiar/colar) — nesse ponto vale registrar um esquema customizado, com o link `http(s)://…?invite=` continuando como fallback pro client web/PWA.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

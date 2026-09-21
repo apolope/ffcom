@@ -130,6 +130,7 @@ function App() {
       {showInviteServer && server && (
         <InviteServerDialog
           serverName={server.name}
+          serverBaseUrl={server.baseUrl}
           onCreateInvite={async () => {
             const invite = await createServerInvite(server.baseUrl, accessToken ?? '')
             return invite.code
