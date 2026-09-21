@@ -33,8 +33,58 @@ docker compose up -d
 Sobe quatro serviços: `postgres`, `livekit`, `coturn` e `app` (o binário
 `server-channel` em si, buildado a partir do `Dockerfile` local).
 
-Se o servidor for hospedado atrás de NAT (ex. em casa), `TURN_EXTERNAL_IP`
-precisa ser o IP público do host, e as portas do LiveKit (7880/tcp, 7881/tcp,
-faixa UDP de mídia) e do coturn (3478 tcp/udp, faixa de relay UDP) precisam
-estar encaminhadas no roteador — guia dedicado a isso ainda é TODO
-(`../TODO.md`, seção Infraestrutura/DevOps).
+## Hospedando atrás de NAT (ex. em casa)
+
+A maioria de quem autohospedar um `server-channel` vai estar numa rede
+residencial: sem IP público fixo e atrás do roteador do provedor. Dois
+ajustes são necessários além de preencher o `.env`.
+
+### Port-forwarding
+
+Encaminhe estas portas no roteador para o IP interno (LAN) da máquina que
+roda o `docker compose` — todas vêm do próprio `docker-compose.yml` deste
+diretório:
+
+| Porta (host) | Protocolo | Serviço | Variável no `.env` |
+| --- | --- | --- | --- |
+| 8080 | TCP | `app` (API REST + WebSocket) | `SERVER_CHANNEL_PORT` |
+| 7880 | TCP | `livekit` (sinalização) | fixa no compose |
+| 7881 | TCP | `livekit` (RTC fallback via TCP) | fixa no compose |
+| 50000–50100 | UDP | `livekit` (mídia RTC) | `LIVEKIT_RTC_PORT_RANGE_START`/`_END` |
+| 3478 | TCP + UDP | `coturn` (TURN/STUN) | fixa no compose |
+| 49160–49200 | UDP | `coturn` (relay) | `TURN_RELAY_MIN_PORT`/`_MAX_PORT` |
+
+Se alguma dessas portas já estiver em uso na rede (ex. outro serviço no
+mesmo roteador), ajuste a variável correspondente no `.env` e o mapeamento
+no roteador juntos — o compose já usa `${VAR}` dos dois lados (porta do
+host e `--listening-port`/flags do coturn), então não precisa editar o
+`docker-compose.yml`.
+
+### DNS dinâmico
+
+IP residencial normalmente muda de tempos em tempos (reconexão do modem,
+DHCP do provedor). Como `LIVEKIT_PUBLIC_URL` e o endereço que os membros
+usam para adicionar o servidor (`AddServerDialog` no client) precisam
+apontar para um host estável, configure um serviço de DNS dinâmico (ex.
+[DuckDNS](https://www.duckdns.org/), No-IP, Dynu — muitos roteadores
+domésticos já têm cliente DDNS embutido nas configurações) e use o
+hostname resultante em vez do IP bruto:
+
+- `LIVEKIT_PUBLIC_URL=ws://seu-host.duckdns.org:7880` (ou `wss://` se
+  houver TLS na frente, fora do escopo deste compose de referência).
+- Endereço divulgado aos membros: `http://seu-host.duckdns.org:8080`.
+
+O LiveKit descobre sozinho seu IP público via STUN (`use_external_ip: true`
+já configurado no compose) — nenhuma ação manual necessária aí, mesmo com
+IP dinâmico.
+
+**Limitação conhecida:** `TURN_EXTERNAL_IP` do coturn precisa ser um IP
+literal (o `--external-ip` do `turnserver` não resolve hostname a cada
+alocação de relay) — não dá pra apontar para o hostname DDNS diretamente.
+Se seu IP público mudar, atualize `TURN_EXTERNAL_IP` no `.env` e rode
+`docker compose up -d coturn` para recriar o serviço com o IP novo. Quem
+tiver IP público praticamente estável na prática (a maioria dos planos
+residenciais só muda em reconexões raras) pode tratar isso como manutenção
+ocasional em vez de automatizar; automatizar (script que compara o IP
+público atual e reinicia o `coturn` quando muda) fica como melhoria futura
+se virar fricção real.
