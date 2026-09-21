@@ -1,0 +1,80 @@
+name: deploy-ffcom-client
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/a3sitsolutions/ffcom-client
+  # VITE_* é embutido no bundle em tempo de build (ver client/Dockerfile) —
+  # precisa ser o domínio público de server-central roteado via NPM, não
+  # localhost. Ajustar aqui se o subdomínio mudar.
+  VITE_SERVER_CENTRAL_URL: https://central.ffcom.a3sitsolutions.com.br
+
+jobs:
+  lint-dockerfile:
+    name: Lint do Dockerfile
+    runs-on: [self-hosted, a3s-network]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: client/Dockerfile
+
+  security-scan:
+    name: Scan de segredos
+    runs-on: [self-hosted, a3s-network]
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Gitleaks (escopo: client)"
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
+            detect --source="/repo/client" --no-git -v
+
+  build-push-deploy:
+    name: Build, push e deploy
+    needs: [lint-dockerfile, security-scan]
+    runs-on: [self-hosted, a3s-network]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login no GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build e push da imagem
+        working-directory: client
+        run: |
+          IMAGE_TAG="${IMAGE}:$(git rev-parse --short HEAD)"
+          docker buildx build \
+            --build-arg VITE_SERVER_CENTRAL_URL="${VITE_SERVER_CENTRAL_URL}" \
+            -t "$IMAGE_TAG" -f Dockerfile --push .
+
+      - name: Deploy ffcom-client
+        working-directory: deploy/client
+        run: |
+          export IMAGE_TAG=$(git rev-parse --short HEAD)
+          docker compose -f docker-compose.yml up -d --pull always --remove-orphans
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 12); do
+            status=$(docker inspect --format='{{.State.Health.Status}}' ffcom-client 2>/dev/null)
+            [ "$status" = "healthy" ] && echo "ffcom-client healthy" && exit 0
+            echo "Aguardando... status: ${status:-iniciando} (tentativa $i/12)"
+            sleep 10
+          done
+          echo "Timeout: ffcom-client nao ficou healthy em 2 minutos"
+          docker logs --tail 50 ffcom-client
+          exit 1
+
+      - name: Limpeza de imagens antigas
+        run: docker image prune -f
+
+      - name: Logout do GHCR
+        if: always()
+        run: docker logout ghcr.io

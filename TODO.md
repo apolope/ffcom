@@ -20,9 +20,24 @@ Todas as decisões abaixo foram tomadas — ver `docs/architecture.md` para o de
 - [x] Docker Compose de referência para `server-channel` (app Go + LiveKit + coturn + Postgres)
 - [x] Docker Compose de referência para `server-central` (app Go + Postgres — Authentik é a instância central do `abs-3d-printer`, não roda aqui)
 - [ ] Documentar port-forwarding / DNS dinâmico para quem for self-hostear `server-channel` atrás de NAT
-- [ ] Pipeline de CI (lint + testes) para os três componentes
+- [x] Pipeline de deploy (build + push GHCR + deploy) para os três componentes — `.github/workflows/deploy-ffcom-{central,channel,client}.yml`, ver `docs/architecture.md` ("Decisão: primeira implantação de teste"); ainda sem etapa de testes automatizados (só lint de Dockerfile via Hadolint e scan de segredo via Gitleaks)
 - [ ] Definir versionamento e forma de release dos binários (`server-central`, `server-channel`, `client`)
-- [ ] Provisionar `ffcom.a3sitsolutions.com` (DNS + certificado) para a instância oficial do `server-central`
+- [ ] Provisionar `ffcom.a3sitsolutions.com` (DNS + certificado) para a instância oficial do `server-central` — domínio a confirmar (`.com` vs `.com.br`); primeira implantação de teste usa `*.ffcom.a3sitsolutions.com.br` na infra do `a3s-network` como passo intermediário, ver `docs/architecture.md`
+
+## Primeira implantação de teste (infra `a3s-network`, `SVRUBS24IPS0101`)
+
+Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a correção logo abaixo ("exposição pública via `VMSUBS24OCI0102`"), para o detalhe completo. Responsabilidade dividida entre este repositório (containers em `SVRUBS24IPS0101`) e um agente de infra separado (proxy reverso/DNS/certificado em `VMSUBS24OCI0102` + túnel até `SVRUBS24IPS0101` — **não** o roteador do site IPS01, que não expõe nada à internet).
+
+- [x] Compose de implantação (`deploy/central/`, `deploy/channel/`, `deploy/client/`), nomes de container fixos, rede overlay `a3s-services` para tráfego HTTP/WebSocket, Postgres isolado em rede interna
+- [x] `Dockerfile`/`nginx.conf` do `client` (build da SPA + serve estático) — não existia até esta rodada
+- [x] `GET /healthz` sem autenticação em `server-central` e `server-channel`, para o `HEALTHCHECK` do Docker
+- [x] Workflows `deploy-ffcom-{central,channel,client}.yml`
+- [x] Checar portas livres em `SVRUBS24IPS0101` (via SSH, `ss -tuln`, 2026-09-20) — `3478/3479/5349/5350` já ocupados em `10.20.4.10` pelo coturn do stack VoIP/FreeSWITCH existente; `TURN_LISTEN_PORT` ajustado para `33478` em `deploy/channel/.env.example` (o container continua escutando `3478` internamente). Faixas de relay do coturn (`49160-49200`) e RTC do LiveKit (`50000-50100`) livres, sem mudança.
+- [x] `.env` reais criados em `/opt/ffcom/envs/ffcom-{central,channel}.env` no host, com segredos gerados (Postgres, LiveKit, TURN)
+- [x] `TURN_EXTERNAL_IP` confirmado pelo agente de infra: `137.131.249.145` (IP público fixo de `VMSUBS24OCI0102` — não um IP do site IPS01, ver correção em `docs/architecture.md`), preenchido em `/opt/ffcom/envs/ffcom-channel.env`
+- [ ] Agente de infra: proxy reverso/certificado/DNS em `VMSUBS24OCI0102` para os 4 hostnames (`app.`, `central.`, `channel-test.`, `livekit-test.ffcom.a3sitsolutions.com.br` → `137.131.249.145`) + encaminhamento das portas de mídia (RTC do LiveKit, STUN/TURN do coturn) até `SVRUBS24IPS0101`
+- [ ] Atualizar `redirect_uris` do blueprint Authentik (`abs-3d-printer/infra/authentik/blueprints/providers-ffcom.yaml`) para incluir `https://app.ffcom.a3sitsolutions.com.br/auth/callback`
+- [ ] Subir os containers em `SVRUBS24IPS0101` (via os workflows `deploy-ffcom-*` ou manualmente) e avisar o lado operacional para finalizar proxy hosts/certificado/encaminhamento
 
 ## server-central
 

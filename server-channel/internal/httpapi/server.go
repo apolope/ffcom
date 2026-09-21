@@ -33,6 +33,8 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string
 	}
 	upgrader := newUpgrader(allowed)
 
+	mux.HandleFunc("GET /healthz", handleHealthz)
+
 	authenticated := auth.VerifyToken(verifier)
 	requireMember := auth.RequireMember(db.Members)
 	protected := func(h http.Handler) http.Handler {

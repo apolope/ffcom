@@ -1,0 +1,78 @@
+name: deploy-ffcom-channel
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/a3sitsolutions/ffcom-channel
+
+jobs:
+  lint-dockerfile:
+    name: Lint do Dockerfile
+    runs-on: [self-hosted, a3s-network]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: server-channel/Dockerfile
+
+  security-scan:
+    name: Scan de segredos
+    runs-on: [self-hosted, a3s-network]
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Gitleaks (escopo: server-channel)"
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
+            detect --source="/repo/server-channel" --no-git -v
+
+  build-push-deploy:
+    name: Build, push e deploy
+    needs: [lint-dockerfile, security-scan]
+    runs-on: [self-hosted, a3s-network]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login no GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build e push da imagem
+        working-directory: server-channel
+        run: |
+          IMAGE_TAG="${IMAGE}:$(git rev-parse --short HEAD)"
+          docker buildx build -t "$IMAGE_TAG" -f Dockerfile --push .
+
+      - name: Carregar env file
+        working-directory: deploy/channel
+        run: cp /opt/ffcom/envs/ffcom-channel.env .env
+
+      - name: Deploy ffcom-channel
+        working-directory: deploy/channel
+        run: |
+          export IMAGE_TAG=$(git rev-parse --short HEAD)
+          docker compose -f docker-compose.yml --env-file .env up -d --pull always --remove-orphans
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 12); do
+            status=$(docker inspect --format='{{.State.Health.Status}}' ffcom-channel-app 2>/dev/null)
+            [ "$status" = "healthy" ] && echo "ffcom-channel-app healthy" && exit 0
+            echo "Aguardando... status: ${status:-iniciando} (tentativa $i/12)"
+            sleep 10
+          done
+          echo "Timeout: ffcom-channel-app nao ficou healthy em 2 minutos"
+          docker logs --tail 50 ffcom-channel-app
+          exit 1
+
+      - name: Limpeza de imagens antigas
+        run: docker image prune -f
+
+      - name: Logout do GHCR
+        if: always()
+        run: docker logout ghcr.io

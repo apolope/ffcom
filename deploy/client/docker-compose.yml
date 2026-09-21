@@ -1,0 +1,22 @@
+# Compose de implantação do client (SPA estática, servida via nginx) em
+# SVRUBS24IPS0101. Diferente de server-central/server-channel, o client não
+# tem um docker-compose.yml de referência próprio hoje (build web/PWA ainda
+# é TODO) — este arquivo é só para esta implantação de teste, via NPM/rede
+# overlay a3s-services.
+services:
+  app:
+    image: ghcr.io/a3sitsolutions/ffcom-client:${IMAGE_TAG}
+    container_name: ffcom-client
+    restart: unless-stopped
+    networks:
+      - a3s-services
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+networks:
+  a3s-services:
+    external: true

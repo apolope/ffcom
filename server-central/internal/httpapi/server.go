@@ -28,6 +28,8 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string
 	}
 	upgrader := newPresenceUpgrader(allowed)
 
+	mux.HandleFunc("GET /healthz", handleHealthz)
+
 	protected := auth.Middleware(verifier, db.Accounts)
 	mux.Handle("GET /api/me", protected(handleMe(db)))
 	mux.Handle("GET /api/servers", protected(handleListServers(db.KnownServers)))

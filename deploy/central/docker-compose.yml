@@ -1,0 +1,56 @@
+# Compose de implantação do server-central em SVRUBS24IPS0101 — diferente
+# de server-central/docker-compose.yml (referência genérica para qualquer
+# self-hoster, build: . local, sem rede overlay). Este arquivo assume a
+# infra específica da a3s-network: imagem pré-buildada no GHCR (pipeline
+# em .github/workflows/deploy-ffcom-central.yml) e a rede overlay
+# a3s-services (ver D:\Dev\a3s-network, docs/services/docker-swarm-cluster.md)
+# para o Nginx Proxy Manager alcançar o container por nome.
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: ffcom-central-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ffcom}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      POSTGRES_DB: ${POSTGRES_DB:-ffcom_central}
+    volumes:
+      - ffcom_central_db:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ffcom} -d ${POSTGRES_DB:-ffcom_central}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    image: ghcr.io/a3sitsolutions/ffcom-central:${IMAGE_TAG}
+    container_name: ffcom-central-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-ffcom}:${POSTGRES_PASSWORD}@ffcom-central-db:5432/${POSTGRES_DB:-ffcom_central}?sslmode=disable
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:?defina OIDC_ISSUER_URL no .env}
+      # Domínio público do client (ex. https://app.ffcom.a3sitsolutions.com.br)
+      # — sem isso o navegador bloqueia as chamadas REST/WebSocket por CORS.
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?defina CORS_ALLOWED_ORIGINS no .env}
+    networks:
+      - internal
+      - a3s-services
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  ffcom_central_db:
+
+networks:
+  internal:
+  a3s-services:
+    external: true

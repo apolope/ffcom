@@ -43,7 +43,7 @@ export function useForumChannel(
   const [postsLoading, setPostsLoading] = useState(false)
 
   const socketRef = useRef<WebSocket | null>(null)
-  const activeThreadIdRef = useRef<string>()
+  const activeThreadIdRef = useRef<string | undefined>(undefined)
   useEffect(() => {
     activeThreadIdRef.current = activeThreadId
   }, [activeThreadId])

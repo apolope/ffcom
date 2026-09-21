@@ -367,6 +367,46 @@ Há bastante espaço sobrando no `BIGINT` para bits futuros (canal forum, gerenc
 
 **Revisitar quando:** o volume de atividade num canal forum justificar filtrar o broadcast por thread no servidor em vez de no client (mesmo gatilho de escala já registrado no Hub de canal de texto); ou um endpoint de editar/apagar thread/post existir (hoje só criação, mesmo escopo mínimo do TODO original).
 
+## Decisão: primeira implantação de teste — infra do `a3s-network`, imagens no GHCR, deploy via GitHub Actions
+
+**Contexto:** antes de decidir a infra "oficial" de longo prazo (domínio próprio `ffcom.a3sitsolutions.com`/`.com.br`, host dedicado), era preciso validar o fluxo ponta a ponta com um grupo maior de pessoas. O operador já mantém uma infra própria (`D:\Dev\a3s-network`) com Docker Swarm (rede overlay `a3s-services`, cluster entre `VMSUBS24OCI0102` e `SVRUBS24IPS0101`), Nginx Proxy Manager alcançando containers por nome via essa rede, um runner self-hosted de GitHub Actions (`[self-hosted, a3s-network]`) e um certificado wildcard cobrindo `*.a3sitsolutions.com.br` (inclusive subdomínios aninhados como `*.ffcom.a3sitsolutions.com.br`) — reaproveitar essa infra para o primeiro teste evita provisionar servidor/domínio/CI própria do zero só para validar o produto.
+
+**Decisão:**
+1. **Host:** `SVRUBS24IPS0101` (site Ipsep 01, worker do Swarm, sem IP público próprio — LAN `10.20.4.10`, Tailscale `100.64.0.2`). Responsabilidade dividida: este repositório cobre os containers (build, compose, nomes, portas); um agente separado cobre NPM (Proxy Hosts por nome de container) e DNS/port-forwarding no roteador do site — ver `D:\Dev\a3s-network`.
+2. **Containers e portas** (nomes fixos via `container_name`, não os gerados pelo Compose):
+
+   | Container | Porta interna | Rede | Alcançado via |
+   |---|---|---|---|
+   | `ffcom-client` | 8080 (nginx) | `a3s-services` | NPM, por nome |
+   | `ffcom-central-app` | 8080 | `a3s-services` + `internal` | NPM, por nome |
+   | `ffcom-central-db` | 5432 | `internal` | só `ffcom-central-app` |
+   | `ffcom-channel-app` | 8080 | `a3s-services` + `internal` | NPM, por nome |
+   | `ffcom-channel-db` | 5432 | `internal` | só `ffcom-channel-app` |
+   | `ffcom-livekit` | 7880 (sinalização) | `a3s-services` | NPM, por nome |
+   | `ffcom-livekit` | 7881/tcp + range RTC/udp | — | publicada direto no host, amarrada ao IP de LAN (`10.20.4.10`), sem passar pelo NPM |
+   | `ffcom-coturn` | 3478 tcp/udp + range de relay/udp | — | idem, sem NPM nem rede overlay (não fala HTTP) |
+
+   Os bancos Postgres ficam isolados numa rede `internal` própria de cada compose — nunca entram em `a3s-services`, mesmo padrão já usado nos composes de referência de self-host.
+3. **Publicação de porta amarrada ao IP de LAN, não `0.0.0.0`:** mesmo padrão já usado em `D:\Dev\a3s-network\deploy\go2rtc\docker-compose.yml` (`"10.20.4.10:1984:1984"`) — evita publicar em todas as interfaces de um host com múltiplas redes.
+4. **Compose de implantação separado do compose de referência de self-host:** `deploy/central/`, `deploy/channel/`, `deploy/client/` (novos, só para esta implantação) em vez de editar `server-central/docker-compose.yml`/`server-channel/docker-compose.yml` — esses últimos continuam sendo a referência genérica documentada no TODO ("Docker Compose de referência para X"), com `build: .` local e sem nenhuma suposição sobre rede overlay/GHCR/nomes de container fixos desta infra específica. Misturar os dois quebraria o caso de uso de terceiros self-hosteando a partir do repo público.
+5. **CI/CD:** um workflow por componente (`.github/workflows/deploy-ffcom-{central,channel,client}.yml`), mesmo molde já usado por outros projetos do operador (`deploy-a3s-claude-relay.yml`): `workflow_dispatch` manual, roda no runner self-hosted `[self-hosted, a3s-network]` (registrado a nível de organização, atende qualquer repo dela — não precisou de registro extra neste repo), builda e publica em `ghcr.io/a3sitsolutions/ffcom-{central,channel,client}`, carrega o `.env` real de `/opt/ffcom/envs/ffcom-{central,channel}.env` no host (fora do git) e roda `docker compose up -d --pull always --remove-orphans`, com healthcheck via `docker inspect` no final.
+6. **`GET /healthz` novo em `server-central` e `server-channel`:** endpoint sem autenticação (`internal/httpapi/healthz.go` nos dois), porque toda rota existente exigia Bearer token — sem isso o `HEALTHCHECK` do Docker não tinha como confirmar o processo de pé sem sempre falhar com 401.
+
+**Razão:** reaproveitar infraestrutura e convenções já validadas em produção (naming, isolamento de rede, pipeline) é mais barato do que inventar um esquema novo só para o FFCom, e mantém a separação clara entre "como um terceiro self-hosteia isso" (composes de referência, inalterados) e "como esta implantação de teste específica roda" (novo `deploy/`).
+
+**Checagem de portas (2026-09-20, via SSH em `apolo@10.20.4.10`):** confirmado que `3478/3479/5349/5350` já estão ocupados em `10.20.4.10` pelo coturn do stack VoIP/FreeSWITCH existente (`network_mode=host`, escuta em todas as interfaces do host). `TURN_LISTEN_PORT` do FFCom ajustado para `33478` (porta externa/host — o container continua escutando `3478` internamente via `--listening-port` fixo no compose). Faixas de relay do coturn (`49160-49200`) e RTC do LiveKit (`50000-50100`) não colidiram com nada em uso, mantidas no default. `.env` reais já criados em `/opt/ffcom/envs/ffcom-{central,channel}.env`.
+
+**Correção (2026-09-20): exposição pública via `VMSUBS24OCI0102`, não pelo roteador do site IPS01.** O pedido inicial (DNS + port-forwarding direto no roteador do site, via WAN1/Nio ou WAN2/Tim) estava incorreto — o lado operacional (agente de infra) confirmou, checando a infra real, que nenhum dos dois links de WAN do site serve para isso: WAN1 (Nio) é CGNAT (nenhuma conexão de entrada é aceita, em nenhuma porta) e WAN2 (Tim) tem IP público dinâmico (já mudou pelo menos uma vez) com um aviso não resolvido de "router atrás de NAT". Além disso, o roteador do site não expõe nada à internet por política, e isso não muda para o FFCom.
+
+**Desenho correto:** os containers continuam em `SVRUBS24IPS0101` (LAN `10.20.4.10`), mas toda a exposição pública — HTTP(S) via proxy reverso e a mídia RTC crua — entra por `VMSUBS24OCI0102` (IP público fixo, `137.131.249.145`), que encaminha internamente até `SVRUBS24IPS0101` por um túnel próprio da infra (fora do escopo deste repositório). `TURN_EXTERNAL_IP` é esse IP da VM (`137.131.249.145`), não um IP do site — é justamente o que esse encaminhamento evita expor. Os 4 hostnames públicos (`app.`, `central.`, `channel-test.`, `livekit-test.ffcom.a3sitsolutions.com.br`) apontam (DNS, do lado operacional) para esse mesmo IP.
+
+**Pendências conhecidas no momento desta decisão (não resolvidas aqui, ver TODO.md):**
+- Proxy hosts/certificado no proxy reverso de `VMSUBS24OCI0102` e o encaminhamento das portas cruas (RTC do LiveKit, STUN/TURN do coturn) até `SVRUBS24IPS0101` — do lado operacional, não deste repositório.
+- Registros DNS dos 4 hostnames para `137.131.249.145` — do lado operacional.
+- `redirect_uris` do blueprint Authentik (`abs-3d-printer/infra/authentik/blueprints/providers-ffcom.yaml`) ainda não incluem `https://app.ffcom.a3sitsolutions.com.br/auth/callback` — sem isso o login não funciona nesse domínio.
+
+**Revisitar quando:** essa instância de teste for promovida a "oficial" (domínio de produção definitivo, ver TODO "Provisionar `ffcom.a3sitsolutions.com`") — nesse ponto vale decidir se ela continua na infra do `a3s-network` ou migra para infra dedicada.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.
