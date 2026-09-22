@@ -22,7 +22,7 @@ Todas as decisões abaixo foram tomadas — ver `docs/architecture.md` para o de
 - [x] Documentar port-forwarding / DNS dinâmico para quem for self-hostear `server-channel` atrás de NAT — `server-channel/README.md`, seção "Hospedando atrás de NAT (ex. em casa)": tabela de portas a encaminhar, serviço de DDNS recomendado para `LIVEKIT_PUBLIC_URL`/endereço divulgado, e a limitação de `TURN_EXTERNAL_IP` exigir IP literal (sem hostname)
 - [x] Pipeline de deploy (build + push GHCR + deploy) para os três componentes — `.github/workflows/deploy-ffcom-{central,channel,client}.yml`, ver `docs/architecture.md` ("Decisão: primeira implantação de teste"); ainda sem etapa de testes automatizados (só lint de Dockerfile via Hadolint e scan de segredo via Gitleaks)
 - [x] Definir versionamento e forma de release dos binários (`server-central`, `server-channel`, `client`) — semver independente por componente, disparado por push de git tag (`central-v*`/`channel-v*`/`client-v*`); imagem GHCR ganha a tag de versão além do sha; `server-central`/`server-channel` expõem a versão em `GET /healthz`. Ver `docs/architecture.md`
-- [ ] Provisionar `ffcom.a3sitsolutions.com` (DNS + certificado) para a instância oficial do `server-central` — domínio a confirmar (`.com` vs `.com.br`); primeira implantação de teste usa `*.ffcom.a3sitsolutions.com.br` na infra do `a3s-network` como passo intermediário, ver `docs/architecture.md`
+- [x] Provisionar `ffcom.a3sitsolutions.com` (DNS + certificado) para a instância oficial — domínio confirmado como `.com.br` (2026-09-21); coincide com o já usado na implantação de teste (`*.ffcom.a3sitsolutions.com.br`), que passa a ser a instância oficial, sem domínio novo a provisionar. Hostnames mantêm o sufixo `-test` onde já existia. Ver `docs/architecture.md`
 
 ## Primeira implantação de teste (infra `a3s-network`, `SVRUBS24IPS0101`)
 
@@ -52,7 +52,8 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 
 - [x] Modelo de dados: conta, perfil, lista de amigos, diretório de servidores (IP/DNS + nome + ícone por servidor)
 - [x] Registrar o app "ffcom" (provider + application) na instância central de Authentik do `abs-3d-printer`, via blueprint declarativo (`infra/authentik/blueprints/providers-ffcom.yaml` naquele repo, commit `03f726d`) — feito com `redirect_uris` provisórios (só `http://localhost:5173/auth/callback`); ver TODO abaixo para o ajuste final
-- [ ] Atualizar `redirect_uris` em `providers-ffcom.yaml` (repo `abs-3d-printer`) quando o domínio de produção do `client` (web/PWA) e o esquema de callback do build Electron empacotado forem decididos — usar um prompt dedicado para o agente daquele repo, mesmo molde do que registrou o app (ver `docs/architecture.md`)
+- [x] Atualizar `redirect_uris` em `providers-ffcom.yaml` (repo `abs-3d-printer`) — `app://ffcom/auth/callback` (callback do Electron empacotado) adicionado ao provider "ffcom", ao lado dos dois já existentes (dev local e web/PWA de produção)
+- [ ] Adicionar `app://ffcom` a `CORS_ALLOWED_ORIGINS` nos `.env` reais de `server-central`/`server-channel` (`/opt/ffcom/envs/`, fora do git) quando o build Electron empacotado for distribuído de verdade — sem isso, o app desktop instalado não consegue chamar as APIs (ver `docs/architecture.md`, "Decisão: callback OIDC no Electron empacotado")
 - [x] Cadastro/login de conta via Authentik
 - [x] Endpoint/gateway de presença (quem está online)
 - [x] Implementar DMs: `server-central` como gateway de mensagens (armazenamento em Postgres + entrega via WebSocket)

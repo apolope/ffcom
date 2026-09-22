@@ -560,6 +560,28 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** alguém confirmar que o NPM de `VMSUBS24OCI0102` seta `X-Forwarded-Proto` corretamente para os 4 hostnames do FFCom — nesse momento, ligar `REQUIRE_TLS=true` nos `.env` reais em `/opt/ffcom/envs/` e redeployar; ou se surgir um self-hoster usando um proxy que não sete esse header (exigiria documentar exceção ou um header alternativo).
 
+## Decisão: domínio oficial — `ffcom.a3sitsolutions.com.br`, instância de teste vira a oficial
+
+**Contexto:** o TODO "Provisionar `ffcom.a3sitsolutions.com`" listava a extensão (`.com` vs `.com.br`) como a decidir. A "primeira implantação de teste" (ver seção acima) já usa `*.ffcom.a3sitsolutions.com.br` na infra do `a3s-network`, com DNS/TLS/OIDC validados ponta a ponta (2026-09-21).
+
+**Decisão (Apolonio, 2026-09-21):** `.com.br`, não `.com` — decisão já tomada antes desta sessão, só não estava registrada aqui. Como a extensão coincide com a já usada na implantação de teste, essa instância deixa de ser "provisória" e passa a ser a oficial; não há domínio novo a provisionar. Os hostnames mantêm o sufixo `-test` onde já existia (`channel-test.`, `livekit-test.ffcom.a3sitsolutions.com.br`, ao lado de `app.`/`central.` sem sufixo) — renomear exigiria novo trabalho do agente de infra (DNS + certificado) em `VMSUBS24OCI0102`, sem ganho que justifique isso agora.
+
+**Razão:** evita provisionar uma segunda instância/domínio só para "ser a oficial" quando a de teste já está validada ponta a ponta e em uso.
+
+## Decisão: callback OIDC no Electron empacotado — esquema customizado `app://ffcom`
+
+**Contexto:** o build Electron empacotado (`client/electron/main.ts`) carregava o bundle via `win.loadFile('../dist/index.html')`, isto é, `file://`. Isso quebrava o login OIDC de duas formas: (1) `redirect_uri` em `userManager.ts` é `window.location.origin + '/auth/callback'` — sob `file://` cada documento tem uma origin opaca, sem um valor estável para cadastrar no Authentik; (2) os assets do Vite usam caminho raiz-absoluta (`/assets/...`), que sob `file://` resolve contra a raiz do sistema de arquivos, não contra `dist/` (bug latente, não pego antes porque o smoke test do TODO "Build Electron" só confirmou que o instalador roda, não que a UI renderiza).
+
+**Alternativas consideradas:** (a) `loadURL` apontando pro domínio de produção do client web (`https://app.ffcom.a3sitsolutions.com.br`) em vez do bundle local — mais simples, mas transforma o app "instalado" num wrapper fino que sempre depende desse domínio estar no ar, e amarra o build empacotado a um domínio fixo (ruim para quem faz build próprio noutro domínio, dado o caráter self-host do projeto); (b) esquema customizado (`app://`) via `protocol.handle`, servindo os arquivos de `dist/` e dando uma origin fixa e estável independente de domínio.
+
+**Decisão:** (b). `client/electron/main.ts` registra o esquema `app` como privileged (`standard`, `secure`, `supportFetchAPI`, `corsEnabled`) e implementa `protocol.handle('app', ...)` resolvendo `pathname` contra `dist/` (com fallback para `index.html` em qualquer rota sem arquivo correspondente — mesmo padrão de `try_files` do `client/nginx.conf` — necessário para `/auth/callback` funcionar). A janela carrega `app://ffcom/index.html`. Origin resultante: `app://ffcom`, igual em toda execução do app empacotado, em qualquer host/domínio de build.
+
+**Verificado nesta sessão (2026-09-21):** `npm run build:electron` limpo; smoke test do binário (`electron .` sobre o build empacotado, fora do modo dev) confirmou o bundle JS carregando via `app://ffcom` (fetch 200, tamanho batendo com o bundle) e o React montando (root com conteúdo, tela de login). `app://ffcom/auth/callback` já foi cadastrado como `redirect_uri` no blueprint `providers-ffcom.yaml` (repo `abs-3d-printer`, fora deste repositório). Ainda faltam, antes do fluxo completo de login funcionar de ponta a ponta no app empacotado: adicionar `app://ffcom` a `CORS_ALLOWED_ORIGINS` de `server-central`/`server-channel` (ops, fora do git — ver `TODO.md`) e testar o redirect real pro Authentik e volta (não testado nesta sessão, só o carregamento local do bundle).
+
+**Razão:** uma origin fixa e independente de domínio combina melhor com o resto do projeto (self-host, sem assumir uma instância "oficial" única de `server-central`/`server-channel` — só o Authentik central é de fato compartilhado) do que amarrar o app empacotado a um domínio de produção específico. Resolve os dois problemas (asset loading e origin do redirect_uri) com uma única mudança.
+
+**Revisitar quando:** `post_logout_redirect_uri` (também `window.location.origin`, hoje sem uso ativo de logout redirect testado) precisar de cadastro equivalente no Authentik; ou se o esquema de deep link para convites (`docs/architecture.md`, "Revisitar quando" da decisão de convites) for implementado — os dois podem reaproveitar o mesmo `protocol.handle`.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.
