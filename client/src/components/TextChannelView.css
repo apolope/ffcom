@@ -36,6 +36,12 @@
   word-break: break-word;
 }
 
+.message-content-undecryptable {
+  color: var(--text);
+  opacity: 0.6;
+  font-style: italic;
+}
+
 .message-error {
   padding: 4px 16px;
   color: #e5484d;

@@ -5,9 +5,10 @@ import "time"
 // Account é a identidade autenticada via Authentik (OIDC). server-central
 // não guarda senha nenhuma, só o vínculo com o "sub" emitido pelo IdP.
 type Account struct {
-	ID          string
-	OIDCSubject string
-	CreatedAt   time.Time
+	ID           string
+	OIDCSubject  string
+	CreatedAt    time.Time
+	E2EPublicKey []byte
 }
 
 // Profile são os dados editáveis pelo usuário, associados 1:1 a uma Account.
@@ -51,12 +52,15 @@ type KnownServer struct {
 
 // DirectMessage é uma mensagem trocada diretamente entre duas contas, sem
 // passar por nenhum server-channel (ver docs/architecture.md, "Decisão:
-// modelo de DMs").
+// modelo de DMs"). Ciphertext/Nonce são opacos ao server-central --
+// criptografia ponta-a-ponta (NaCl box), ver docs/architecture.md, "Decisão:
+// criptografia ponta-a-ponta em DMs".
 type DirectMessage struct {
 	ID          string
 	SenderID    string
 	RecipientID string
-	Content     string
+	Ciphertext  []byte
+	Nonce       []byte
 	CreatedAt   time.Time
 	EditedAt    *time.Time
 }

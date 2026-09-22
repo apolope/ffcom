@@ -66,6 +66,11 @@ export interface RemoteFriend {
   accountId: string
   displayName?: string
   avatarUrl?: string
+  // Chave pública de E2E (NaCl box, base64) do dispositivo ativo do amigo,
+  // se já publicada -- ver docs/architecture.md, "Decisão: criptografia
+  // ponta-a-ponta em DMs". Ausente = amigo ainda não usou DMs em nenhum
+  // dispositivo, não dá pra enviar mensagem cifrada para ele ainda.
+  e2ePublicKey?: string
 }
 
 export interface FriendPresence {
@@ -84,6 +89,21 @@ export async function fetchFriends(accessToken: string): Promise<RemoteFriend[]>
   })
   const body = await parseJsonOrThrow<{ friends: RemoteFriend[] }>(res)
   return body.friends
+}
+
+// setMyE2EPublicKey publica a chave pública de E2E deste dispositivo (ver
+// hooks/useE2EKeys.ts) -- sobrescreve qualquer chave publicada antes por
+// outro dispositivo desta mesma conta.
+export async function setMyE2EPublicKey(accessToken: string, publicKeyB64: string): Promise<void> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/me/e2e-public-key`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ publicKey: publicKeyB64 }),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(text || `server-central: ${res.status} ${res.statusText}`)
+  }
 }
 
 export async function fetchPresenceSnapshot(accessToken: string): Promise<FriendPresence[]> {
@@ -131,11 +151,16 @@ export function openPresenceSocket(accessToken: string): WebSocket {
 // dedicado — o client anexa um listener extra a esse mesmo WebSocket (ver
 // hooks/useDirectMessages.ts).
 
+// ciphertext/nonce (base64) são opacos ao server-central -- criptografia
+// ponta-a-ponta, ver docs/architecture.md, "Decisão: criptografia
+// ponta-a-ponta em DMs". Decifrados no client via crypto/e2e.ts antes de
+// virar texto exibível (ver hooks/useDirectMessages.ts).
 export interface RemoteDirectMessage {
   id: string
   senderId: string
   recipientId: string
-  content: string
+  ciphertext: string
+  nonce: string
   createdAt: string
   editedAt?: string
 }
@@ -153,8 +178,8 @@ export async function fetchDirectMessages(
   return body.messages.slice().reverse()
 }
 
-export function sendDirectMessageFrame(socket: WebSocket, recipientId: string, content: string): void {
-  socket.send(JSON.stringify({ type: 'dm.create', recipientId, content }))
+export function sendDirectMessageFrame(socket: WebSocket, recipientId: string, ciphertext: string, nonce: string): void {
+  socket.send(JSON.stringify({ type: 'dm.create', recipientId, ciphertext, nonce }))
 }
 
 type PresenceSocketFrame =

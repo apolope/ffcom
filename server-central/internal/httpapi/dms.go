@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"a3sitsolutions.com/ffcom/server-central/internal/auth"
@@ -15,9 +14,15 @@ import (
 )
 
 const (
-	maxDMContentLength = 4000
-	defaultDMLimit     = 50
-	maxDMLimit         = 200
+	dmNonceLength = 24
+	// maxDMCiphertextLength é um limite de tamanho bruto, não de conteúdo --
+	// o servidor não consegue mais validar "vazio" ou contar caracteres
+	// depois que o payload virou ciphertext opaco (criptografia
+	// ponta-a-ponta, ver docs/architecture.md). Generoso o bastante para o
+	// overhead de 16 bytes do NaCl box sobre uma mensagem de texto razoável.
+	maxDMCiphertextLength = 8192
+	defaultDMLimit        = 50
+	maxDMLimit            = 200
 )
 
 // handleIncomingDM processa um frame "dm.create" recebido no WebSocket de
@@ -39,13 +44,12 @@ func handleIncomingDM(ctx context.Context, hub *realtime.Hub, friendships *store
 		return
 	}
 
-	content := strings.TrimSpace(incoming.Content)
-	if content == "" {
-		client.SendError("conteúdo da mensagem não pode ser vazio")
+	if len(incoming.Nonce) != dmNonceLength {
+		client.SendError("nonce inválido")
 		return
 	}
-	if len(content) > maxDMContentLength {
-		client.SendError("conteúdo excede o limite de caracteres")
+	if len(incoming.Ciphertext) == 0 || len(incoming.Ciphertext) > maxDMCiphertextLength {
+		client.SendError("ciphertext inválido")
 		return
 	}
 
@@ -60,7 +64,7 @@ func handleIncomingDM(ctx context.Context, hub *realtime.Hub, friendships *store
 		return
 	}
 
-	m, err := directMessages.Create(ctx, senderID, incoming.RecipientID, content)
+	m, err := directMessages.Create(ctx, senderID, incoming.RecipientID, incoming.Ciphertext, incoming.Nonce)
 	if err != nil {
 		log.Printf("server-central: erro ao criar DM: %v", err)
 		client.SendError("erro ao enviar mensagem")
@@ -148,7 +152,8 @@ func toDMView(m store.DirectMessage) realtime.DirectMessageView {
 		ID:          m.ID,
 		SenderID:    m.SenderID,
 		RecipientID: m.RecipientID,
-		Content:     m.Content,
+		Ciphertext:  m.Ciphertext,
+		Nonce:       m.Nonce,
 		CreatedAt:   m.CreatedAt,
 		EditedAt:    m.EditedAt,
 	}

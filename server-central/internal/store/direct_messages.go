@@ -12,16 +12,18 @@ type DirectMessageStore struct {
 	pool *pgxpool.Pool
 }
 
-// Create grava uma DM de senderID para recipientID.
-func (s *DirectMessageStore) Create(ctx context.Context, senderID, recipientID, content string) (DirectMessage, error) {
+// Create grava uma DM de senderID para recipientID. ciphertext/nonce são
+// opacos ao server-central (criptografia ponta-a-ponta, ver
+// docs/architecture.md).
+func (s *DirectMessageStore) Create(ctx context.Context, senderID, recipientID string, ciphertext, nonce []byte) (DirectMessage, error) {
 	const query = `
-		INSERT INTO direct_messages (sender_id, recipient_id, content)
-		VALUES ($1, $2, $3)
-		RETURNING id, sender_id, recipient_id, content, created_at, edited_at
+		INSERT INTO direct_messages (sender_id, recipient_id, ciphertext, nonce)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, sender_id, recipient_id, ciphertext, nonce, created_at, edited_at
 	`
 	var m DirectMessage
-	err := s.pool.QueryRow(ctx, query, senderID, recipientID, content).
-		Scan(&m.ID, &m.SenderID, &m.RecipientID, &m.Content, &m.CreatedAt, &m.EditedAt)
+	err := s.pool.QueryRow(ctx, query, senderID, recipientID, ciphertext, nonce).
+		Scan(&m.ID, &m.SenderID, &m.RecipientID, &m.Ciphertext, &m.Nonce, &m.CreatedAt, &m.EditedAt)
 	if err != nil {
 		return DirectMessage{}, fmt.Errorf("direct_messages: create: %w", err)
 	}
@@ -34,7 +36,7 @@ func (s *DirectMessageStore) Create(ctx context.Context, senderID, recipientID, 
 // server-channel).
 func (s *DirectMessageStore) ListConversation(ctx context.Context, accountA, accountB string, before *time.Time, limit int) ([]DirectMessage, error) {
 	const query = `
-		SELECT id, sender_id, recipient_id, content, created_at, edited_at
+		SELECT id, sender_id, recipient_id, ciphertext, nonce, created_at, edited_at
 		FROM direct_messages
 		WHERE ((sender_id = $1 AND recipient_id = $2) OR (sender_id = $2 AND recipient_id = $1))
 		AND ($3::timestamptz IS NULL OR created_at < $3)
@@ -50,7 +52,7 @@ func (s *DirectMessageStore) ListConversation(ctx context.Context, accountA, acc
 	var out []DirectMessage
 	for rows.Next() {
 		var m DirectMessage
-		if err := rows.Scan(&m.ID, &m.SenderID, &m.RecipientID, &m.Content, &m.CreatedAt, &m.EditedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.SenderID, &m.RecipientID, &m.Ciphertext, &m.Nonce, &m.CreatedAt, &m.EditedAt); err != nil {
 			return nil, fmt.Errorf("direct_messages: scan: %w", err)
 		}
 		out = append(out, m)

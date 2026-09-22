@@ -1,6 +1,6 @@
 # Protocolo entre client, server-central e server-channel
 
-Referência técnica dos endpoints REST e frames de WebSocket expostos por `server-central` e `server-channel`, e de como o `client` os consome. As decisões de design por trás de cada mecanismo (por quê REST vs. WebSocket, por quê DMs entram na conexão de presença, por quê convite é obrigatório, etc.) estão em [`docs/architecture.md`](architecture.md) — este documento não as repete, só referencia. Gerado a partir da leitura do código em 2026-09-21; se o comportamento e este doc divergirem no futuro, o código manda.
+Referência técnica dos endpoints REST e frames de WebSocket expostos por `server-central` e `server-channel`, e de como o `client` os consome. As decisões de design por trás de cada mecanismo (por quê REST vs. WebSocket, por quê DMs entram na conexão de presença, por quê convite é obrigatório, etc.) estão em [`docs/architecture.md`](architecture.md) — este documento não as repete, só referencia. Gerado a partir da leitura do código em 2026-09-21, atualizado em 2026-09-22 (criptografia ponta-a-ponta em DMs); se o comportamento e este doc divergirem no futuro, o código manda.
 
 ## Visão geral
 
@@ -39,23 +39,24 @@ Base URL: `VITE_SERVER_CENTRAL_URL` no client (`http://localhost:8081` em dev).
 |---|---|---|---|---|---|
 | GET | `/healthz` | não | — | `{status, version}` | — |
 | GET | `/api/me` | Bearer | — | `{accountId, oidcSubject, createdAt, displayName?, avatarUrl?}` | — |
+| PUT | `/api/me/e2e-public-key` | Bearer | `{publicKey}` (base64, 32 bytes) | `204` | `400` tamanho inválido |
 | GET | `/api/servers` | Bearer | — | `{servers: [{id, address, name, iconUrl?, addedAt}]}` | — |
 | POST | `/api/servers` | Bearer | `{address, name, iconUrl?}` | `201` + `KnownServer` | `400` address/name vazios |
 | DELETE | `/api/servers/{id}` | Bearer | — | `204` | `404` |
 | GET | `/api/presence` | Bearer | — | `{friends: [{accountId, online}]}` — snapshot dos amigos aceitos | — |
 | GET | `/api/presence/ws` | Bearer (subprotocolo) | upgrade WS | ver abaixo | — |
-| GET | `/api/friends` | Bearer | — | `{friends: [{accountId, displayName?, avatarUrl?}]}` | — |
+| GET | `/api/friends` | Bearer | — | `{friends: [{accountId, displayName?, avatarUrl?, e2ePublicKey?}]}` | — |
 | POST | `/api/friends/invites` | Bearer | — | `201` `{code, createdAt}` | — |
 | POST | `/api/friends/invites/{code}/redeem` | Bearer | — | `201` `{friendAccountId}` | `400` convite próprio, `404`, `409` já usado, `410` expirado |
 | GET | `/api/dms/{accountId}/messages?before=&limit=` | Bearer | — | `{messages: [DirectMessage]}` | `403` se não são amigos |
 
-`DirectMessage`: `{id, senderId, recipientId, content, createdAt, editedAt?}`.
+`DirectMessage`: `{id, senderId, recipientId, ciphertext, nonce, createdAt, editedAt?}` — `ciphertext`/`nonce` são base64, opacos ao servidor (criptografia ponta-a-ponta, ver `docs/architecture.md`, "Decisão: criptografia ponta-a-ponta em DMs"). O client decifra localmente com a chave pública atual do outro lado da conversa (`GET /api/friends`) + a chave privada do dispositivo.
 
 ### WebSocket — `GET /api/presence/ws`
 
 Uma conexão por sessão do client, mantida aberta enquanto online; serve **presença e DMs na mesma conexão** (ver `docs/architecture.md`, "Decisão: DMs entregues no mesmo WebSocket de presença"). Ao conectar (primeira conexão da conta) e desconectar (última conexão), o servidor emite `presence.update` para cada amigo aceito online.
 
-- **client → servidor:** só `dm.create` — `{"type": "dm.create", "recipientId": "...", "content": "..."}`. Rejeitado com `error` se: destinatário é o próprio remetente, conteúdo vazio ou > 4000 caracteres, ou remetente/destinatário não são amigos aceitos (`FriendshipStore.AreFriends`).
+- **client → servidor:** só `dm.create` — `{"type": "dm.create", "recipientId": "...", "ciphertext": "...", "nonce": "..."}` (`ciphertext`/`nonce` base64, cifrados no client antes de enviar). Rejeitado com `error` se: destinatário é o próprio remetente, `nonce` não tem 24 bytes decodificados, `ciphertext` vazio ou > 8192 bytes decodificados, ou remetente/destinatário não são amigos aceitos (`FriendshipStore.AreFriends`).
 - **servidor → client:**
   - `presence.update` — `{"type": "presence.update", "accountId": "...", "online": bool}`, só para amigos aceitos.
   - `dm.created` — `{"type": "dm.created", "message": DirectMessage}`, broadcast para remetente e destinatário.

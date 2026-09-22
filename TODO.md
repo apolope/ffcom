@@ -47,6 +47,7 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [ ] Testar canal de voz com pelo menos 2 pessoas em redes diferentes (validação real do TURN em `33478`/relay `49160-49200`)
 - [ ] Testar convite/entrada de um segundo membro no `channel-test` de ponta a ponta (não só o fundador)
 - [ ] Testar roles/permissões negando `ViewChannels` a um membro de teste
+- [ ] Testar DM cifrada ponta a ponta com duas contas reais (dois logins/navegadores): confirmar que `PUT /api/me/e2e-public-key` é chamado, que o envio funciona nos dois sentidos, e que o payload do frame `dm.create`/`dm.created` (DevTools) é ciphertext opaco — ver `docs/architecture.md`, "Decisão: criptografia ponta-a-ponta em DMs". Verificado nesta sessão só via teste automatizado direto no store (Postgres real, sem UI)
 
 ## server-central
 
@@ -92,7 +93,7 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [x] Criptografia em trânsito (TLS) obrigatória entre client e ambos os tipos de servidor — client recusa endereço `http://` fora de localhost (`AddServerDialog.tsx`), servidores recusam requisição sem `X-Forwarded-Proto: https` quando `REQUIRE_TLS=true` (`internal/httpapi/requiretls.go`, padrão desligado). Falta ligar `REQUIRE_TLS=true` no `.env` real da instância de teste (`/opt/ffcom/envs/`, fora do git) depois de confirmar que o NPM em `VMSUBS24OCI0102` seta o header — ver `docs/architecture.md`
 - [x] Rate limiting / proteção contra abuso em `server-central` (cadastro, login) — limite geral por IP (token bucket em memória, `internal/httpapi/ratelimit.go`), já que não há endpoint de cadastro/login próprio (conta é criada implicitamente no `auth.Middleware`); configurável via `RATE_LIMIT_RPM`/`RATE_LIMIT_BURST`, padrão 120 req/min e burst 20; `/healthz` isento. Ver `docs/architecture.md`
 - [x] Política de permissões/roles em `server-channel` revisada contra escalonamento de privilégio — achado: `ManageRoles` sozinho permitia auto-conceder `Administrator` (criar role com esse bit + se auto-atribuir); corrigido com `permissions.Grants` (bits concedidos via criação/edição de role, atribuição de role e `Allow` de overwrite de canal não podem exceder a permissão base de quem chama). Ver `docs/architecture.md`
-- [ ] Avaliar necessidade de criptografia ponta-a-ponta em DMs
+- [x] Avaliar necessidade de criptografia ponta-a-ponta em DMs — implementado: NaCl box (X25519-XSalsa20-Poly1305) via `tweetnacl`, chave por dispositivo em `localStorage`, `server-central` armazena/roteia só ciphertext opaco. Ver `docs/architecture.md`, "Decisão: criptografia ponta-a-ponta em DMs", para o desenho completo e as limitações de escopo (sem multi-dispositivo, sem forward secrecy, sem proteção contra operador malicioso)
 
 ## Documentação
 

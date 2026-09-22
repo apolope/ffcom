@@ -111,7 +111,32 @@ Outros pontos de referência no mesmo espaço: [Spacebar](https://github.com/spa
 
 **Implicação:** `server-central` precisa de armazenamento de mensagens de DM (Postgres) e entrega em tempo real via WebSocket, reaproveitando o mesmo transporte já decidido para presença.
 
-**Revisitar quando:** criptografia ponta-a-ponta em DMs for exigida (já listado em Segurança) — o `server-central` passaria a rotear payloads cifrados sem conseguir lê-los, mas a mediação continua.
+**Revisitar quando:** ~~criptografia ponta-a-ponta em DMs for exigida~~ — feito, ver "Decisão: criptografia ponta-a-ponta em DMs" abaixo. O `server-central` continua mediando (roteia payloads cifrados sem conseguir lê-los).
+
+## Decisão: criptografia ponta-a-ponta em DMs — NaCl box, chave por dispositivo
+
+**Contexto:** `server-central` é a **instância única oficial** do FFCom (ao contrário de `server-channel`, self-hosted por comunidade) — antes desta decisão ela guardava o conteúdo de **todas** as DMs de **todos** os usuários da plataforma em texto puro, num único Postgres. Isso é um raio de exposição bem maior que mensagens de canal, que ficam isoladas por comunidade em cada `server-channel`. Se essa instância central fosse comprometida ou intimada judicialmente, todo o histórico de DM de todos os usuários ficaria exposto de uma vez. Item já previsto em Segurança/TODO.md ("Avaliar necessidade de criptografia ponta-a-ponta em DMs") e no "Revisitar quando" acima.
+
+**Alternativas consideradas:**
+- **Double Ratchet / Signal protocol:** forward secrecy e post-compromise security de verdade, padrão da indústria — descartado nesta v1 pelo custo de engenharia (X3DH, prekey bundles, estado de ratchet persistido por sessão, história de multi-dispositivo do próprio Signal) desproporcional ao ganho numa fase sem usuários reais fora do autor. Registrado como candidato futuro se o produto crescer.
+- **`crypto.subtle` nativo (WebCrypto) com curvas X25519:** suporte a curvas seguras (X25519/Ed25519) ainda é recente e inconsistente entre versões de Chromium/Electron e navegadores de terceiros que um self-hoster do `client` web possa usar — descartado por apostar numa API de plataforma ainda não universal, ao contrário da filosofia de "não reinventar o que uma lib madura já cobre" (LiveKit, `oidc-client-ts`, `vite-plugin-pwa`, etc.) aplicada aqui trocando "nativo" por "lib pura JS madura".
+- **NaCl `box` (X25519-XSalsa20-Poly1305) via `tweetnacl`:** escolhida — pura JS, ~7KB, auditada, décadas de uso em produção, funciona idêntico em qualquer ambiente (web, Electron, qualquer Chromium razoável), API mínima (`box`/`box.open`) suficiente para autenticação + confidencialidade de mensagem ponto-a-ponto sem reimplementar nada.
+
+**Decisão:**
+1. **Chave por dispositivo, não por conta:** cada perfil de navegador / instalação do Electron gera seu próprio par de chaves X25519 na primeira vez que a conta loga (`client/src/crypto/e2e.ts`, `nacl.box.keyPair()`), guardado só em `localStorage` (mesmo padrão de risco já aceito para o `oidc-client-ts` em `auth/userManager.ts` — não é uma novidade de superfície de ataque deste código-base) e publicado em `server-central` via `PUT /api/me/e2e-public-key` (`client/src/hooks/useE2EKeys.ts`, instanciado em `App.tsx` assim que há login, não adiado até abrir uma DM).
+2. **Diretório de chaves públicas:** `accounts.e2e_public_key` (nova coluna, `server-central/migrations/0004_dm_e2e_encryption.up.sql`), exposta em `GET /api/friends` (`e2ePublicKey`, ver `internal/httpapi/friends.go`) — só entre amigos aceitos, mesma regra de acesso que já vale para DMs.
+3. **`direct_messages.content TEXT` vira `ciphertext BYTEA` + `nonce BYTEA(24)`:** `server-central` armazena e roteia bytes opacos, não consegue mais validar "conteúdo vazio" nem ler nada — só o tamanho bruto do ciphertext (`maxDMCiphertextLength`, `internal/httpapi/dms.go`). Mensagens de teste existentes na migração foram descartadas (`TRUNCATE`, sem usuários reais fora do autor ainda).
+4. **Decifrar sempre com a chave pública ATUAL do outro lado da conversa** (resolvida via `GET /api/friends` no momento, não uma chave "pinada" por mensagem) — simplificação de v1, ver limitação de multi-dispositivo abaixo. Por isso o schema/wire não guarda a chave pública de quem enviou por mensagem, só `ciphertext`+`nonce`.
+5. **Nunca cai para texto puro em silêncio:** se o amigo ainda não publicou uma chave (`peer.e2ePublicKey` ausente), o client bloqueia o envio com uma mensagem explícita (`useDirectMessages.ts`) em vez de mandar sem cifrar ou falhar sem explicação.
+
+**Limitações de escopo, para não vender além do que entrega:**
+- **Não protege contra um operador do `server-central` ativamente malicioso** substituindo a chave pública de alguém no diretório — não há verificação fora de banda ("números de segurança" tipo Signal) nesta v1. Protege contra acesso passivo aos dados em repouso (breach, dump, intimação), não contra um MITM ativo de quem opera a instância.
+- **Sem forward secrecy / post-compromise security:** par de chaves estático por dispositivo, não um ratchet — se o dispositivo for comprometido depois, dá pra decifrar histórico antigo guardado ali.
+- **Sem sincronização entre dispositivos:** trocar de navegador/reinstalar o Electron gera um par de chaves novo, perdendo acesso ao histórico antigo (mensagens antigas mostram "não foi possível decifrar neste dispositivo"). Conversas novas funcionam normalmente, porque a chave pública atual é sempre resolvida no momento do envio — só o histórico anterior à troca fica ilegível no dispositivo novo.
+
+**Razão:** para uma instância central única que serve toda a plataforma, o ganho de "o operador não consegue ler DMs mesmo com acesso total ao banco" supera o custo de implementação de uma cifra de mensagem única (não é um protocolo de sessão completo) — mas um protocolo com ratchet/multi-dispositivo de verdade só se justifica com usuários reais e demanda por essas garantias adicionais, não antes.
+
+**Revisitar quando:** houver demanda real por multi-dispositivo (nesse ponto avaliar um fluxo de "vincular dispositivo" que transfira a chave privada, ou migrar para um protocolo com prekeys) ou por proteção contra operador malicioso (nesse ponto avaliar verificação de chave fora de banda, tipo "números de segurança").
 
 ## Decisão: descoberta de server-channel — nenhuma, apenas convite ou IP manual
 

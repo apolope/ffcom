@@ -126,10 +126,12 @@ func handleRedeemFriendInvite(invites *store.FriendInviteStore, friendships *sto
 }
 
 // GET /api/friends — lista as amizades aceitas da conta autenticada, com o
-// perfil (nome de exibição, avatar) de cada amigo quando disponível. Não
-// inclui status online/offline — isso vem de GET /api/presence, que o
-// client combina com esta lista (ver internal/httpapi/presence.go).
-func handleListFriends(friendships *store.FriendshipStore, profiles *store.ProfileStore) http.Handler {
+// perfil (nome de exibição, avatar) e a chave pública de E2E (se já
+// publicada, ver docs/architecture.md, "Decisão: criptografia ponta-a-ponta
+// em DMs") de cada amigo quando disponíveis. Não inclui status
+// online/offline — isso vem de GET /api/presence, que o client combina com
+// esta lista (ver internal/httpapi/presence.go).
+func handleListFriends(friendships *store.FriendshipStore, profiles *store.ProfileStore, accounts *store.AccountStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
@@ -149,12 +151,21 @@ func handleListFriends(friendships *store.FriendshipStore, profiles *store.Profi
 			return
 		}
 
+		accountByID, err := accounts.GetManyByIDs(r.Context(), friendIDs)
+		if err != nil {
+			http.Error(w, "erro ao buscar contas", http.StatusInternalServerError)
+			return
+		}
+
 		out := make([]friendView, len(friendIDs))
 		for i, friendID := range friendIDs {
 			view := friendView{AccountID: friendID}
 			if profile, ok := profileByAccount[friendID]; ok {
 				view.DisplayName = &profile.DisplayName
 				view.AvatarURL = profile.AvatarURL
+			}
+			if acc, ok := accountByID[friendID]; ok {
+				view.E2EPublicKey = acc.E2EPublicKey
 			}
 			out[i] = view
 		}
@@ -174,9 +185,10 @@ type redeemInviteResponse struct {
 }
 
 type friendView struct {
-	AccountID   string  `json:"accountId"`
-	DisplayName *string `json:"displayName,omitempty"`
-	AvatarURL   *string `json:"avatarUrl,omitempty"`
+	AccountID    string  `json:"accountId"`
+	DisplayName  *string `json:"displayName,omitempty"`
+	AvatarURL    *string `json:"avatarUrl,omitempty"`
+	E2EPublicKey []byte  `json:"e2ePublicKey,omitempty"`
 }
 
 type listFriendsResponse struct {

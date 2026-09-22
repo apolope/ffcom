@@ -31,6 +31,7 @@ function toFriend(remote: RemoteFriend, online: boolean): Friend {
     displayName: remote.displayName ?? remote.accountId,
     avatarUrl: remote.avatarUrl,
     online,
+    e2ePublicKey: remote.e2ePublicKey,
   }
 }
 

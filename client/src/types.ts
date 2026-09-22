@@ -50,4 +50,8 @@ export interface Friend {
   displayName: string
   avatarUrl?: string
   online: boolean
+  // Chave pública de E2E do amigo (base64), se já publicada -- ver
+  // crypto/e2e.ts e docs/architecture.md, "Decisão: criptografia
+  // ponta-a-ponta em DMs". Ausente = ainda não dá pra enviar DM cifrada.
+  e2ePublicKey?: string
 }

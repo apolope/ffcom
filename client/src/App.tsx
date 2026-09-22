@@ -15,6 +15,7 @@ import { useAuth } from './auth/AuthProvider'
 import { useServerStructure } from './hooks/useServerStructure'
 import { useKnownServers } from './hooks/useKnownServers'
 import { useFriends } from './hooks/useFriends'
+import { useE2EKeys } from './hooks/useE2EKeys'
 import { useMe } from './hooks/useMe'
 import { useServerMembers } from './hooks/useServerMembers'
 import { createServerInvite } from './lib/serverChannelApi'
@@ -25,6 +26,7 @@ function App() {
   const { status, accessToken } = useAuth()
   const { servers, addServer } = useKnownServers(accessToken ?? '')
   const { friends, createInvite, redeemInvite, socket: presenceSocket } = useFriends(accessToken ?? '')
+  const { keyPair: myE2EKeyPair } = useE2EKeys(accessToken ?? '')
   const [selectedServerId, setSelectedServerId] = useState<string>()
   const [showFriends, setShowFriends] = useState(false)
   const [showAddServer, setShowAddServer] = useState(false)
@@ -97,6 +99,7 @@ function App() {
               peer={selectedFriend}
               accessToken={accessToken ?? ''}
               socket={presenceSocket}
+              myKeyPair={myE2EKeyPair}
             />
           ) : (
             <div className="empty-state">

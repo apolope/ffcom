@@ -28,19 +28,25 @@ func EncodePresenceUpdate(accountID string, online bool) ([]byte, error) {
 
 // IncomingDMCreate é o payload decodificado de um frame "dm.create" enviado
 // pelo client nesta mesma conexão WebSocket (ver docs/architecture.md,
-// "Decisão: DMs entregues no WebSocket de presença").
+// "Decisão: DMs entregues no WebSocket de presença"). Ciphertext/Nonce
+// chegam como bytes -- encoding/json decodifica []byte a partir de base64
+// automaticamente -- e são opacos ao servidor (criptografia ponta-a-ponta,
+// ver docs/architecture.md, "Decisão: criptografia ponta-a-ponta em DMs").
 type IncomingDMCreate struct {
 	RecipientID string `json:"recipientId"`
-	Content     string `json:"content"`
+	Ciphertext  []byte `json:"ciphertext"`
+	Nonce       []byte `json:"nonce"`
 }
 
 // DirectMessageView é a representação em fio de uma DM, usada no payload de
-// "dm.created".
+// "dm.created". Ciphertext/Nonce serializam como base64 (comportamento
+// padrão de encoding/json para []byte).
 type DirectMessageView struct {
 	ID          string     `json:"id"`
 	SenderID    string     `json:"senderId"`
 	RecipientID string     `json:"recipientId"`
-	Content     string     `json:"content"`
+	Ciphertext  []byte     `json:"ciphertext"`
+	Nonce       []byte     `json:"nonce"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	EditedAt    *time.Time `json:"editedAt,omitempty"`
 }
