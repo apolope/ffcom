@@ -14,6 +14,12 @@ const (
 	ManageInvites
 	ManageRoles
 	Administrator
+	// KickMembers e BanMembers foram adicionados depois dos bits acima —
+	// ver docs/architecture.md, "Decisão: kick/ban de membro". Ficam no
+	// fim do bloco de propósito: reordenar bits já existentes mudaria o
+	// significado de valores de roles.permissions já persistidos.
+	KickMembers
+	BanMembers
 )
 
 // Owner é o valor de retorno de quem é dono do servidor (member.IsOwner):

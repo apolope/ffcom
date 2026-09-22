@@ -250,6 +250,47 @@ export function removeRole(
   return postJsonOrThrow(baseUrl, `/api/members/${memberId}/roles/${roleId}`, accessToken, 'DELETE')
 }
 
+// POST /api/members/{memberId}/kick — expulsa um membro (requer
+// KickMembers). Quem for expulso pode voltar com um convite novo, ver
+// docs/architecture.md, "Decisão: kick/ban de membro".
+export function kickMember(baseUrl: string, accessToken: string, memberId: string): Promise<void> {
+  return postJsonOrThrow(baseUrl, `/api/members/${memberId}/kick`, accessToken, 'POST')
+}
+
+// POST /api/members/{memberId}/ban — expulsa um membro e bloqueia
+// reentrada até um unban (requer BanMembers).
+export function banMember(
+  baseUrl: string,
+  accessToken: string,
+  memberId: string,
+  reason?: string,
+): Promise<void> {
+  return postJsonOrThrow(baseUrl, `/api/members/${memberId}/ban`, accessToken, 'POST', reason ? { reason } : {})
+}
+
+export interface RemoteBan {
+  oidcSubject: string
+  bannedByMemberId?: string
+  reason?: string
+  createdAt: string
+  lastNickname?: string
+}
+
+// GET /api/bans — lista banimentos ativos (requer BanMembers), para a UI
+// de administração poder revogar.
+export async function fetchBans(baseUrl: string, accessToken: string): Promise<RemoteBan[]> {
+  const res = await fetch(`${baseUrl}/api/bans`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  const body = await parseJsonOrThrow<{ bans: RemoteBan[] }>(res)
+  return body.bans
+}
+
+// DELETE /api/bans/{oidcSubject} — revoga um banimento (requer BanMembers).
+export function unbanMember(baseUrl: string, accessToken: string, oidcSubject: string): Promise<void> {
+  return postJsonOrThrow(baseUrl, `/api/bans/${encodeURIComponent(oidcSubject)}`, accessToken, 'DELETE')
+}
+
 const UNCATEGORIZED_ID = 'uncategorized'
 
 // Agrupa categorias e canais crus da API em Category[] (formato usado pelo

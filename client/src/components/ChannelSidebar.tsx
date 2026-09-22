@@ -13,7 +13,7 @@ interface ChannelSidebarProps {
   selectedChannelId: string | undefined
   onSelectChannel: (channelId: string) => void
   onInvite: () => void
-  canManageRoles: boolean
+  canManageMembers: boolean
   onManageRoles: () => void
   onEditNickname: () => void
 }
@@ -24,7 +24,7 @@ export function ChannelSidebar({
   selectedChannelId,
   onSelectChannel,
   onInvite,
-  canManageRoles,
+  canManageMembers,
   onManageRoles,
   onEditNickname,
 }: ChannelSidebarProps) {
@@ -33,9 +33,9 @@ export function ChannelSidebar({
       <div className="server-name">
         <span>{server.name}</span>
         <div className="server-name-actions">
-          {canManageRoles && (
+          {canManageMembers && (
             <button type="button" className="invite-button" onClick={onManageRoles}>
-              Roles
+              Membros
             </button>
           )}
           <button type="button" className="invite-button" onClick={onEditNickname}>

@@ -32,11 +32,25 @@ type joinResponse struct {
 // membro — em teoria duas requisições simultâneas no instante exato da
 // primeira configuração do servidor poderiam ambas virar fundador. Aceitável
 // aqui porque só o próprio self-hoster está nesse momento, sozinho.
-func handleJoin(members *store.MemberStore, invites *store.InviteStore) http.Handler {
+//
+// Banimento (member_bans, ver docs/architecture.md, "Decisão: kick/ban de
+// membro") é checado antes de tudo, inclusive do bootstrap: um oidc_subject
+// banido nunca entra, mesmo sem nenhum membro ainda no servidor.
+func handleJoin(members *store.MemberStore, invites *store.InviteStore, bans *store.MemberBanStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		subject, ok := auth.SubjectFromContext(r.Context())
 		if !ok {
 			http.Error(w, "subject ausente no contexto", http.StatusInternalServerError)
+			return
+		}
+
+		banned, err := bans.IsBanned(r.Context(), subject)
+		if err != nil {
+			http.Error(w, "erro ao verificar banimento", http.StatusInternalServerError)
+			return
+		}
+		if banned {
+			http.Error(w, "banido deste servidor", http.StatusForbidden)
 			return
 		}
 

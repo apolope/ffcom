@@ -653,6 +653,28 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** os mesmos gatilhos já registrados na decisão de `server-central` (múltiplas réplicas de `server-channel` tornariam um bucket em memória por processo insuficiente); ou se um self-hoster relatar falso positivo em uso legítimo (ajustar via env, sem mudança de código).
 
+## Decisão: kick/ban de membro — remoção lógica (`removed_at`), banimento por `oidc_subject`
+
+**Contexto:** implementar o item de TODO "Kick/ban de membro" — até aqui não havia nenhuma forma de remover um membro problemático de um `server-channel`, só o sistema de bits de permissão sem bit dedicado a isso.
+
+**Alternativas consideradas (remoção do membro):** apagar a linha de `members` (`DELETE`), o caminho óbvio à primeira vista; marcar como removido sem apagar (`removed_at`).
+
+**Decisão:** não apagar. `members` ganhou a coluna `removed_at` (migration `0003_member_moderation`); kick define `removed_at = now()` e limpa `member_roles` do membro. `MemberStore.GetByOIDCSubject`/`List` passam a ignorar quem tem `removed_at` preenchido, então a perda de acesso é imediata (próxima requisição já nega, mesmo critério de corte "muda só na próxima conexão/requisição" já aceito em outros lugares deste sistema).
+
+**Razão:** `messages.author_member_id`, `threads.author_member_id` e `invites.created_by_member_id` são `ON DELETE CASCADE` para `members(id)` desde a migration `0001_init` (nunca exercitado até agora — não havia nenhuma forma de apagar um membro). Um `DELETE` de verdade apagaria em cascata todo o histórico de mensagens/threads/convites da pessoa expulsa, destruindo a conversa pra quem ficou — foi decisão consciente **não** fazer isso, mesmo critério do Discord (kick/ban não apaga o que a pessoa já escreveu). A remoção lógica evita mexer nessas três FKs (e no formato de `Message`/`Thread`/`MessageView`, hoje `AuthorMemberID string` sem ponteiro) e resolve o requisito com uma mudança bem mais contida.
+
+**Reentrada:** `GetOrCreateByOIDCSubject` (chamado por `POST /api/join` depois de resgatar um convite) ganhou `removed_at = NULL` no `ON CONFLICT DO UPDATE` — quem foi expulso e consegue um convite novo reaproveita a mesma linha/`id` de antes (nickname antigo se perde porque não é reafirmado, mas o `id` e portanto a autoria das mensagens antigas continuam batendo).
+
+**Banimento:** tabela nova `member_bans`, chave primária `oidc_subject` (não `member_id` — precisa continuar bloqueando mesmo depois que a linha de `members` for reaproveitada por uma reentrada, ou não existir mais). `POST /api/members/{id}/ban` cria o registro e expulsa (chama o mesmo `Kick`); `POST /api/join` confere `member_bans` antes de qualquer outra coisa, inclusive antes do bootstrap. `GET /api/bans`/`DELETE /api/bans/{oidcSubject}` existem para a UI poder revisar/revogar — banir sem nenhuma forma de reverter pela UI (só via acesso direto ao Postgres) foi julgado uma lacuna ruim o suficiente pra não ficar de fora desta v1.
+
+**Bits novos:** `KickMembers=64`, `BanMembers=128` — acrescentados **depois** de `Administrator` no bloco de `const` (não reordenados no meio), porque os bits existentes já valem como bitmask persistido em `roles.permissions` de instâncias reais; reordenar mudaria o significado de roles já criadas. Dois bits separados (não um só "ModerateMembers") pelo mesmo motivo que `ManageInvites` é separado de `ManageRoles` neste sistema: severidade diferente, alguém pode ter um sem o outro.
+
+**Alvo inválido:** nenhuma checagem de hierarquia entre roles (ex. "só pode kickar quem tem role abaixo da sua") — este sistema nunca teve isso em lugar nenhum, nem para atribuição de role (`Grants` só olha bits concedidos, não posição). Só duas recusas fixas: o dono do servidor (`IsOwner`, nunca é alvo de kick/ban) e o próprio requisitante (sair do servidor não é uma feature desta v1, então usar a rota em si mesmo é rejeitado em vez de virar um "leave" disfarçado).
+
+**Cliente:** `ManageRolesDialog.tsx` virou o painel de administração geral de membro (renomeado de "Gerenciar roles" para "Gerenciar membros"), aberto por quem tem `ManageRoles`, `KickMembers` ou `BanMembers` (antes só `ManageRoles` abria); cada seção (roles, atribuição de role, expulsar/banir, lista de banidos) é condicionada à permissão específica de quem está vendo. Botão de banir na v1 não coleta motivo pela UI (o campo existe na API, só não tem input ainda). `GET /api/bans` só é chamado quando `canBan` é verdadeiro — um 403 nessa chamada pra quem não é moderador derrubaria o `Promise.all` inteiro e quebraria a lista de membros pra todo mundo (`hooks/useServerMembers.ts`).
+
+**Revisitar quando:** existir demanda por banimento com expiração automática (hoje é permanente até um unban manual); ou por hierarquia entre roles para kick/ban, se algum self-hoster relatar moderador expulsando outro moderador de igual ou maior nível.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

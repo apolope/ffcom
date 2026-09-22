@@ -17,6 +17,30 @@ type Member struct {
 	// permissão — não é uma role (ver docs/architecture.md, "Sistema de
 	// permissões/roles por servidor e por canal").
 	IsOwner bool
+	// RemovedAt marca quando o membro foi expulso (kick) deste
+	// server-channel — ver docs/architecture.md, "Decisão: kick/ban de
+	// membro". A linha não é apagada (preserva a autoria de
+	// mensagens/threads/convites já existentes); GetByOIDCSubject só
+	// devolve membros com RemovedAt nulo, então perder o acesso é
+	// imediato na próxima requisição.
+	RemovedAt *time.Time
+}
+
+// MemberBan é um banimento indexado por oidc_subject (ver
+// docs/architecture.md, "Decisão: kick/ban de membro") — sobrevive
+// independente de existir ou não uma linha em members para esse subject, e
+// bloqueia POST /api/join enquanto existir.
+type MemberBan struct {
+	OIDCSubject      string
+	BannedByMemberID *string
+	Reason           *string
+	CreatedAt        time.Time
+	// LastNickname é o nickname da linha de members com o mesmo
+	// oidc_subject, se ainda existir (ver MemberBanStore.List) — só para
+	// exibição na UI de administração, já que o próprio oidc_subject não
+	// diz nada a um humano. Nulo se a pessoa nunca chegou a ser membro
+	// (banimento preventivo) ou nunca definiu apelido.
+	LastNickname *string
 }
 
 // Category agrupa canais. Não existe tabela "servers": cada server-channel

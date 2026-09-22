@@ -29,6 +29,7 @@ type Store struct {
 	pool *pgxpool.Pool
 
 	Members           *MemberStore
+	MemberBans        *MemberBanStore
 	Categories        *CategoryStore
 	Channels          *ChannelStore
 	Roles             *RoleStore
@@ -58,6 +59,7 @@ func Open(ctx context.Context, databaseURL string) (*Store, error) {
 	return &Store{
 		pool:              pool,
 		Members:           &MemberStore{pool: pool},
+		MemberBans:        &MemberBanStore{pool: pool},
 		Categories:        &CategoryStore{pool: pool},
 		Channels:          &ChannelStore{pool: pool},
 		Roles:             &RoleStore{pool: pool},

@@ -42,6 +42,17 @@ export interface Role {
   isDefault: boolean
 }
 
+// Banimento de um server-channel (ver hooks/useServerMembers.ts,
+// docs/architecture.md "Decisão: kick/ban de membro"). displayName cai para
+// o oidcSubject cru quando a pessoa nunca chegou a definir um apelido (ou
+// nunca chegou a ser membro — banimento preventivo).
+export interface Ban {
+  oidcSubject: string
+  displayName: string
+  reason?: string
+  createdAt: string
+}
+
 // Amigo (via server-central, ver hooks/useFriends.ts). displayName cai para
 // o accountId quando a conta ainda não preencheu o perfil (ver
 // ProfileStore.GetManyByAccountIDs em server-central).

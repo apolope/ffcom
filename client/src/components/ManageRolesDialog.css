@@ -49,7 +49,9 @@
   font-size: 13px;
 }
 
-.role-list button {
+.role-list button,
+.member-moderation-actions button,
+.member-role-list > li > button {
   font: inherit;
   font-size: 12px;
   padding: 4px 8px;
@@ -58,6 +60,11 @@
   background: transparent;
   color: var(--text);
   cursor: pointer;
+}
+
+.member-moderation-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .create-role-form {

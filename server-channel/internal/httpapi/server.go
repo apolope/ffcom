@@ -48,10 +48,14 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string
 		return authenticated(requireMember(h))
 	}
 
-	mux.Handle("POST /api/join", authenticated(handleJoin(db.Members, db.Invites)))
+	mux.Handle("POST /api/join", authenticated(handleJoin(db.Members, db.Invites, db.MemberBans)))
 	mux.Handle("GET /api/me", protected(handleMe(db.Roles)))
 	mux.Handle("PATCH /api/me", protected(handleUpdateMe(db.Members, db.Roles)))
 	mux.Handle("GET /api/members", protected(handleListMembers(db.Members, db.Roles)))
+	mux.Handle("POST /api/members/{memberId}/kick", protected(handleKickMember(db.Members, db.Roles)))
+	mux.Handle("POST /api/members/{memberId}/ban", protected(handleBanMember(db.Members, db.Roles, db.MemberBans)))
+	mux.Handle("GET /api/bans", protected(handleListBans(db.MemberBans, db.Roles)))
+	mux.Handle("DELETE /api/bans/{oidcSubject}", protected(handleUnbanMember(db.MemberBans, db.Roles)))
 	mux.Handle("GET /api/categories", protected(handleListCategories(db.Categories, db.Channels, db.Roles, db.ChannelOverwrites)))
 	mux.Handle("GET /api/channels", protected(handleListChannels(db.Channels, db.Roles, db.ChannelOverwrites)))
 	mux.Handle("GET /api/channels/{id}/messages", protected(handleListMessages(db.Channels, db.Roles, db.ChannelOverwrites, db.Messages)))

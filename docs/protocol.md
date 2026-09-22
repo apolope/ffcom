@@ -75,10 +75,14 @@ Base URL: `KnownServer.baseUrl`, uma por servidor cadastrado no client (endereç
 | Método | Rota | Auth | Request | Response | Erros |
 |---|---|---|---|---|---|
 | GET | `/healthz` | não | — | `{status, version}` | — |
-| POST | `/api/join` | Bearer (sem `RequireMember`) | `{code?}` | `200` (já membro) ou `201` `{memberId, founder?}` | `403` sem convite (exceto fundador), `404`/`410`/`409` convite inválido |
+| POST | `/api/join` | Bearer (sem `RequireMember`) | `{code?}` | `200` (já membro) ou `201` `{memberId, founder?}` | `403` sem convite (exceto fundador) ou banido, `404`/`410`/`409` convite inválido |
 | GET | `/api/me` | Bearer + membro | — | `{memberId, oidcSubject, nickname?, joinedAt, isOwner?, permissions, roleIds?}` | — |
 | PATCH | `/api/me` | Bearer + membro | `{nickname: string \| null}` | `Me` (mesmo shape de GET) | `400` apelido > 64 chars |
-| GET | `/api/members` | Bearer + membro | — | `{members: [{id, nickname?, joinedAt, isOwner?, roleIds?}]}` | — |
+| GET | `/api/members` | Bearer + membro | — | `{members: [{id, nickname?, joinedAt, isOwner?, roleIds?}]}` — só membros ativos, sem quem foi expulso | — |
+| POST | `/api/members/{memberId}/kick` | Bearer + membro + `KickMembers` | — | `204` | `400` alvo é você mesmo, `403` alvo é o dono, `404` membro, `409` já expulso |
+| POST | `/api/members/{memberId}/ban` | Bearer + membro + `BanMembers` | `{reason?}` | `204` | `400` alvo é você mesmo, `403` alvo é o dono, `404` membro |
+| GET | `/api/bans` | Bearer + membro + `BanMembers` | — | `{bans: [{oidcSubject, bannedByMemberId?, reason?, createdAt, lastNickname?}]}` | — |
+| DELETE | `/api/bans/{oidcSubject}` | Bearer + membro + `BanMembers` | — | `204` | `404` não banido |
 | GET | `/api/categories` | Bearer + membro | — | `{categories: [{id, name, position, createdAt}]}` — só com canal visível | — |
 | GET | `/api/channels` | Bearer + membro | — | `{channels: [{id, categoryId?, name, type, position, createdAt}]}` — só visíveis | — |
 | GET | `/api/channels/{id}/messages?before=&limit=` | Bearer + membro + `ViewChannels` | — | `{messages: [Message]}` | `400` canal não é texto, `403`, `404` |
@@ -101,7 +105,7 @@ Base URL: `KnownServer.baseUrl`, uma por servidor cadastrado no client (endereç
 
 `Message`: `{id, channelId, threadId?, authorMemberId, content, createdAt, editedAt?}`. `Thread`: `{id, channelId, title, authorMemberId, createdAt}`. `Role`: `{id, name, color?, permissions, position, isDefault, createdAt}`. `Invite`: `{id, code, createdByMemberId, maxUses?, uses, expiresAt?, createdAt}`. `Overwrite`: `{roleId, allow, deny}`.
 
-**Bits de permissão** (`internal/permissions`, `int64`): `ViewChannels=1, SendMessages=2, Voice=4, ManageInvites=8, ManageRoles=16, Administrator=32`. `Owner=-1` (dono do bootstrap, ignora tudo). `Grants(base, target)` impede que `ManageRoles` sozinho conceda um bit que quem chama não possui — ver `docs/architecture.md`, "Decisão: ManageRoles não concede permissões além das próprias".
+**Bits de permissão** (`internal/permissions`, `int64`): `ViewChannels=1, SendMessages=2, Voice=4, ManageInvites=8, ManageRoles=16, Administrator=32, KickMembers=64, BanMembers=128`. `Owner=-1` (dono do bootstrap, ignora tudo). `Grants(base, target)` impede que `ManageRoles` sozinho conceda um bit que quem chama não possui — ver `docs/architecture.md`, "Decisão: ManageRoles não concede permissões além das próprias". Kick/ban não passam por `Grants` (não concedem bit nenhum a ninguém) e não têm checagem de hierarquia entre roles — só o bit e "não pode ser o dono/você mesmo", ver `docs/architecture.md`, "Decisão: kick/ban de membro".
 
 ### WebSocket — `GET /api/channels/{id}/ws`
 

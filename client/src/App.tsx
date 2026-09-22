@@ -46,8 +46,22 @@ function App() {
   const server = servers.find((s) => s.id === selectedServerId)
   const { me, setNickname } = useMe(server?.baseUrl ?? '', accessToken ?? '')
   const canManageRoles = me ? hasPermission(me.permissions, PERMISSIONS.ManageRoles) || !!me.isOwner : false
-  const { members, roles, createRole, deleteRole, assignRole, removeRole, refresh: refreshMembers } =
-    useServerMembers(server?.baseUrl ?? '', accessToken ?? '')
+  const canKick = me ? hasPermission(me.permissions, PERMISSIONS.KickMembers) || !!me.isOwner : false
+  const canBan = me ? hasPermission(me.permissions, PERMISSIONS.BanMembers) || !!me.isOwner : false
+  const canOpenMemberAdmin = canManageRoles || canKick || canBan
+  const {
+    members,
+    roles,
+    bans,
+    createRole,
+    deleteRole,
+    assignRole,
+    removeRole,
+    kickMember,
+    banMember,
+    unbanMember,
+    refresh: refreshMembers,
+  } = useServerMembers(server?.baseUrl ?? '', accessToken ?? '', canBan)
 
   const { categories } = useServerStructure(server?.baseUrl ?? '', accessToken ?? '')
 
@@ -115,7 +129,7 @@ function App() {
             selectedChannelId={selectedChannelId}
             onSelectChannel={setSelectedChannelId}
             onInvite={() => setShowInviteServer(true)}
-            canManageRoles={canManageRoles}
+            canManageMembers={canOpenMemberAdmin}
             onManageRoles={() => setShowManageRoles(true)}
             onEditNickname={() => setShowEditNickname(true)}
           />
@@ -145,10 +159,18 @@ function App() {
         <ManageRolesDialog
           members={members}
           roles={roles}
+          bans={bans}
+          currentMemberId={me?.memberId}
+          canManageRoles={canManageRoles}
+          canKick={canKick}
+          canBan={canBan}
           onCreateRole={createRole}
           onDeleteRole={deleteRole}
           onAssignRole={assignRole}
           onRemoveRole={removeRole}
+          onKick={kickMember}
+          onBan={banMember}
+          onUnban={unbanMember}
           onClose={() => setShowManageRoles(false)}
         />
       )}
