@@ -5,7 +5,7 @@ import { setMyE2EPublicKey } from '../lib/serverCentralApi'
 // Flag em localStorage para não republicar a mesma chave a cada carregamento
 // do app -- só falha silenciosamente se a publicação anterior não tiver ido
 // pra frente (ex.: primeira vez offline); tenta de novo no próximo load.
-const PUBLISHED_FLAG_KEY = 'ffcom.e2e.publishedKey.v1'
+const PUBLISHED_FLAG_KEY = 'ffcom.e2e.publishedKey.v1' // gitleaks:allow (nome de chave de localStorage, não segredo)
 
 // Garante que este dispositivo tenha um par de chaves de E2E (ver
 // crypto/e2e.ts) e que a chave pública esteja publicada em server-central
