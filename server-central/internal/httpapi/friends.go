@@ -130,8 +130,11 @@ func handleRedeemFriendInvite(invites *store.FriendInviteStore, friendships *sto
 // publicada, ver docs/architecture.md, "Decisão: criptografia ponta-a-ponta
 // em DMs") de cada amigo quando disponíveis. Não inclui status
 // online/offline — isso vem de GET /api/presence, que o client combina com
-// esta lista (ver internal/httpapi/presence.go).
-func handleListFriends(friendships *store.FriendshipStore, profiles *store.ProfileStore, accounts *store.AccountStore) http.Handler {
+// esta lista (ver internal/httpapi/presence.go). lastMessageAt (ver
+// DirectMessageStore.LastMessageAtByPeer) alimenta o indicador de não lida no
+// client, mesmo mecanismo do lastMessageAt de canal em server-channel — ver
+// docs/architecture.md, "Decisão: indicador de não lida".
+func handleListFriends(friendships *store.FriendshipStore, profiles *store.ProfileStore, accounts *store.AccountStore, directMessages *store.DirectMessageStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
@@ -157,6 +160,12 @@ func handleListFriends(friendships *store.FriendshipStore, profiles *store.Profi
 			return
 		}
 
+		lastMessageAt, err := directMessages.LastMessageAtByPeer(r.Context(), account.ID, friendIDs)
+		if err != nil {
+			http.Error(w, "erro ao buscar atividade das conversas", http.StatusInternalServerError)
+			return
+		}
+
 		out := make([]friendView, len(friendIDs))
 		for i, friendID := range friendIDs {
 			view := friendView{AccountID: friendID}
@@ -166,6 +175,9 @@ func handleListFriends(friendships *store.FriendshipStore, profiles *store.Profi
 			}
 			if acc, ok := accountByID[friendID]; ok {
 				view.E2EPublicKey = acc.E2EPublicKey
+			}
+			if at, ok := lastMessageAt[friendID]; ok {
+				view.LastMessageAt = &at
 			}
 			out[i] = view
 		}
@@ -185,10 +197,11 @@ type redeemInviteResponse struct {
 }
 
 type friendView struct {
-	AccountID    string  `json:"accountId"`
-	DisplayName  *string `json:"displayName,omitempty"`
-	AvatarURL    *string `json:"avatarUrl,omitempty"`
-	E2EPublicKey []byte  `json:"e2ePublicKey,omitempty"`
+	AccountID     string     `json:"accountId"`
+	DisplayName   *string    `json:"displayName,omitempty"`
+	AvatarURL     *string    `json:"avatarUrl,omitempty"`
+	E2EPublicKey  []byte     `json:"e2ePublicKey,omitempty"`
+	LastMessageAt *time.Time `json:"lastMessageAt,omitempty"`
 }
 
 type listFriendsResponse struct {

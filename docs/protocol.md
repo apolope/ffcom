@@ -45,7 +45,7 @@ Base URL: `VITE_SERVER_CENTRAL_URL` no client (`http://localhost:8081` em dev).
 | DELETE | `/api/servers/{id}` | Bearer | — | `204` | `404` |
 | GET | `/api/presence` | Bearer | — | `{friends: [{accountId, online}]}` — snapshot dos amigos aceitos | — |
 | GET | `/api/presence/ws` | Bearer (subprotocolo) | upgrade WS | ver abaixo | — |
-| GET | `/api/friends` | Bearer | — | `{friends: [{accountId, displayName?, avatarUrl?, e2ePublicKey?}]}` | — |
+| GET | `/api/friends` | Bearer | — | `{friends: [{accountId, displayName?, avatarUrl?, e2ePublicKey?, lastMessageAt?}]}` — `lastMessageAt` é a DM mais recente trocada com esse amigo em qualquer sentido, mesmo uso do `lastMessageAt` de canal em `server-channel` (ver `docs/architecture.md`, "Decisão: indicador de não lida") | — |
 | POST | `/api/friends/invites` | Bearer | — | `201` `{code, createdAt}` | — |
 | POST | `/api/friends/invites/{code}/redeem` | Bearer | — | `201` `{friendAccountId}` | `400` convite próprio, `404`, `409` já usado, `410` expirado |
 | GET | `/api/dms/{accountId}/messages?before=&limit=` | Bearer | — | `{messages: [DirectMessage]}` | `403` se não são amigos |
@@ -84,7 +84,7 @@ Base URL: `KnownServer.baseUrl`, uma por servidor cadastrado no client (endereç
 | GET | `/api/bans` | Bearer + membro + `BanMembers` | — | `{bans: [{oidcSubject, bannedByMemberId?, reason?, createdAt, lastNickname?}]}` | — |
 | DELETE | `/api/bans/{oidcSubject}` | Bearer + membro + `BanMembers` | — | `204` | `404` não banido |
 | GET | `/api/categories` | Bearer + membro | — | `{categories: [{id, name, position, createdAt}]}` — só com canal visível | — |
-| GET | `/api/channels` | Bearer + membro | — | `{channels: [{id, categoryId?, name, type, position, createdAt}]}` — só visíveis | — |
+| GET | `/api/channels` | Bearer + membro | — | `{channels: [{id, categoryId?, name, type, position, createdAt, lastMessageAt?}]}` — só visíveis; `lastMessageAt` alimenta o indicador de não lida do client, ver `docs/architecture.md`, "Decisão: indicador de não lida" | — |
 | GET | `/api/channels/{id}/messages?before=&limit=` | Bearer + membro + `ViewChannels` | — | `{messages: [Message]}` | `400` canal não é texto, `403`, `404` |
 | POST | `/api/channels/{id}/messages` | Bearer + membro + `SendMessages` | `multipart/form-data`: `content?`, `file?` (pelo menos um) | `201` `Message` | `400` sem conteúdo nem anexo, `413` anexo maior que `ATTACHMENT_MAX_MB`, `403`, `404` |
 | GET | `/api/attachments/{id}` | Bearer + membro + `ViewChannels` (do canal da mensagem do anexo) | — | bytes do arquivo (`Content-Type`/`Content-Disposition` do anexo) | `403`, `404` |

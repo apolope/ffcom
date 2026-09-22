@@ -5,6 +5,9 @@ import './FriendsView.css'
 interface FriendsViewProps {
   friends: Friend[]
   selectedFriendId: string | undefined
+  // Ver hooks/useUnread.ts e docs/architecture.md, "Decisão: indicador de
+  // não lida".
+  unreadFriendIds: Set<string>
   onSelectFriend: (accountId: string) => void
   onAddFriend: () => void
 }
@@ -14,7 +17,13 @@ interface FriendsViewProps {
 // selecionado; clicar num amigo abre a conversa de DM correspondente (ver
 // components/DirectMessageView.tsx e docs/architecture.md, "Decisão: modelo
 // de DMs").
-export function FriendsView({ friends, selectedFriendId, onSelectFriend, onAddFriend }: FriendsViewProps) {
+export function FriendsView({
+  friends,
+  selectedFriendId,
+  unreadFriendIds,
+  onSelectFriend,
+  onAddFriend,
+}: FriendsViewProps) {
   const online = friends.filter((f) => f.online)
   const offline = friends.filter((f) => !f.online)
 
@@ -41,6 +50,7 @@ export function FriendsView({ friends, selectedFriendId, onSelectFriend, onAddFr
                   key={friend.accountId}
                   friend={friend}
                   active={friend.accountId === selectedFriendId}
+                  unread={unreadFriendIds.has(friend.accountId)}
                   onSelect={onSelectFriend}
                 />
               ))}
@@ -54,6 +64,7 @@ export function FriendsView({ friends, selectedFriendId, onSelectFriend, onAddFr
                   key={friend.accountId}
                   friend={friend}
                   active={friend.accountId === selectedFriendId}
+                  unread={unreadFriendIds.has(friend.accountId)}
                   onSelect={onSelectFriend}
                 />
               ))}
@@ -68,10 +79,12 @@ export function FriendsView({ friends, selectedFriendId, onSelectFriend, onAddFr
 function FriendRow({
   friend,
   active,
+  unread,
   onSelect,
 }: {
   friend: Friend
   active: boolean
+  unread: boolean
   onSelect: (accountId: string) => void
 }) {
   return (
@@ -91,6 +104,7 @@ function FriendRow({
       <span className="friend-status" aria-hidden="true" />
       <UserAvatar avatarUrl={friend.avatarUrl} displayName={friend.displayName} size={24} />
       {friend.displayName}
+      {unread && <span className="unread-dot" aria-label="mensagens não lidas" />}
     </button>
   )
 }

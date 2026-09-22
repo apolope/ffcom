@@ -133,6 +133,8 @@ export interface RemoteFriend {
   // ponta-a-ponta em DMs". Ausente = amigo ainda não usou DMs em nenhum
   // dispositivo, não dá pra enviar mensagem cifrada para ele ainda.
   e2ePublicKey?: string
+  // Ver docs/architecture.md, "Decisão: indicador de não lida".
+  lastMessageAt?: string
 }
 
 export interface FriendPresence {

@@ -715,6 +715,35 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** a feature de editar `display_name` for implementada de verdade (nesse ponto, o fallback pro `oidcSubject` aqui deixa de ser necessário); ou por demanda de redimensionar/normalizar a imagem no servidor (hoje o arquivo enviado é gravado como está, sem reencode).
 
+## Decisão: indicador de não lida — `lastMessageAt` do servidor + cursor local no client, sem contagem nem WebSocket dedicado
+
+**Contexto:** implementar o item de TODO (seção `client`) "Notificação/contador de não lidas" — hoje nada indica atividade num canal ou numa DM fechada, só abrindo cada um manualmente.
+
+**Problema de base:** o `realtime.Hub` de `server-channel` é particionado por canal (ver "Decisão: canal de texto em server-channel") — um client só recebe broadcast de mensagens do canal que tem aberto agora, não dos demais canais do mesmo servidor. Não existe (e esta decisão não cria) um feed de atividade cruzando canais.
+
+**Alternativas consideradas:**
+- **WebSocket de atividade por servidor:** nova conexão/hub em `server-channel` que qualquer membro mantém aberta e recebe um ping mínimo (`{channelId, lastMessageAt}`) a cada mensagem nova em qualquer canal que ele possa ver — tempo real de verdade, mas introduz um segundo tipo de hub (por servidor, não por canal) e uma segunda conexão WS por client só para isso.
+- **Contagem de não lidas com estado por membro no servidor** (tabela `read_cursors` em `server-channel`/`server-central`, um endpoint para marcar como lido) — replica o modelo do Discord (contagem exata, sincronizada entre dispositivos), mas exige schema novo, endpoint novo e mais uma escrita a cada canal aberto, em ambos os servidores.
+- **`lastMessageAt` no servidor + cursor "última leitura" só local ao client (localStorage), sem contagem:** escolhida.
+
+**Decisão:**
+1. **Servidor expõe só o timestamp da mensagem mais recente, sem contar quantas:** `GET /api/channels` (`server-channel`) ganha `lastMessageAt` por canal (`MessageStore.LastMessageAtByChannel`, `MAX(created_at) GROUP BY channel_id` — cobre canal de texto e posts de thread de forum, que também têm `channel_id`). `GET /api/friends` (`server-central`) ganha `lastMessageAt` por amigo (`DirectMessageStore.LastMessageAtByPeer`, `MAX(created_at)` da conversa em qualquer sentido). Nenhum dos dois servidores sabe o que cada membro/conta já leu — só client sabe, ver próximo ponto.
+2. **Cursor "última leitura" é local ao dispositivo, em `localStorage`** (`client/src/lib/unread.ts`, chave `ffcom:lastRead:<channel|dm>:<id>`) — mesmo padrão de persistência/risco já aceito para a sessão OIDC (`auth/userManager.ts`) e as chaves de E2E (`crypto/e2e.ts`). Não sincroniza entre dispositivos: um canal lido no desktop pode aparecer como não lido no navegador até ser aberto lá também. Aceito pela mesma razão do NaCl box por dispositivo — engenharia de sincronização entre dispositivos só se justifica com demanda real (ver "Revisitar quando" abaixo).
+3. **`hooks/useUnread.ts` deriva o conjunto de ids não lidos** comparando `lastMessageAt` (do servidor) contra o cursor local, excluindo sempre o canal/DM selecionado no momento (nunca aparece como não lido enquanto está aberto). `App.tsx` marca como lido (grava cursor = agora) ao entrar e de novo ao sair de um canal/DM selecionado.
+4. **Primeira vez que um id é visto (sem cursor local ainda) conta como já lido, não como atrasado:** evita acender a bolinha em tudo que já existia antes desta feature (rollout) ou num servidor/amigo recém-adicionado — o cursor é semeado com o `lastMessageAt` atual na primeira leitura em vez de tratado como "nunca lido".
+5. **Atualização em canais fora do selecionado:**
+   - **DMs:** o `dm.created` do WebSocket de presença já chega para qualquer amigo, aberto ou não (ver "Decisão: DMs entregues no mesmo WebSocket de presença") — `hooks/useFriends.ts` atualiza `lastMessageAt` do amigo correspondente em memória a cada evento, sem polling.
+   - **Canais de `server-channel`:** sem um feed cruzando canais (ver "Problema de base"), `hooks/useServerStructure.ts` repassa a lista de categorias/canais a cada 20s (`STRUCTURE_POLL_INTERVAL_MS`) enquanto o servidor está selecionado, além da carga inicial — não é tempo real, mas é suficiente para uma bolinha de "tem mensagem nova".
+
+**Escopo aceito, para não vender além do que entrega:**
+- **Sem contagem** — só bolinha binária (tem/não tem mensagem nova), não "3 não lidas".
+- **Sem indicador agregado no `ServerRail`** (ex. bolinha no ícone do servidor quando há canal não lido em qualquer lugar dele) — exigiria buscar a estrutura de **todos** os servidores conhecidos, não só o selecionado (`useServerStructure` hoje só busca o servidor ativo). Fora do escopo desta v1; a bolinha aparece no `ChannelSidebar` do servidor aberto e na lista de amigos.
+- **Atraso de até ~20s para atividade em canal de texto/forum fora do selecionado** (intervalo de poll), e nenhuma atualização enquanto nenhum servidor está selecionado (tela de Amigos) — poll só roda com um `serverBaseUrl` ativo.
+
+**Razão:** o servidor já grava tudo que esse recurso precisa (timestamp de mensagem) sem schema novo; o que falta é só "o que este dispositivo específico já viu", que é inerentemente um dado de cliente — guardá-lo no servidor implicaria sincronizar estado entre N dispositivos por conta, problema que o NaCl box por dispositivo já decidiu não resolver nesta v1 pelo mesmo motivo (ver "Decisão: criptografia ponta-a-ponta em DMs"). Reaproveita a infraestrutura de tempo real que já existe (WebSocket de presença já entrega todo `dm.created`) em vez de abrir uma conexão nova, e usa polling só onde de fato não existe alternativa (canais de `server-channel`), evitando o custo de projetar um hub por servidor para um indicador que não precisa ser instantâneo.
+
+**Revisitar quando:** houver demanda por contagem exata ou por sincronizar "lido" entre dispositivos da mesma conta (nesse ponto avaliar mover o cursor para o servidor, com um endpoint de "marcar como lido" — mesmo gatilho, em espírito, do "Revisitar quando" de multi-dispositivo da criptografia de DM); ou por um indicador agregado no `ServerRail` (nesse ponto `useServerStructure` precisaria buscar todos os servidores conhecidos, não só o ativo, ou `server-channel` precisaria de um endpoint mais barato que `GET /api/channels` completo só para isso).
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

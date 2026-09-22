@@ -63,7 +63,7 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, attachmentFiles *storag
 	mux.Handle("GET /api/bans", protected(handleListBans(db.MemberBans, db.Roles)))
 	mux.Handle("DELETE /api/bans/{oidcSubject}", protected(handleUnbanMember(db.MemberBans, db.Roles)))
 	mux.Handle("GET /api/categories", protected(handleListCategories(db.Categories, db.Channels, db.Roles, db.ChannelOverwrites)))
-	mux.Handle("GET /api/channels", protected(handleListChannels(db.Channels, db.Roles, db.ChannelOverwrites)))
+	mux.Handle("GET /api/channels", protected(handleListChannels(db.Channels, db.Roles, db.ChannelOverwrites, db.Messages)))
 	mux.Handle("GET /api/channels/{id}/messages", protected(handleListMessages(db.Channels, db.Roles, db.ChannelOverwrites, db.Messages, db.Attachments)))
 	mux.Handle("POST /api/channels/{id}/messages", protected(handleCreateMessageWithAttachment(hub, db.Channels, db.Roles, db.ChannelOverwrites, db.Messages, db.Attachments, attachmentFiles, attachmentMaxBytes)))
 	mux.Handle("GET /api/attachments/{id}", protected(handleGetAttachment(db.Attachments, db.Messages, db.Roles, db.ChannelOverwrites, attachmentFiles)))

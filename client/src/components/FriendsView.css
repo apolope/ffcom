@@ -99,3 +99,12 @@
 .friend-row.offline .friend-status {
   background: var(--text);
 }
+
+.unread-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-left: auto;
+  flex: 0 0 8px;
+}

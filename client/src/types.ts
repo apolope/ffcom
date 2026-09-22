@@ -14,6 +14,12 @@ export interface Channel {
   id: string
   name: string
   type: ChannelType
+  // Timestamp da mensagem mais recente do canal (ISO 8601), se houver
+  // alguma -- usado só para o indicador de não lida (ver
+  // lib/unread.ts/hooks/useUnread.ts), comparado contra um cursor "última
+  // leitura" guardado local ao dispositivo. Não é uma garantia de entrega
+  // nem reflete atividade de voz.
+  lastMessageAt?: string
 }
 
 export interface Category {
@@ -65,4 +71,8 @@ export interface Friend {
   // crypto/e2e.ts e docs/architecture.md, "Decisão: criptografia
   // ponta-a-ponta em DMs". Ausente = ainda não dá pra enviar DM cifrada.
   e2ePublicKey?: string
+  // Timestamp da DM mais recente trocada com este amigo (ISO 8601), em
+  // qualquer sentido -- mesmo uso do lastMessageAt de Channel, ver
+  // hooks/useUnread.ts.
+  lastMessageAt?: string
 }

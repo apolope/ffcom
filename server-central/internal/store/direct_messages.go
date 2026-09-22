@@ -62,3 +62,43 @@ func (s *DirectMessageStore) ListConversation(ctx context.Context, accountA, acc
 	}
 	return out, nil
 }
+
+// LastMessageAtByPeer devolve, para cada amigo em peerIDs com pelo menos uma
+// DM trocada com accountID (em qualquer sentido), o timestamp da mensagem
+// mais recente — usado por internal/httpapi.handleListFriends para o
+// indicador de não lida no client (ver docs/architecture.md, "Decisão:
+// indicador de não lida"). peerIDs vazio devolve um mapa vazio sem consultar
+// o banco.
+func (s *DirectMessageStore) LastMessageAtByPeer(ctx context.Context, accountID string, peerIDs []string) (map[string]time.Time, error) {
+	out := make(map[string]time.Time, len(peerIDs))
+	if len(peerIDs) == 0 {
+		return out, nil
+	}
+
+	const query = `
+		SELECT
+			CASE WHEN sender_id = $1 THEN recipient_id ELSE sender_id END AS peer_id,
+			MAX(created_at)
+		FROM direct_messages
+		WHERE (sender_id = $1 AND recipient_id = ANY($2)) OR (recipient_id = $1 AND sender_id = ANY($2))
+		GROUP BY peer_id
+	`
+	rows, err := s.pool.Query(ctx, query, accountID, peerIDs)
+	if err != nil {
+		return nil, fmt.Errorf("direct_messages: last message at por peer: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var peerID string
+		var lastAt time.Time
+		if err := rows.Scan(&peerID, &lastAt); err != nil {
+			return nil, fmt.Errorf("direct_messages: scan last message at: %w", err)
+		}
+		out[peerID] = lastAt
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("direct_messages: iterar last message at: %w", err)
+	}
+	return out, nil
+}

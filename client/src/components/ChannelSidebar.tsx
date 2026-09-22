@@ -11,6 +11,9 @@ interface ChannelSidebarProps {
   server: KnownServer
   categories: Category[]
   selectedChannelId: string | undefined
+  // Ver hooks/useUnread.ts e docs/architecture.md, "Decisão: indicador de
+  // não lida".
+  unreadChannelIds: Set<string>
   onSelectChannel: (channelId: string) => void
   onInvite: () => void
   canManageMembers: boolean
@@ -22,6 +25,7 @@ export function ChannelSidebar({
   server,
   categories,
   selectedChannelId,
+  unreadChannelIds,
   onSelectChannel,
   onInvite,
   canManageMembers,
@@ -66,6 +70,9 @@ export function ChannelSidebar({
                       {CHANNEL_ICON[channel.type]}
                     </span>
                     {channel.name}
+                    {unreadChannelIds.has(channel.id) && (
+                      <span className="unread-dot" aria-label="mensagens não lidas" />
+                    )}
                   </button>
                 </li>
               ))}

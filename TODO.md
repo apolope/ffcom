@@ -95,7 +95,7 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [x] Build Electron para Windows/macOS/Linux — `electron-builder` (`client/package.json`, campo `"build"`), scripts `package`/`package:win`/`package:mac`/`package:linux`; sem ícone customizado nem assinatura de código ainda. Ver `docs/architecture.md`
 - [x] Build web/PWA — `vite-plugin-pwa` (manifest + service worker via Workbox), ícones gerados por `@vite-pwa/assets-generator` a partir de `favicon.svg`, desligado no build Electron; ver `docs/architecture.md`
 - [x] UI para editar/apagar mensagem própria — `TextChannelView.tsx`, botões "editar"/"apagar" visíveis ao passar o mouse na própria mensagem; editar troca por um form inline. Sem botão para Administrator apagar mensagem de outro (permissão já existe no servidor). Ver `docs/architecture.md`
-- [ ] Notificação/contador de não lidas — nenhum indicador de atividade em canal/DM fechada; usuário só percebe mensagem nova abrindo cada canal manualmente
+- [x] Notificação/contador de não lidas — bolinha de "não lida" (sem contagem) em canal e em DM fechada: `lastMessageAt` por canal (`GET /api/channels` em `server-channel`) e por amigo (`GET /api/friends` em `server-central`), comparado contra um cursor local ao dispositivo (`client/src/lib/unread.ts`, `hooks/useUnread.ts`); DM atualiza via WebSocket de presença já existente, canal via poll de 20s (sem feed cruzando canais). Sem indicador agregado no `ServerRail` ainda. Ver `docs/architecture.md`, "Decisão: indicador de não lida"
 
 ## Segurança
 

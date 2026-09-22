@@ -94,8 +94,12 @@ func handleListCategories(categories *store.CategoryStore, channels *store.Chann
 
 // GET /api/channels — lista os canais visíveis ao membro autenticado (todos
 // os tipos), ordenados por categoria e posição. O client agrupa por
-// categoryId; canais sem categoria vêm com categoryId nulo.
-func handleListChannels(channels *store.ChannelStore, roles *store.RoleStore, overwrites *store.ChannelOverwriteStore) http.Handler {
+// categoryId; canais sem categoria vêm com categoryId nulo. lastMessageAt
+// (ver MessageStore.LastMessageAtByChannel) alimenta o indicador de não lida
+// no client — comparado contra um cursor "última leitura" guardado local ao
+// dispositivo (localStorage), não há conceito de "lido" no servidor (ver
+// docs/architecture.md, "Decisão: indicador de não lida").
+func handleListChannels(channels *store.ChannelStore, roles *store.RoleStore, overwrites *store.ChannelOverwriteStore, messages *store.MessageStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		member, ok := auth.MemberFromContext(r.Context())
 		if !ok {
@@ -113,10 +117,19 @@ func handleListChannels(channels *store.ChannelStore, roles *store.RoleStore, ov
 			http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
 			return
 		}
+		lastMessageAt, err := messages.LastMessageAtByChannel(r.Context())
+		if err != nil {
+			http.Error(w, "erro ao buscar atividade dos canais", http.StatusInternalServerError)
+			return
+		}
 
 		out := make([]channelView, len(visible))
 		for i, c := range visible {
-			out[i] = toChannelView(c)
+			view := toChannelView(c)
+			if at, ok := lastMessageAt[c.ID]; ok {
+				view.LastMessageAt = &at
+			}
+			out[i] = view
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -140,12 +153,13 @@ type categoryView struct {
 }
 
 type channelView struct {
-	ID         string    `json:"id"`
-	CategoryID *string   `json:"categoryId,omitempty"`
-	Name       string    `json:"name"`
-	Type       string    `json:"type"`
-	Position   int       `json:"position"`
-	CreatedAt  time.Time `json:"createdAt"`
+	ID            string     `json:"id"`
+	CategoryID    *string    `json:"categoryId,omitempty"`
+	Name          string     `json:"name"`
+	Type          string     `json:"type"`
+	Position      int        `json:"position"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	LastMessageAt *time.Time `json:"lastMessageAt,omitempty"`
 }
 
 func toCategoryView(c store.Category) categoryView {

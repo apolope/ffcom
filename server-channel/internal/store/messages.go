@@ -146,6 +146,34 @@ func (s *MessageStore) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+// LastMessageAtByChannel devolve, para cada canal com pelo menos uma
+// mensagem, o timestamp da mais recente (inclui posts de thread de canal
+// forum, que também têm channel_id preenchido) — usado por
+// internal/httpapi.handleListChannels para o indicador de não lida no
+// client, ver docs/architecture.md, "Decisão: indicador de não lida".
+func (s *MessageStore) LastMessageAtByChannel(ctx context.Context) (map[string]time.Time, error) {
+	const query = `SELECT channel_id, MAX(created_at) FROM messages GROUP BY channel_id`
+	rows, err := s.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("messages: last message at por canal: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[string]time.Time)
+	for rows.Next() {
+		var channelID string
+		var lastAt time.Time
+		if err := rows.Scan(&channelID, &lastAt); err != nil {
+			return nil, fmt.Errorf("messages: scan last message at: %w", err)
+		}
+		out[channelID] = lastAt
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("messages: iterar last message at: %w", err)
+	}
+	return out, nil
+}
+
 // ListForChannel devolve o histórico paginado de um canal de texto ou de uma
 // thread de forum (conforme threadID), mais recentes primeiro. before, se
 // não nulo, restringe a mensagens anteriores a esse instante (keyset

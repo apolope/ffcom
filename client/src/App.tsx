@@ -20,7 +20,9 @@ import { useE2EKeys } from './hooks/useE2EKeys'
 import { useMe } from './hooks/useMe'
 import { useMyProfile } from './hooks/useMyProfile'
 import { useServerMembers } from './hooks/useServerMembers'
+import { useUnread } from './hooks/useUnread'
 import { createServerInvite } from './lib/serverChannelApi'
+import { markRead } from './lib/unread'
 import { PERMISSIONS, hasPermission } from './lib/permissions'
 import './App.css'
 
@@ -82,6 +84,40 @@ function App() {
     [categories, selectedChannelId],
   )
 
+  // Marca o canal como lido ao entrar nele e de novo ao sair (cursor "agora"
+  // -- ver lib/unread.ts) para não deixar mensagens vistas enquanto o canal
+  // estava aberto acusando "não lida" depois. Independe de showFriends: só
+  // useUnread abaixo decide se o canal selecionado conta como ativo agora.
+  useEffect(() => {
+    if (!selectedChannelId) return
+    markRead('channel', selectedChannelId)
+    return () => markRead('channel', selectedChannelId)
+  }, [selectedChannelId])
+
+  useEffect(() => {
+    if (!selectedFriendId) return
+    markRead('dm', selectedFriendId)
+    return () => markRead('dm', selectedFriendId)
+  }, [selectedFriendId])
+
+  const unreadChannelIds = useUnread(
+    'channel',
+    useMemo(
+      () =>
+        categories
+          .flatMap((category) => category.channels)
+          .map((c) => ({ id: c.id, lastMessageAt: c.lastMessageAt })),
+      [categories],
+    ),
+    showFriends ? undefined : selectedChannelId,
+  )
+
+  const unreadFriendIds = useUnread(
+    'dm',
+    useMemo(() => friends.map((f) => ({ id: f.accountId, lastMessageAt: f.lastMessageAt })), [friends]),
+    showFriends ? selectedFriendId : undefined,
+  )
+
   if (status === 'loading') {
     return null
   }
@@ -110,6 +146,7 @@ function App() {
           <FriendsView
             friends={friends}
             selectedFriendId={selectedFriendId}
+            unreadFriendIds={unreadFriendIds}
             onSelectFriend={setSelectedFriendId}
             onAddFriend={() => setShowAddFriend(true)}
           />
@@ -133,6 +170,7 @@ function App() {
             server={server}
             categories={categories}
             selectedChannelId={selectedChannelId}
+            unreadChannelIds={unreadChannelIds}
             onSelectChannel={setSelectedChannelId}
             onInvite={() => setShowInviteServer(true)}
             canManageMembers={canOpenMemberAdmin}

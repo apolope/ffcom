@@ -19,6 +19,8 @@ export interface RemoteChannel {
   type: ChannelType
   position: number
   createdAt: string
+  // Ver docs/architecture.md, "Decisão: indicador de não lida".
+  lastMessageAt?: string
 }
 
 // RemoteAttachment.url é relativo e exige o mesmo Bearer token de qualquer
@@ -325,7 +327,12 @@ export function groupIntoCategories(
 
   for (const channel of channels) {
     const target = channel.categoryId ? byCategory.get(channel.categoryId) : undefined
-    const entry = { id: channel.id, name: channel.name, type: channel.type }
+    const entry = {
+      id: channel.id,
+      name: channel.name,
+      type: channel.type,
+      lastMessageAt: channel.lastMessageAt,
+    }
     if (target) {
       target.channels.push(entry)
     } else {

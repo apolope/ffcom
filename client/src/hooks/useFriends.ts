@@ -32,6 +32,7 @@ function toFriend(remote: RemoteFriend, online: boolean): Friend {
     avatarUrl: remote.avatarUrl,
     online,
     e2ePublicKey: remote.e2ePublicKey,
+    lastMessageAt: remote.lastMessageAt,
   }
 }
 
@@ -77,16 +78,32 @@ export function useFriends(accessToken: string): UseFriendsResult {
     setSocket(ws)
     ws.onmessage = (event) => {
       const frame = decodePresenceSocketFrame(String(event.data))
-      if (!frame || frame.type !== 'presence.update') return
-      setOnlineIds((prev) => {
-        const next = new Set(prev)
-        if (frame.online) {
-          next.add(frame.accountId)
-        } else {
-          next.delete(frame.accountId)
-        }
-        return next
-      })
+      if (!frame) return
+      if (frame.type === 'presence.update') {
+        setOnlineIds((prev) => {
+          const next = new Set(prev)
+          if (frame.online) {
+            next.add(frame.accountId)
+          } else {
+            next.delete(frame.accountId)
+          }
+          return next
+        })
+      } else if (frame.type === 'dm.created') {
+        // Atualiza lastMessageAt do amigo em memória em vez de esperar o
+        // próximo load() — o mesmo evento já chega aqui independente de qual
+        // conversa está aberta (ver docs/architecture.md, "Decisão: DMs
+        // entregues no mesmo WebSocket de presença"), então dá pra alimentar
+        // o indicador de não lida (ver hooks/useUnread.ts) sem polling.
+        const { senderId, recipientId, createdAt } = frame.message
+        setRemoteFriends((prev) =>
+          prev.map((f) =>
+            f.accountId === senderId || f.accountId === recipientId
+              ? { ...f, lastMessageAt: createdAt }
+              : f,
+          ),
+        )
+      }
     }
 
     return () => {
