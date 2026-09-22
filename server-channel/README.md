@@ -66,6 +66,10 @@ sinalize `X-Forwarded-Proto: https` (Caddy, Nginx Proxy Manager e Traefik
 fazem isso por padrão), fechando o caso de alguém expor `8080` direto sem
 TLS nenhum. Deixe desligado (padrão) enquanto testar em LAN sem proxy.
 
+## Backup / restore
+
+Nenhum backup automático embutido — ver [`../docs/backup-restore.md`](../docs/backup-restore.md) para o procedimento de `pg_dump`/`pg_restore` do banco e dos anexos (`attachments_data`).
+
 ## Hospedando atrás de NAT (ex. em casa)
 
 A maioria de quem autohospedar um `server-channel` vai estar numa rede

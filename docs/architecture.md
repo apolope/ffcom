@@ -761,6 +761,20 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** houver demanda por contagem exata ou por sincronizar "lido" entre dispositivos da mesma conta (nesse ponto avaliar mover o cursor para o servidor, com um endpoint de "marcar como lido" — mesmo gatilho, em espírito, do "Revisitar quando" de multi-dispositivo da criptografia de DM); ou por um indicador agregado no `ServerRail` (nesse ponto `useServerStructure` precisaria buscar todos os servidores conhecidos, não só o ativo, ou `server-channel` precisaria de um endpoint mais barato que `GET /api/channels` completo só para isso).
 
+## Decisão: backup/restore — `pg_dump`/`pg_restore` via `docker compose exec`, sem WAL archiving
+
+**Contexto:** item de TODO em aberto ("Guia de backup/restore do Postgres") — `server-central` e `server-channel` são a única fonte de dados de suas respectivas comunidades (cada `server-channel` é isolado, sem banco compartilhado — ver "Decisão: dados e transporte"), mas nenhum guia de self-hosting cobria como fazer backup.
+
+**Alternativas consideradas:** `pg_basebackup`/WAL archiving (PITR — point-in-time recovery), backup a nível de volume (snapshot do volume Docker/disco via LVM ou ferramenta do provedor de VPS), `pg_dump`/`pg_restore` lógico via `docker compose exec`.
+
+**Decisão:** `pg_dump -Fc` / `pg_restore`, disparado de fora do container via `docker compose exec postgres pg_dump ...`, documentado em [`backup-restore.md`](backup-restore.md).
+
+**Razão:** o público-alvo de self-hosting (`server-channel`, mesmo argumento já registrado nas decisões de linguagem e de config via `.env`) não vai operar WAL archiving/PITR — exige um repositório de WAL contínuo (S3 ou equivalente) e ferramentas extras (`pgbackrest`/`wal-g`) desproporcionais ao volume de dados de uma comunidade self-hosted. Snapshot a nível de volume depende do backend de storage de quem hospeda (nem todo VPS/host doméstico tem LVM ou snapshot de disco disponível), enquanto `pg_dump`/`pg_restore` funciona igual em qualquer host que já rode o `docker compose` do projeto, sem infraestrutura adicional — só precisa do próprio container `postgres` já no ar.
+
+**Escopo aceito:** só backup lógico pontual (RPO = intervalo entre backups agendados via cron, ver o guia), sem recovery para um timestamp exato entre dois backups. Aceitável para o volume de dados de uma comunidade self-hosted; não é o mesmo padrão de disponibilidade de `server-central` (instância única oficial), que continua fora do escopo deste guia — backup da instância de teste/produção em `a3s-network` é responsabilidade de infra separada, ainda não automatizada.
+
+**Revisitar quando:** `server-central` (instância única, sem isolamento por comunidade) justificar RPO menor que "uma vez por dia" — nesse ponto PITR via WAL archiving passa a valer o custo de operação adicional, especificamente para esse componente.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

@@ -55,6 +55,10 @@ instância central de Authentik (blueprint declarativo no repositório
 essa instância — ver
 `D:\Dev\a3s-network\docs\procedures\integrar-app-com-authentik.md`).
 
+## Backup / restore
+
+Nenhum backup automático embutido — ver [`../docs/backup-restore.md`](../docs/backup-restore.md) para o procedimento de `pg_dump`/`pg_restore` do banco e dos avatares (`avatars_data`).
+
 ## TLS / HTTPS
 
 Mesmo caso de `server-channel` (ver
