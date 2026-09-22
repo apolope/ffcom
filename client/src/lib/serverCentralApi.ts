@@ -25,6 +25,68 @@ async function parseJsonOrThrow<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>
 }
 
+// Conta autenticada + perfil (GET /api/me em server-central) -- não confundir
+// com hooks/useMe.ts, que é o "me" de um server-channel específico (apelido,
+// permissões). displayName/avatarUrl aqui vêm de profiles, preenchido só
+// depois do primeiro upload de avatar (ver internal/httpapi/avatar.go em
+// server-central, docs/architecture.md "Decisão: upload de avatar de conta").
+export interface MyProfile {
+  accountId: string
+  oidcSubject: string
+  createdAt: string
+  displayName?: string
+  avatarUrl?: string
+}
+
+export async function fetchMyProfile(accessToken: string): Promise<MyProfile> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/me`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  return parseJsonOrThrow<MyProfile>(res)
+}
+
+export async function uploadMyAvatar(accessToken: string, file: File): Promise<MyProfile> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/me/avatar`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: form,
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(text || `server-central: ${res.status} ${res.statusText}`)
+  }
+  return res.json() as Promise<MyProfile>
+}
+
+export async function deleteMyAvatar(accessToken: string): Promise<MyProfile> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/me/avatar`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(text || `server-central: ${res.status} ${res.statusText}`)
+  }
+  return res.json() as Promise<MyProfile>
+}
+
+// GET /api/avatars/{accountId} — precisa do mesmo Bearer token de qualquer
+// outra rota deste servidor, por isso um <img src="..."> direto não
+// funciona -- o client busca como Blob e gera uma object URL local (ver
+// components/UserAvatar.tsx). avatarUrl já vem como o path relativo
+// ("/api/avatars/{id}") devolvido pelo servidor em MyProfile/Friend.
+export async function fetchAvatarBlob(avatarUrl: string, accessToken: string): Promise<Blob> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}${avatarUrl}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!res.ok) {
+    throw new Error(`server-central: ${res.status} ${res.statusText}`)
+  }
+  return res.blob()
+}
+
 export async function fetchKnownServers(accessToken: string): Promise<RemoteKnownServer[]> {
   const res = await fetch(`${SERVER_CENTRAL_URL}/api/servers`, {
     headers: { Authorization: `Bearer ${accessToken}` },

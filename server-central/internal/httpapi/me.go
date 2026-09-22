@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -20,25 +21,37 @@ func handleMe(db *store.Store) http.Handler {
 			return
 		}
 
-		profile, err := db.Profiles.GetByAccountID(r.Context(), account.ID)
-		if err != nil && !errors.Is(err, store.ErrNotFound) {
+		resp, err := buildMeResponse(r.Context(), db.Profiles, account)
+		if err != nil {
 			http.Error(w, "erro ao buscar perfil", http.StatusInternalServerError)
 			return
-		}
-
-		resp := meResponse{
-			AccountID:   account.ID,
-			OIDCSubject: account.OIDCSubject,
-			CreatedAt:   account.CreatedAt,
-		}
-		if err == nil {
-			resp.DisplayName = &profile.DisplayName
-			resp.AvatarURL = profile.AvatarURL
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
 	})
+}
+
+// buildMeResponse monta o meResponse da conta autenticada a partir do
+// perfil (se já preenchido). Usado por handleMe e pelas rotas de avatar
+// (internal/httpapi/avatar.go), que devolvem o mesmo formato depois de
+// alterar o avatar.
+func buildMeResponse(ctx context.Context, profiles *store.ProfileStore, account store.Account) (meResponse, error) {
+	profile, err := profiles.GetByAccountID(ctx, account.ID)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		return meResponse{}, err
+	}
+
+	resp := meResponse{
+		AccountID:   account.ID,
+		OIDCSubject: account.OIDCSubject,
+		CreatedAt:   account.CreatedAt,
+	}
+	if err == nil {
+		resp.DisplayName = &profile.DisplayName
+		resp.AvatarURL = profile.AvatarURL
+	}
+	return resp, nil
 }
 
 type meResponse struct {

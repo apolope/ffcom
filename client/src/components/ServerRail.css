@@ -57,3 +57,18 @@
 .server-rail > .server-icon {
   margin-bottom: 4px;
 }
+
+.account-button {
+  margin-top: auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.account-button:hover {
+  opacity: 0.85;
+}

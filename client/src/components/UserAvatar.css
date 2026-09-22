@@ -1,0 +1,15 @@
+.user-avatar {
+  border-radius: 50%;
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+
+.user-avatar-fallback {
+  background: var(--bg-tertiary);
+  color: var(--text-h);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-family: var(--sans);
+}

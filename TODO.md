@@ -61,7 +61,7 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [x] Endpoint/gateway de presença (quem está online)
 - [x] Implementar DMs: `server-central` como gateway de mensagens (armazenamento em Postgres + entrega via WebSocket)
 - [x] API para o client listar/adicionar/remover servidores conhecidos (adição manual via IP/DNS ou convite — sem discovery automático)
-- [ ] Upload de avatar — `avatar_url` já existe no schema e em `GET/PUT /api/me`, mas não há endpoint de upload nem UI que leia/edite o campo; hoje é campo morto
+- [x] Upload de avatar — `internal/storage.AvatarStore` (disco local, chave fixa por conta), `POST/DELETE /api/me/avatar` + `GET /api/avatars/{id}`; UI em `client/src/components/AvatarDialog.tsx` (botão de conta no rodapé do `ServerRail`) e `UserAvatar.tsx` (usado ali, na lista de amigos e no cabeçalho de DM). Ver `docs/architecture.md`, "Decisão: upload de avatar de conta"
 
 ## server-channel
 

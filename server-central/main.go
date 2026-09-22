@@ -10,6 +10,7 @@ import (
 
 	"a3sitsolutions.com/ffcom/server-central/internal/auth"
 	"a3sitsolutions.com/ffcom/server-central/internal/httpapi"
+	"a3sitsolutions.com/ffcom/server-central/internal/storage"
 	"a3sitsolutions.com/ffcom/server-central/internal/store"
 )
 
@@ -29,6 +30,15 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
+	// Diretório onde os bytes de avatar de conta são persistidos (ver
+	// internal/storage.AvatarStore e docs/architecture.md, "Decisão: upload
+	// de avatar de conta") -- precisa ser um volume Docker para sobreviver a
+	// recriação do container, mesmo padrão já usado pelo Postgres.
+	avatarsDir := os.Getenv("AVATARS_DIR")
+	if avatarsDir == "" {
+		avatarsDir = "/data/avatars"
+	}
+	avatarMaxBytes := int64(envInt("AVATAR_MAX_MB", 2)) << 20
 
 	ctx := context.Background()
 
@@ -43,10 +53,15 @@ func main() {
 		log.Fatalf("server-central: %v", err)
 	}
 
+	avatarFiles, err := storage.NewAvatarStore(avatarsDir)
+	if err != nil {
+		log.Fatalf("server-central: %v", err)
+	}
+
 	rateLimitRPM := envInt("RATE_LIMIT_RPM", 120)
 	rateLimitBurst := envInt("RATE_LIMIT_BURST", 20)
 	requireTLS := envBool("REQUIRE_TLS", false)
-	router := httpapi.NewRouter(verifier, db, parseAllowedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS")), version, rateLimitRPM, rateLimitBurst, requireTLS)
+	router := httpapi.NewRouter(verifier, db, avatarFiles, avatarMaxBytes, parseAllowedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS")), version, rateLimitRPM, rateLimitBurst, requireTLS)
 
 	log.Printf("server-central: versão %s, ouvindo em :%s (OIDC issuer: %s)", version, port, issuerURL)
 	if err := http.ListenAndServe(":"+port, router); err != nil {

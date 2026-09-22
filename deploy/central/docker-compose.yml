@@ -47,6 +47,14 @@ services:
       # ligar depois de confirmar que o Nginx Proxy Manager na frente
       # (VMSUBS24OCI0102) realmente seta esse header.
       REQUIRE_TLS: ${REQUIRE_TLS:-}
+      # Upload de avatar de conta — ver docs/architecture.md, "Decisão:
+      # upload de avatar de conta". AVATARS_DIR precisa apontar para um
+      # volume (ffcom_central_avatars abaixo), ou avatares somem a cada
+      # recriação do container.
+      AVATARS_DIR: /data/avatars
+      AVATAR_MAX_MB: ${AVATAR_MAX_MB:-}
+    volumes:
+      - ffcom_central_avatars:/data/avatars
     networks:
       - internal
       - a3s-services
@@ -59,6 +67,7 @@ services:
 
 volumes:
   ffcom_central_db:
+  ffcom_central_avatars:
 
 networks:
   internal:

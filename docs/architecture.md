@@ -697,6 +697,24 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** existir demanda por mais de um anexo por mensagem (schema já é 1:N, só a v1 que assume um só); por anexo em canal forum; ou por um self-hoster relatar que 8 MB é baixo demais para o uso real (ajustar via `ATTACHMENT_MAX_MB`, sem mudança de código).
 
+## Decisão: upload de avatar de conta — disco local com chave fixa por conta, `display_name` provisório no primeiro upload
+
+**Contexto:** implementar o item de TODO "Upload de avatar" (`server-central`) — `avatar_url` já existia no schema (`profiles`, migration `0001_init`) e era devolvido por `GET /api/me`/`GET /api/friends`, mas nunca era gravado: não havia endpoint de upload nem chamada a `ProfileStore.Upsert` em lugar nenhum do código. Campo morto desde a v1. Diferente do apelido por servidor (`PATCH /api/me` em `server-channel`, ver decisão de UUID truncado), avatar é um dado de conta, então mora em `server-central`.
+
+**Alternativas consideradas (chave de armazenamento):** mesmo padrão de `internal/storage.FileStore` do upload de anexo em `server-channel` (chave aleatória por upload, rastreada numa coluna); ou chave determinística = `accountId`, sobrescrevendo o arquivo a cada novo upload.
+
+**Decisão:** chave determinística. Um avatar é sempre 1:1 com a conta e o upload novo sempre substitui o anterior — nunca existe motivo pra manter os dois nem pra "esquecer qual é o atual", então rastrear uma chave aleatória à parte (e ter que apagar o arquivo anterior a cada troca) seria estado redundante. `internal/storage.AvatarStore` (novo pacote em `server-central`, mesma filosofia de `server-channel/internal/storage` mas API própria — `Save`/`Open`/`Delete` recebem `accountId` direto) grava/lê sob um diretório configurável (`AVATARS_DIR`, padrão `/data/avatars`), montado como volume Docker (`avatars_data` na referência de self-host, `ffcom_central_avatars` na implantação de teste) — mesmo padrão já usado por `ATTACHMENTS_DIR`. `Save` escreve num arquivo temporário (`os.CreateTemp` no mesmo diretório) e troca via `os.Rename` atômico, pra nunca deixar um avatar parcialmente escrito servível em caso de falha no meio do upload.
+
+**Content-Type não é gravado à parte:** `GET /api/avatars/{id}` serve o arquivo via `http.ServeContent`, que sniffa o tipo a partir dos próprios bytes (`net/http.DetectContentType`) em vez de uma coluna/sidecar dedicado — só os tipos em `allowedAvatarContentTypes` (PNG/JPEG/WebP/GIF) chegam a ser salvos, então o sniff nunca precisa lidar com um tipo fora dessa lista.
+
+**`display_name` provisório:** `profiles.display_name` é `NOT NULL`, mas não existe (ainda) endpoint para editá-lo — nenhuma linha de `profiles` chegava a ser criada antes desta feature. No primeiro upload de avatar de uma conta sem perfil, `POST /api/me/avatar` cria a linha com `display_name = oidcSubject` (o mesmo fallback que o client já aplica no lugar de `displayName` ausente, ver `client/src/hooks/useFriends.ts`), só que agora persistido. Uploads seguintes preservam o `display_name` já gravado (editado ou não). Não ativa o resto da feature de perfil (editar nome de exibição continua fora do escopo, ver `TODO.md`).
+
+**Download exige Bearer token, sem checagem de amizade:** `GET /api/avatars/{id}` está atrás do `auth.Middleware` de qualquer outra rota deste servidor, mas sem nenhuma checagem extra de relação (amizade, servidor em comum) — um avatar não é dado sensível, e o `accountId` só chega a quem já tem algum vínculo com a conta (amigo, ou visualizando lista de membros de um `server-channel` em comum). Consequência aceita, mesmo padrão de `GET /api/attachments/{id}` em `server-channel`: um `<img src="...">` direto não funciona, o client busca via `fetch()`+Blob e monta uma object URL local (`components/UserAvatar.tsx`, `fetchAvatarBlob` em `client/src/lib/serverCentralApi.ts`).
+
+**Tamanho máximo:** `AVATAR_MAX_MB` (padrão 2 MB, bem menor que os 8 MB de anexo — avatar não precisa do mesmo espaço), aplicado via `http.MaxBytesReader` antes de `ParseMultipartForm`, mesmo mecanismo do upload de anexo.
+
+**Revisitar quando:** a feature de editar `display_name` for implementada de verdade (nesse ponto, o fallback pro `oidcSubject` aqui deixa de ser necessário); ou por demanda de redimensionar/normalizar a imagem no servidor (hoje o arquivo enviado é gravado como está, sem reencode).
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

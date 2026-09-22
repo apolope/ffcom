@@ -6,6 +6,7 @@ import (
 
 	"a3sitsolutions.com/ffcom/server-central/internal/auth"
 	"a3sitsolutions.com/ffcom/server-central/internal/realtime"
+	"a3sitsolutions.com/ffcom/server-central/internal/storage"
 	"a3sitsolutions.com/ffcom/server-central/internal/store"
 )
 
@@ -18,7 +19,7 @@ import (
 // server-channel, ver docs/architecture.md, "Decisão: CORS em
 // server-channel") — origens do client (web/PWA, Electron) autorizadas a
 // chamar esta instância de uma origem diferente.
-func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string, version string, rateLimitRPM, rateLimitBurst int, requireTLS bool) http.Handler {
+func NewRouter(verifier *auth.Verifier, db *store.Store, avatarFiles *storage.AvatarStore, avatarMaxBytes int64, allowedOrigins []string, version string, rateLimitRPM, rateLimitBurst int, requireTLS bool) http.Handler {
 	mux := http.NewServeMux()
 	hub := realtime.NewHub()
 
@@ -33,6 +34,9 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string
 	protected := auth.Middleware(verifier, db.Accounts)
 	mux.Handle("GET /api/me", protected(handleMe(db)))
 	mux.Handle("PUT /api/me/e2e-public-key", protected(handleSetE2EPublicKey(db.Accounts)))
+	mux.Handle("POST /api/me/avatar", protected(handleUploadAvatar(db.Profiles, avatarFiles, avatarMaxBytes)))
+	mux.Handle("DELETE /api/me/avatar", protected(handleDeleteAvatar(db.Profiles, avatarFiles)))
+	mux.Handle("GET /api/avatars/{id}", protected(handleGetAvatar(avatarFiles)))
 	mux.Handle("GET /api/servers", protected(handleListServers(db.KnownServers)))
 	mux.Handle("POST /api/servers", protected(handleAddServer(db.KnownServers)))
 	mux.Handle("DELETE /api/servers/{id}", protected(handleRemoveServer(db.KnownServers)))

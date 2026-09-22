@@ -3,6 +3,7 @@ networks:
 
 volumes:
   postgres_data:
+  avatars_data:
 
 services:
   postgres:
@@ -51,7 +52,15 @@ services:
       # HTTPS". Padrão desligado (vazio), para não quebrar dev local sem
       # proxy na frente.
       REQUIRE_TLS: ${REQUIRE_TLS:-}
+      # Upload de avatar de conta — ver docs/architecture.md, "Decisão:
+      # upload de avatar de conta". AVATARS_DIR precisa apontar para um
+      # volume (avatars_data abaixo), ou avatares somem a cada recriação do
+      # container.
+      AVATARS_DIR: /data/avatars
+      AVATAR_MAX_MB: ${AVATAR_MAX_MB:-}
     ports:
       - "${SERVER_CENTRAL_PORT:-8081}:8080"
+    volumes:
+      - avatars_data:/data/avatars
     networks:
       - ffcom-central

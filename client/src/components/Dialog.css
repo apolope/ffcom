@@ -41,6 +41,11 @@
   color: var(--text);
 }
 
+.avatar-dialog-preview {
+  display: flex;
+  justify-content: center;
+}
+
 .dialog-error {
   margin: 0;
   color: var(--danger, #ed4245);

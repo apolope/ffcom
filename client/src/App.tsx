@@ -11,12 +11,14 @@ import { FriendsView } from './components/FriendsView'
 import { AddFriendDialog } from './components/AddFriendDialog'
 import { DirectMessageView } from './components/DirectMessageView'
 import { NicknameDialog } from './components/NicknameDialog'
+import { AvatarDialog } from './components/AvatarDialog'
 import { useAuth } from './auth/AuthProvider'
 import { useServerStructure } from './hooks/useServerStructure'
 import { useKnownServers } from './hooks/useKnownServers'
 import { useFriends } from './hooks/useFriends'
 import { useE2EKeys } from './hooks/useE2EKeys'
 import { useMe } from './hooks/useMe'
+import { useMyProfile } from './hooks/useMyProfile'
 import { useServerMembers } from './hooks/useServerMembers'
 import { createServerInvite } from './lib/serverChannelApi'
 import { PERMISSIONS, hasPermission } from './lib/permissions'
@@ -27,6 +29,7 @@ function App() {
   const { servers, addServer } = useKnownServers(accessToken ?? '')
   const { friends, createInvite, redeemInvite, socket: presenceSocket } = useFriends(accessToken ?? '')
   const { keyPair: myE2EKeyPair } = useE2EKeys(accessToken ?? '')
+  const { profile: myProfile, uploadAvatar, removeAvatar } = useMyProfile(accessToken ?? '')
   const [selectedServerId, setSelectedServerId] = useState<string>()
   const [showFriends, setShowFriends] = useState(false)
   const [showAddServer, setShowAddServer] = useState(false)
@@ -34,6 +37,7 @@ function App() {
   const [showManageRoles, setShowManageRoles] = useState(false)
   const [showAddFriend, setShowAddFriend] = useState(false)
   const [showEditNickname, setShowEditNickname] = useState(false)
+  const [showMyAvatar, setShowMyAvatar] = useState(false)
   const [selectedFriendId, setSelectedFriendId] = useState<string>()
 
   const selectedFriend = friends.find((f) => f.accountId === selectedFriendId)
@@ -92,12 +96,14 @@ function App() {
         servers={servers}
         selectedServerId={selectedServerId}
         friendsSelected={showFriends}
+        myProfile={myProfile}
         onSelectServer={(id) => {
           setShowFriends(false)
           setSelectedServerId(id)
         }}
         onSelectFriends={() => setShowFriends(true)}
         onAddServer={() => setShowAddServer(true)}
+        onOpenMyAvatar={() => setShowMyAvatar(true)}
       />
       {showFriends ? (
         <>
@@ -189,6 +195,14 @@ function App() {
             await refreshMembers()
           }}
           onClose={() => setShowEditNickname(false)}
+        />
+      )}
+      {showMyAvatar && (
+        <AvatarDialog
+          profile={myProfile}
+          onUpload={uploadAvatar}
+          onRemove={removeAvatar}
+          onClose={() => setShowMyAvatar(false)}
         />
       )}
     </div>
