@@ -376,6 +376,14 @@ export function sendCreateMessage(socket: WebSocket, content: string): void {
   socket.send(JSON.stringify({ type: 'message.create', content }))
 }
 
+export function sendUpdateMessage(socket: WebSocket, id: string, content: string): void {
+  socket.send(JSON.stringify({ type: 'message.update', id, content }))
+}
+
+export function sendDeleteMessage(socket: WebSocket, id: string): void {
+  socket.send(JSON.stringify({ type: 'message.delete', id }))
+}
+
 // Frames de canal forum, mesma conexão de WebSocket do canal (ver
 // docs/architecture.md, "Canal forum: threads/posts").
 export function sendCreateThread(socket: WebSocket, title: string, content: string): void {
@@ -389,6 +397,17 @@ export function sendCreatePost(socket: WebSocket, threadId: string, content: str
 interface MessageCreatedFrame {
   type: 'message.created'
   message: ChannelMessage
+}
+
+interface MessageUpdatedFrame {
+  type: 'message.updated'
+  message: ChannelMessage
+}
+
+interface MessageDeletedFrame {
+  type: 'message.deleted'
+  id: string
+  channelId: string
 }
 
 interface ThreadCreatedFrame {
@@ -409,12 +428,16 @@ interface ErrorFrame {
 
 export type ChannelSocketFrame =
   | MessageCreatedFrame
+  | MessageUpdatedFrame
+  | MessageDeletedFrame
   | ThreadCreatedFrame
   | PostCreatedFrame
   | ErrorFrame
 
 const CHANNEL_SOCKET_FRAME_TYPES = new Set([
   'message.created',
+  'message.updated',
+  'message.deleted',
   'thread.created',
   'post.created',
   'error',

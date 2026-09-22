@@ -14,9 +14,11 @@ export function TextChannelView({ serverBaseUrl, channel }: TextChannelViewProps
   const { accessToken } = useAuth()
   const [selfMemberId, setSelfMemberId] = useState<string>()
   const [draft, setDraft] = useState('')
+  const [editingId, setEditingId] = useState<string>()
+  const [editDraft, setEditDraft] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
 
-  const { messages, status, error, sendMessage } = useChannelChat(
+  const { messages, status, error, sendMessage, editMessage, deleteMessage } = useChannelChat(
     serverBaseUrl,
     channel.id,
     accessToken!,
@@ -42,19 +44,67 @@ export function TextChannelView({ serverBaseUrl, channel }: TextChannelViewProps
     setDraft('')
   }
 
+  function startEditing(id: string, content: string) {
+    setEditingId(id)
+    setEditDraft(content)
+  }
+
+  function cancelEditing() {
+    setEditingId(undefined)
+    setEditDraft('')
+  }
+
+  function handleEditSubmit(e: FormEvent) {
+    e.preventDefault()
+    const content = editDraft.trim()
+    if (!content || !editingId) return
+    editMessage(editingId, content)
+    cancelEditing()
+  }
+
   return (
     <div className="text-channel">
       <div className="message-list" ref={listRef}>
         {status === 'loading' && <p className="placeholder">Carregando histórico…</p>}
-        {messages.map((m) => (
-          <div
-            key={m.id}
-            className={m.authorMemberId === selfMemberId ? 'message message-self' : 'message'}
-          >
-            <span className="message-author">{m.authorMemberId === selfMemberId ? 'você' : m.authorMemberId.slice(0, 8)}</span>
-            <span className="message-content">{m.content}</span>
-          </div>
-        ))}
+        {messages.map((m) => {
+          const isSelf = m.authorMemberId === selfMemberId
+          return (
+            <div key={m.id} className={isSelf ? 'message message-self' : 'message'}>
+              <span className="message-author">{isSelf ? 'você' : m.authorMemberId.slice(0, 8)}</span>
+              {editingId === m.id ? (
+                <form className="message-edit-form" onSubmit={handleEditSubmit}>
+                  <input
+                    type="text"
+                    value={editDraft}
+                    onChange={(e) => setEditDraft(e.target.value)}
+                    autoFocus
+                  />
+                  <button type="submit" disabled={editDraft.trim() === ''}>
+                    Salvar
+                  </button>
+                  <button type="button" onClick={cancelEditing}>
+                    Cancelar
+                  </button>
+                </form>
+              ) : (
+                <>
+                  <span className="message-content">{m.content}</span>
+                  {m.editedAt && <span className="message-edited">(editada)</span>}
+                  {isSelf && (
+                    <span className="message-actions">
+                      <button type="button" onClick={() => startEditing(m.id, m.content)}>
+                        editar
+                      </button>
+                      <button type="button" onClick={() => deleteMessage(m.id)}>
+                        apagar
+                      </button>
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
+          )
+        })}
         {messages.length === 0 && status === 'open' && (
           <p className="placeholder">Nenhuma mensagem ainda. Seja o primeiro a escrever.</p>
         )}

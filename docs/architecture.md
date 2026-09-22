@@ -619,6 +619,24 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** o repositório ganhar teste de integração contra Postgres real (hoje os únicos 2 arquivos `_test.go` são unitários, sem dependência externa) — nesse ponto o job de teste precisa subir um serviço de Postgres (`services:` do GitHub Actions) em vez de só `go test ./...`.
 
+## Decisão: editar/apagar mensagem de texto — frames WS, autor apaga ou edita a própria, Administrator apaga qualquer uma
+
+**Contexto:** implementar o item de TODO "Endpoint para editar/apagar mensagem de texto" em `server-channel` (e a UI correspondente no `client`). `MessageStore.Edit`/`Delete` (`internal/store/messages.go`) já existiam desde a decisão original de canal de texto, mas nenhuma rota expunha os dois — mensagem enviada era permanente na prática.
+
+**Alternativas consideradas (transporte):** REST (`PATCH`/`DELETE /api/messages/{id}`) — mais simples de testar isoladamente, mas introduz uma segunda forma de mutar o mesmo recurso (mensagem) fora do WebSocket, sem propagação ao vivo para outros clients conectados ao canal (precisaria de um broadcast manual do handler REST para o Hub, misturando os dois transportes); frames novos no mesmo WebSocket de canal (`message.update`, `message.delete`), mesmo padrão já usado por `message.create`/`thread.create`/`post.create`, com o servidor respondendo `message.updated`/`message.deleted` via broadcast do `realtime.Hub`.
+
+**Decisão:** frames WS. `handleChannelWS` (`internal/httpapi/channel_ws.go`) passou a despachar o texto recebido num canal de texto por `type` (`realtime.FrameType`, mesmo mecanismo já usado pelo canal forum) em vez de assumir sempre `message.create` — `handleIncomingTextFrame` decide entre `handleIncomingMessage` (cria, exige `SendMessages`), `handleIncomingMessageUpdate` e `handleIncomingMessageDelete`. Canal forum **não** ganhou os frames novos (fora do escopo do item de TODO, que fala só de canal de texto); revisitar junto da decisão de forum se um dia fizer sentido.
+
+**Autorização (por mensagem, não pelo bit `SendMessages` checado uma vez por conexão):** editar exige ser o autor (`MessageStore.GetByID` confirma `AuthorMemberID` e `ChannelID` antes de `Edit`) — sem edição por moderação nesta v1. Apagar aceita autor **ou** `Administrator` (`permissions.Has(effective, permissions.Administrator)`) — não há bit de permissão dedicado a mensagens (mesma lacuna já registrada no TODO para kick/ban), então reaproveita o bit que já ignora qualquer outra checagem no resto do sistema.
+
+**Decisão (protocolo):** `message.update` `{id, content}` → broadcast `message.updated` `{message}` (mesmo `MessageView`, com `editedAt` preenchido). `message.delete` `{id}` → broadcast `message.deleted` `{id, channelId}` (payload mínimo — quem recebe só precisa remover da lista local, não do `MessageView` inteiro). Ver `docs/protocol.md`.
+
+**Cliente:** `lib/serverChannelApi.ts` ganhou `sendUpdateMessage`/`sendDeleteMessage` e os dois frames novos em `ChannelSocketFrame`; `hooks/useChannelChat.ts` aplica `message.updated` (substitui a mensagem na lista pelo id) e `message.deleted` (remove pelo id) e expõe `editMessage`/`deleteMessage`. `components/TextChannelView.tsx` mostra "editar"/"apagar" só na própria mensagem (`authorMemberId === selfMemberId`), ao passar o mouse — apagar é direto, editar troca o conteúdo por um form inline reaproveitando o mesmo frame de saída; sem UI para Administrator apagar mensagem de outro membro ainda (a permissão já existe no servidor, só falta o botão condicionado a `Administrator` no client).
+
+**Razão:** manter tudo no mesmo WebSocket evita duplicar a lógica de propagação em tempo real (REST teria que chamar o Hub manualmente) e segue exatamente o padrão já estabelecido por `message.create`/`thread.create`/`post.create` — o mesmo motivo já registrado na decisão de canal forum ("reaproveitar infraestrutura existente em vez de generalizar cedo demais").
+
+**Revisitar quando:** um bit de permissão dedicado a moderação de mensagens for criado (ver TODO, kick/ban); ou quando canal forum precisar dos mesmos frames (hoje só citado como possibilidade, sem caso de uso concreto).
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

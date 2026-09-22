@@ -7,21 +7,32 @@ import (
 )
 
 // Frames trocados no WebSocket de um canal seguem um envelope
-// "{type, ...payload}". Num canal de texto, cliente -> servidor só emite
-// "message.create". Num canal forum (mesma rota de WS, ver
-// docs/architecture.md "Canal forum: threads/posts"), cliente -> servidor
-// emite "thread.create" (abre uma thread com o post inicial) ou
-// "post.create" (responde numa thread existente). O servidor responde com o
-// "*.created" correspondente (broadcast para todo o canal, inclusive para o
-// autor, para confirmar id/timestamp atribuídos pelo servidor) ou "error"
-// (só para o client que causou o erro).
+// "{type, ...payload}". Num canal de texto, cliente -> servidor emite
+// "message.create", "message.update" (edita mensagem própria) ou
+// "message.delete" (apaga mensagem própria, ou de qualquer autor se
+// Administrator — ver internal/httpapi/channel_ws.go). Num canal forum
+// (mesma rota de WS, ver docs/architecture.md "Canal forum: threads/posts"),
+// cliente -> servidor emite "thread.create" (abre uma thread com o post
+// inicial) ou "post.create" (responde numa thread existente) — edição/exclusão
+// não cobre canal forum ainda, mesmo escopo mínimo do TODO original. O
+// servidor responde com o "*.created"/"*.updated"/"*.deleted" correspondente
+// (broadcast para todo o canal, inclusive para o autor, para confirmar
+// id/timestamp atribuídos pelo servidor) ou "error" (só para o client que
+// causou o erro).
 const (
-	typeMessageCreate  = "message.create"
+	// TypeMessageCreate, TypeMessageUpdate e TypeMessageDelete são
+	// exportados porque internal/httpapi precisa comparar com FrameType
+	// antes de saber qual decoder chamar (um canal de texto aceita os três
+	// tipos na mesma conexão).
+	TypeMessageCreate  = "message.create"
 	typeMessageCreated = "message.created"
+	TypeMessageUpdate  = "message.update"
+	typeMessageUpdated = "message.updated"
+	TypeMessageDelete  = "message.delete"
+	typeMessageDeleted = "message.deleted"
 
-	// TypeThreadCreate e TypePostCreate são exportados porque
-	// internal/httpapi precisa comparar com FrameType antes de saber qual
-	// decoder chamar (um canal forum aceita os dois tipos na mesma conexão).
+	// TypeThreadCreate e TypePostCreate são exportados pelo mesmo motivo
+	// (um canal forum aceita os dois tipos na mesma conexão).
 	TypeThreadCreate  = "thread.create"
 	typeThreadCreated = "thread.created"
 	TypePostCreate    = "post.create"
@@ -34,6 +45,19 @@ const (
 // "message.create" enviado pelo client.
 type IncomingMessageCreate struct {
 	Content string `json:"content"`
+}
+
+// IncomingMessageUpdate é o payload decodificado de um frame
+// "message.update" já identificado via FrameType.
+type IncomingMessageUpdate struct {
+	ID      string `json:"id"`
+	Content string `json:"content"`
+}
+
+// IncomingMessageDelete é o payload decodificado de um frame
+// "message.delete" já identificado via FrameType.
+type IncomingMessageDelete struct {
+	ID string `json:"id"`
 }
 
 // IncomingThreadCreate é o payload decodificado de um frame "thread.create":
@@ -79,6 +103,20 @@ type messageCreatedEnvelope struct {
 	Message MessageView `json:"message"`
 }
 
+type messageUpdatedEnvelope struct {
+	Type    string      `json:"type"`
+	Message MessageView `json:"message"`
+}
+
+// messageDeletedEnvelope não carrega o MessageView inteiro — o client só
+// precisa do id para remover a mensagem da lista local (ver
+// hooks/useChannelChat.ts).
+type messageDeletedEnvelope struct {
+	Type      string `json:"type"`
+	ID        string `json:"id"`
+	ChannelID string `json:"channelId"`
+}
+
 type threadCreatedEnvelope struct {
 	Type    string      `json:"type"`
 	Thread  ThreadView  `json:"thread"`
@@ -118,13 +156,33 @@ func DecodeIncoming(raw []byte) (IncomingMessageCreate, error) {
 	if err != nil {
 		return IncomingMessageCreate{}, err
 	}
-	if t != typeMessageCreate {
+	if t != TypeMessageCreate {
 		return IncomingMessageCreate{}, fmt.Errorf("tipo de frame desconhecido: %q", t)
 	}
 
 	var m IncomingMessageCreate
 	if err := json.Unmarshal(raw, &m); err != nil {
 		return IncomingMessageCreate{}, fmt.Errorf("payload de message.create inválido: %w", err)
+	}
+	return m, nil
+}
+
+// DecodeMessageUpdate decodifica o payload de um frame "message.update" já
+// identificado via FrameType.
+func DecodeMessageUpdate(raw []byte) (IncomingMessageUpdate, error) {
+	var m IncomingMessageUpdate
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return IncomingMessageUpdate{}, fmt.Errorf("payload de message.update inválido: %w", err)
+	}
+	return m, nil
+}
+
+// DecodeMessageDelete decodifica o payload de um frame "message.delete" já
+// identificado via FrameType.
+func DecodeMessageDelete(raw []byte) (IncomingMessageDelete, error) {
+	var m IncomingMessageDelete
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return IncomingMessageDelete{}, fmt.Errorf("payload de message.delete inválido: %w", err)
 	}
 	return m, nil
 }
@@ -152,6 +210,18 @@ func DecodePostCreate(raw []byte) (IncomingPostCreate, error) {
 // EncodeMessageCreated serializa o envelope broadcast a cada novo message.
 func EncodeMessageCreated(m MessageView) ([]byte, error) {
 	return json.Marshal(messageCreatedEnvelope{Type: typeMessageCreated, Message: m})
+}
+
+// EncodeMessageUpdated serializa o envelope broadcast quando uma mensagem é
+// editada.
+func EncodeMessageUpdated(m MessageView) ([]byte, error) {
+	return json.Marshal(messageUpdatedEnvelope{Type: typeMessageUpdated, Message: m})
+}
+
+// EncodeMessageDeleted serializa o envelope broadcast quando uma mensagem é
+// apagada.
+func EncodeMessageDeleted(id, channelID string) ([]byte, error) {
+	return json.Marshal(messageDeletedEnvelope{Type: typeMessageDeleted, ID: id, ChannelID: channelID})
 }
 
 // EncodeThreadCreated serializa o envelope broadcast quando uma thread de

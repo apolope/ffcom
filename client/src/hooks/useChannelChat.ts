@@ -4,6 +4,8 @@ import {
   fetchChannelHistory,
   openChannelSocket,
   sendCreateMessage,
+  sendDeleteMessage,
+  sendUpdateMessage,
   type ChannelMessage,
 } from '../lib/serverChannelApi'
 
@@ -14,6 +16,8 @@ interface UseChannelChatResult {
   status: ChatConnectionStatus
   error: string | undefined
   sendMessage: (content: string) => void
+  editMessage: (id: string, content: string) => void
+  deleteMessage: (id: string) => void
 }
 
 // Carrega o histórico (REST) e mantém uma conexão WebSocket para um canal de
@@ -61,6 +65,12 @@ export function useChannelChat(
           if (!frame) return
           if (frame.type === 'message.created') {
             setMessages((prev) => [...prev, frame.message])
+          } else if (frame.type === 'message.updated') {
+            setMessages((prev) =>
+              prev.map((m) => (m.id === frame.message.id ? frame.message : m)),
+            )
+          } else if (frame.type === 'message.deleted') {
+            setMessages((prev) => prev.filter((m) => m.id !== frame.id))
           } else if (frame.type === 'error') {
             setError(frame.error)
           }
@@ -85,5 +95,17 @@ export function useChannelChat(
     sendCreateMessage(socket, content)
   }
 
-  return { messages, status, error, sendMessage }
+  function editMessage(id: string, content: string) {
+    const socket = socketRef.current
+    if (!socket || socket.readyState !== WebSocket.OPEN) return
+    sendUpdateMessage(socket, id, content)
+  }
+
+  function deleteMessage(id: string) {
+    const socket = socketRef.current
+    if (!socket || socket.readyState !== WebSocket.OPEN) return
+    sendDeleteMessage(socket, id)
+  }
+
+  return { messages, status, error, sendMessage, editMessage, deleteMessage }
 }

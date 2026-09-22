@@ -122,13 +122,38 @@ func handleChannelWS(hub *realtime.Hub, channels *store.ChannelStore, roles *sto
 			return
 		}
 		client.ReadPump(func(raw []byte) {
-			if !canSend {
-				client.SendError("sem permissão para enviar mensagens neste canal")
-				return
-			}
-			handleIncomingMessage(r.Context(), hub, messages, channelID, member.ID, client, raw)
+			handleIncomingTextFrame(r.Context(), hub, messages, channelID, member.ID, effective, canSend, client, raw)
 		})
 	})
+}
+
+// handleIncomingTextFrame despacha um frame recebido num canal de texto:
+// "message.create" (exige SendMessages, checado uma vez por conexão — ver
+// canSend acima), "message.update" ou "message.delete" (autoria/Administrator
+// checados por mensagem dentro de cada handler, não pelo bit SendMessages —
+// ver docs/architecture.md, "Decisão: editar/apagar mensagem de texto").
+// Qualquer outro tipo é rejeitado com error.
+func handleIncomingTextFrame(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, channelID, memberID string, effective int64, canSend bool, client *realtime.Client, raw []byte) {
+	frameType, err := realtime.FrameType(raw)
+	if err != nil {
+		client.SendError(err.Error())
+		return
+	}
+
+	switch frameType {
+	case realtime.TypeMessageCreate:
+		if !canSend {
+			client.SendError("sem permissão para enviar mensagens neste canal")
+			return
+		}
+		handleIncomingMessage(ctx, hub, messages, channelID, memberID, client, raw)
+	case realtime.TypeMessageUpdate:
+		handleIncomingMessageUpdate(ctx, hub, messages, channelID, memberID, client, raw)
+	case realtime.TypeMessageDelete:
+		handleIncomingMessageDelete(ctx, hub, messages, channelID, memberID, effective, client, raw)
+	default:
+		client.SendError(fmt.Sprintf("tipo de frame desconhecido: %q", frameType))
+	}
 }
 
 func handleIncomingMessage(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, channelID, authorMemberID string, client *realtime.Client, raw []byte) {
@@ -158,6 +183,104 @@ func handleIncomingMessage(ctx context.Context, hub *realtime.Hub, messages *sto
 	payload, err := realtime.EncodeMessageCreated(toMessageView(m))
 	if err != nil {
 		log.Printf("server-channel: erro ao codificar mensagem criada: %v", err)
+		return
+	}
+	hub.Broadcast(channelID, payload)
+}
+
+// handleIncomingMessageUpdate edita uma mensagem existente. Só o autor pode
+// editar a própria mensagem — edição por moderação não está no escopo desta
+// v1 (Administrator só pode apagar, ver handleIncomingMessageDelete).
+func handleIncomingMessageUpdate(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, channelID, memberID string, client *realtime.Client, raw []byte) {
+	incoming, err := realtime.DecodeMessageUpdate(raw)
+	if err != nil {
+		client.SendError(err.Error())
+		return
+	}
+
+	content := strings.TrimSpace(incoming.Content)
+	if content == "" {
+		client.SendError("conteúdo da mensagem não pode ser vazio")
+		return
+	}
+	if len(content) > maxMessageContentLength {
+		client.SendError(fmt.Sprintf("conteúdo excede o limite de %d caracteres", maxMessageContentLength))
+		return
+	}
+
+	existing, err := messages.GetByID(ctx, incoming.ID)
+	if errors.Is(err, store.ErrNotFound) {
+		client.SendError("mensagem não encontrada")
+		return
+	}
+	if err != nil {
+		log.Printf("server-channel: erro ao buscar mensagem para editar: %v", err)
+		client.SendError("erro ao editar mensagem")
+		return
+	}
+	if existing.ChannelID != channelID {
+		client.SendError("mensagem não pertence a este canal")
+		return
+	}
+	if existing.AuthorMemberID != memberID {
+		client.SendError("só o autor pode editar a mensagem")
+		return
+	}
+
+	m, err := messages.Edit(ctx, incoming.ID, content)
+	if err != nil {
+		log.Printf("server-channel: erro ao editar mensagem: %v", err)
+		client.SendError("erro ao editar mensagem")
+		return
+	}
+
+	payload, err := realtime.EncodeMessageUpdated(toMessageView(m))
+	if err != nil {
+		log.Printf("server-channel: erro ao codificar mensagem editada: %v", err)
+		return
+	}
+	hub.Broadcast(channelID, payload)
+}
+
+// handleIncomingMessageDelete apaga uma mensagem existente. O autor sempre
+// pode apagar a própria mensagem; Administrator pode apagar qualquer
+// mensagem do canal (moderação — não há bit de permissão dedicado a
+// mensagens, ver docs/architecture.md).
+func handleIncomingMessageDelete(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, channelID, memberID string, effective int64, client *realtime.Client, raw []byte) {
+	incoming, err := realtime.DecodeMessageDelete(raw)
+	if err != nil {
+		client.SendError(err.Error())
+		return
+	}
+
+	existing, err := messages.GetByID(ctx, incoming.ID)
+	if errors.Is(err, store.ErrNotFound) {
+		client.SendError("mensagem não encontrada")
+		return
+	}
+	if err != nil {
+		log.Printf("server-channel: erro ao buscar mensagem para apagar: %v", err)
+		client.SendError("erro ao apagar mensagem")
+		return
+	}
+	if existing.ChannelID != channelID {
+		client.SendError("mensagem não pertence a este canal")
+		return
+	}
+	if existing.AuthorMemberID != memberID && !permissions.Has(effective, permissions.Administrator) {
+		client.SendError("sem permissão para apagar esta mensagem")
+		return
+	}
+
+	if err := messages.Delete(ctx, incoming.ID); err != nil {
+		log.Printf("server-channel: erro ao apagar mensagem: %v", err)
+		client.SendError("erro ao apagar mensagem")
+		return
+	}
+
+	payload, err := realtime.EncodeMessageDeleted(incoming.ID, channelID)
+	if err != nil {
+		log.Printf("server-channel: erro ao codificar mensagem apagada: %v", err)
 		return
 	}
 	hub.Broadcast(channelID, payload)

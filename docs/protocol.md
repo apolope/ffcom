@@ -108,14 +108,14 @@ Base URL: `KnownServer.baseUrl`, uma por servidor cadastrado no client (endereç
 Mesma rota para canal de **texto** e **forum** (`docs/architecture.md`, "Decisão: canal forum"); o tipo do canal decide quais frames são aceitos. `SendMessages` é checado uma vez na conexão, não por frame.
 
 **Canal de texto:**
-- client → servidor: `message.create` — `{"type": "message.create", "content": "..."}`.
-- servidor → client: `message.created` — `{"type": "message.created", "message": Message}`, broadcast a todo o canal.
+- client → servidor: `message.create` — `{"type": "message.create", "content": "..."}`; `message.update` — `{"type": "message.update", "id": "...", "content": "..."}` (só o autor); `message.delete` — `{"type": "message.delete", "id": "..."}` (autor ou `Administrator`).
+- servidor → client: `message.created` — `{"type": "message.created", "message": Message}`; `message.updated` — `{"type": "message.updated", "message": Message}`; `message.deleted` — `{"type": "message.deleted", "id": "...", "channelId": "..."}`. Todos broadcast a todo o canal.
 
 **Canal forum** (mesmo hub, particionado por `channel_id`, não por thread — todo mundo conectado ao canal recebe todo evento, o client filtra por `threadId`):
 - client → servidor: `thread.create` — `{"type": "thread.create", "title": "...", "content": "..."}` (abre thread + post inicial); `post.create` — `{"type": "post.create", "threadId": "...", "content": "..."}`.
 - servidor → client: `thread.created` — `{"type": "thread.created", "thread": Thread, "message": Message}`; `post.created` — `{"type": "post.created", "message": Message}`.
 
-Em ambos os casos: `error` para conteúdo vazio, acima do limite (mensagem: 4000 chars, título de thread: 200 chars), sem `SendMessages`, thread de outro canal, ou tipo de frame desconhecido.
+Em ambos os casos: `error` para conteúdo vazio, acima do limite (mensagem: 4000 chars, título de thread: 200 chars), sem `SendMessages`, thread de outro canal, ou tipo de frame desconhecido. `message.update`/`message.delete` também retornam `error` para mensagem não encontrada, mensagem de outro canal, ou sem autoria/`Administrator`.
 
 ## Não confirmado / fora do escopo deste documento
 

@@ -95,6 +95,27 @@ func (s *MessageStore) Create(ctx context.Context, channelID string, threadID *s
 	return m, nil
 }
 
+// GetByID busca uma mensagem por id — usado para checar autoria (edição) ou
+// autoria/Administrator (exclusão) antes de aplicar a operação, ver
+// internal/httpapi/channel_ws.go.
+func (s *MessageStore) GetByID(ctx context.Context, id string) (Message, error) {
+	const query = `
+		SELECT id, channel_id, thread_id, author_member_id, content, created_at, edited_at
+		FROM messages
+		WHERE id = $1
+	`
+	var m Message
+	err := s.pool.QueryRow(ctx, query, id).
+		Scan(&m.ID, &m.ChannelID, &m.ThreadID, &m.AuthorMemberID, &m.Content, &m.CreatedAt, &m.EditedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Message{}, ErrNotFound
+	}
+	if err != nil {
+		return Message{}, fmt.Errorf("messages: get by id: %w", err)
+	}
+	return m, nil
+}
+
 func (s *MessageStore) Edit(ctx context.Context, id, content string) (Message, error) {
 	const query = `
 		UPDATE messages SET content = $2, edited_at = now()
