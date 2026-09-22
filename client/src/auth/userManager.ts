@@ -10,11 +10,13 @@ export const userManager = new UserManager({
   redirect_uri: `${window.location.origin}${AUTH_CALLBACK_PATH}`,
   post_logout_redirect_uri: window.location.origin,
   response_type: 'code',
-  scope: 'openid profile email',
-  // Sem renovação silenciosa automática por enquanto: exigiria um segundo
-  // redirect_uri (iframe de silent renew) cadastrado no blueprint do
-  // Authentik, que hoje só tem o callback principal (ver TODO.md). Quando o
-  // access token expirar, o usuário simplesmente loga de novo.
-  automaticSilentRenew: false,
+  // offline_access pede um refresh_token ao Authentik (precisa do scope
+  // mapping correspondente no provider, ver blueprint em abs-3d-printer) —
+  // usado pela renovação silenciosa abaixo em vez do padrão de iframe
+  // (prompt=none), que depende de cookie de terceiro e não funciona bem no
+  // build Electron (esquema app://). Ver docs/architecture.md, "Decisão:
+  // renovação silenciosa de sessão no client".
+  scope: 'openid profile email offline_access',
+  automaticSilentRenew: true,
   userStore: new WebStorageStateStore({ store: window.localStorage }),
 })

@@ -234,7 +234,24 @@ Não existe endpoint de cadastro separado: `internal/auth/middleware.go` (`auth.
 
 **Sem renovação silenciosa automática (`automaticSilentRenew: false`):** exigiria um segundo `redirect_uri` (iframe de silent renew) cadastrado no blueprint do Authentik, que hoje só tem o callback principal. Quando o access token expira, o usuário loga de novo — aceitável nesta fase.
 
-**Revisitar quando:** o app ganhar roteamento real (`react-router` ou similar) — nesse ponto vale avaliar se `react-oidc-context` (que já integra bem com rotas protegidas) passa a valer a pena. Renovação silenciosa via refresh token pode ser revisitada junto do ajuste de `redirect_uris` de produção.
+**Revisitar quando:** o app ganhar roteamento real (`react-router` ou similar) — nesse ponto vale avaliar se `react-oidc-context` (que já integra bem com rotas protegidas) passa a valer a pena. ~~Renovação silenciosa via refresh token pode ser revisitada junto do ajuste de `redirect_uris` de produção~~ — feito, ver "Decisão: renovação silenciosa de sessão no client" abaixo.
+
+## Decisão: renovação silenciosa de sessão no client — refresh token (`offline_access`), não iframe
+
+**Contexto:** item de TODO em aberto ("Ligar `automaticSilentRenew: true`") — sem renovação silenciosa, o access token expira (`access_token_validity: hours=1` no provider Authentik) e o usuário precisa logar de novo sem aviso.
+
+**Alternativas consideradas:**
+- **Iframe de silent renew (`prompt=none`)**, o padrão histórico do `oidc-client-ts`: exigiria um segundo `redirect_uri` (ex. `/auth/silent-renew.html`) cadastrado no blueprint do Authentik e uma página dedicada só para rodar `signinSilentCallback()` dentro do iframe oculto. Descartada: depende do navegador permitir ler o cookie de sessão do Authentik dentro de um iframe cross-origin — exatamente o que Chrome/Safari vêm bloqueando por padrão (third-party cookies) — e complica ainda mais no build Electron empacotado (esquema customizado `app://ffcom`, sem garantia de que um iframe oculto navegando para uma origem `https://` funcione da mesma forma dentro da `BrowserWindow`).
+- **Refresh token (`offline_access`):** escolhida. `oidc-client-ts`, com `automaticSilentRenew: true`, usa o `refresh_token` do `User` (quando presente) para renovar via POST direto ao token endpoint — sem iframe, sem depender de cookie de terceiro, mesmo comportamento em web/PWA/Electron.
+
+**Decisão:**
+1. `client/src/auth/userManager.ts`: `scope` ganhou `offline_access` (`'openid profile email offline_access'`) e `automaticSilentRenew: true`.
+2. **Authentik exige o scope mapping explícito, não só o client pedir o scope:** a partir da 2024.2, mesmo com `grant_types` incluindo `refresh_token` (já presente desde o registro inicial do provider `ffcom`) e o client requisitando `offline_access`, o Authentik só emite `refresh_token` se `offline_access` também estiver na lista `property_mappings` do provider. Adicionado em `abs-3d-printer/infra/authentik/blueprints/providers-ffcom.yaml` (`!Find [authentik_providers_oauth2.scopemapping, [scope_name, offline_access]]`), ao lado de `openid`/`email`/`profile` já existentes — precisa de `ak apply_blueprint` (ou restart do `authentik-server`) na instância central para valer, mesmo procedimento já usado nos registros anteriores do provider `ffcom`.
+3. `client/src/auth/AuthProvider.tsx`: novo listener `userManager.events.addSilentRenewError` — se o refresh token expirar ou for revogado, a renovação falha silenciosamente por definição (não há iframe/redirect pra usuário ver); sem esse listener o estado React ficaria "signed-in" com um access token morto até a próxima chamada de API falhar. O listener força `applyUser(null)` (volta pra tela de login).
+
+**Razão:** para um app que roda como PWA web e como Electron empacotado, refresh token evita a fragilidade do iframe (cookies de terceiro, comportamento inconsistente entre WebViews/Chromium embutido) sem exigir nenhum `redirect_uri` novo no Authentik — só um scope mapping adicional no provider já existente.
+
+**Revisitar quando:** o Authentik desta instância passar a suportar rotação de refresh token de forma mais agressiva (hoje não configurado explicitamente) e valer a pena revisar o tempo de vida do refresh token para reduzir a janela de uso indevido caso um dispositivo seja comprometido (mesma categoria de risco já aceito para outros tokens guardados em `localStorage` neste client).
 
 ## Decisão: CORS em server-channel — origens liberadas via `CORS_ALLOWED_ORIGINS`
 

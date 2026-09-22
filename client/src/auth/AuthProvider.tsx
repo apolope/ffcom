@@ -53,11 +53,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       init()
     }
 
+    function onSilentRenewError(err: Error) {
+      // Refresh token expirado/revogado: sem isso o estado ficaria
+      // "signed-in" com um access token morto até a próxima chamada de API
+      // falhar. Força novo login em vez de deixar a UI presa.
+      console.error('ffcom: falha ao renovar sessão silenciosamente', err)
+      applyUser(null)
+    }
+
     userManager.events.addUserLoaded(applyUser)
     userManager.events.addUserUnloaded(() => applyUser(null))
+    userManager.events.addSilentRenewError(onSilentRenewError)
     return () => {
       userManager.events.removeUserLoaded(applyUser)
       userManager.events.removeUserUnloaded(() => applyUser(null))
+      userManager.events.removeSilentRenewError(onSilentRenewError)
     }
   }, [])
 
