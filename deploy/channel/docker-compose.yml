@@ -73,6 +73,12 @@ services:
       # ligar depois de confirmar que o Nginx Proxy Manager na frente
       # (VMSUBS24OCI0102) realmente seta esse header.
       REQUIRE_TLS: ${REQUIRE_TLS:-}
+      # Rate limiting — ver docs/architecture.md, "Decisão: rate limiting em
+      # server-channel".
+      RATE_LIMIT_RPM: ${RATE_LIMIT_RPM:-}
+      RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-}
+      RATE_LIMIT_WS_RPM: ${RATE_LIMIT_WS_RPM:-}
+      RATE_LIMIT_WS_BURST: ${RATE_LIMIT_WS_BURST:-}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
       LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:?defina LIVEKIT_PUBLIC_URL no .env (wss://livekit-test.ffcom.a3sitsolutions.com.br)}

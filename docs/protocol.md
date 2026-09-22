@@ -21,7 +21,7 @@ Os dois servidores validam o mesmo Bearer JWT emitido pela instância central de
 
 ## Convenções gerais
 
-- **Erros HTTP:** texto simples via `http.Error` (não JSON) — `Content-Type: text/plain`, corpo é a mensagem de erro em português. Status codes usados: `400` (corpo/parâmetro inválido), `401` (token ausente/inválido), `403` (sem permissão), `404` (recurso não encontrado), `409` (conflito — ex. convite já usado), `410 Gone` (convite expirado), `426 Upgrade Required` (TLS obrigatório, só quando `REQUIRE_TLS=true`, ver abaixo), `429` (rate limit, só `server-central`, ver abaixo).
+- **Erros HTTP:** texto simples via `http.Error` (não JSON) — `Content-Type: text/plain`, corpo é a mensagem de erro em português. Status codes usados: `400` (corpo/parâmetro inválido), `401` (token ausente/inválido), `403` (sem permissão), `404` (recurso não encontrado), `409` (conflito — ex. convite já usado), `410 Gone` (convite expirado), `426 Upgrade Required` (TLS obrigatório, só quando `REQUIRE_TLS=true`, ver abaixo), `429` (rate limit, ver abaixo).
 - **Respostas de sucesso:** JSON, `Content-Type: application/json`, `camelCase` em todos os campos.
 - **Paginação de histórico:** keyset pagination por `created_at`, sempre os mesmos dois query params — `before` (RFC3339, opcional) e `limit` (opcional, default 50, máximo 200). O servidor devolve mais recentes primeiro; o `client` inverte para ordem cronológica antes de renderizar (`fetchChannelHistory`, `fetchThreadMessages`, `fetchDirectMessages` em `client/src/lib/`).
 - **Frames de WebSocket:** envelope JSON uniforme `{"type": "...", ...payload}` nos dois servidores. O client → servidor emite um tipo (`*.create`); o servidor → client responde com o `*.created` correspondente (broadcast, **incluindo o próprio autor**, para confirmar id/timestamp atribuídos pelo servidor) ou `"error"` (`{"type": "error", "error": "..."}`, só para quem causou o erro).
@@ -116,6 +116,12 @@ Mesma rota para canal de **texto** e **forum** (`docs/architecture.md`, "Decisã
 - servidor → client: `thread.created` — `{"type": "thread.created", "thread": Thread, "message": Message}`; `post.created` — `{"type": "post.created", "message": Message}`.
 
 Em ambos os casos: `error` para conteúdo vazio, acima do limite (mensagem: 4000 chars, título de thread: 200 chars), sem `SendMessages`, thread de outro canal, ou tipo de frame desconhecido. `message.update`/`message.delete` também retornam `error` para mensagem não encontrada, mensagem de outro canal, ou sem autoria/`Administrator`.
+
+### Rate limiting
+
+Dois token buckets em memória, chaves diferentes (ver `docs/architecture.md`, "Decisão: rate limiting em server-channel"):
+- **REST** (toda a API exceto `/healthz`, incluindo o handshake de `GET /api/channels/{id}/ws`): por IP, `RATE_LIMIT_RPM` (padrão 120) / `RATE_LIMIT_BURST` (padrão 20). Excesso responde `429 Too Many Requests` com header `Retry-After`.
+- **Frames de WebSocket** (dentro de uma conexão de canal já aberta): por membro, `RATE_LIMIT_WS_RPM` (padrão 60) / `RATE_LIMIT_WS_BURST` (padrão 10). Excesso responde com um frame `error` (conexão permanece aberta, frame é descartado).
 
 ## Não confirmado / fora do escopo deste documento
 

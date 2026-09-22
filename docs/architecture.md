@@ -637,6 +637,22 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** um bit de permissão dedicado a moderação de mensagens for criado (ver TODO, kick/ban); ou quando canal forum precisar dos mesmos frames (hoje só citado como possibilidade, sem caso de uso concreto).
 
+## Decisão: rate limiting em server-channel — dois limiters, por IP na API REST e por membro nos frames de WebSocket
+
+**Contexto:** implementar o item de TODO "Rate limiting em `server-channel`". `server-central` já tinha proteção por IP (ver "Decisão: rate limiting em server-central"), mas `server-channel` não — apesar de ser exposto publicamente por cada self-hoster (REST + WebSocket de chat) e não ter nenhuma proteção contra spam/abuso.
+
+**Diferença em relação a server-central:** ali, o único tráfego de escrita repetido é REST — um limiter por IP sobre toda a API cobre o cenário inteiro. Aqui, o vetor mais óbvio de spam é enviar muitos frames `message.create` (ou `message.update`/`message.delete`/`thread.create`/`post.create`) numa única conexão WebSocket já estabelecida — um limiter que só olha a requisição HTTP de upgrade não enxerga nada do que acontece depois disso, então reaplicar exatamente o mesmo desenho de server-central deixaria o canal de chat, que é o alvo mais provável de abuso, sem proteção nenhuma.
+
+**Alternativas consideradas:** (1) um único limiter por IP cobrindo REST + o handshake de WS, igual a server-central — simples, mas não protege contra flood dentro de uma conexão já aberta; (2) limitar por IP também dentro do WS — mais simples de implementar (reaproveita a mesma chave), mas member ID é a identidade que já resolvemos no handshake (`auth.RequireMember`) e é o que o resto do sistema usa para autorização por mensagem (ver decisão de editar/apagar mensagem), então é a chave mais correta para atribuir "de quem" é o spam, além de não punir todo mundo atrás do mesmo IP/NAT por um único membro abusivo; (3) dois limiters (adotada).
+
+**Decisão:** dois `rateLimiter` (mesmo token bucket em memória de `server-central/internal/httpapi/ratelimit.go`, duplicado aqui — módulos Go separados, mesmo padrão de duplicação já usado por `requiretls.go`/`cors.go`):
+1. Um por IP (`clientIP`, mesma extração via `X-Forwarded-For`/`RemoteAddr`), aplicado via `withRateLimit` a toda a API REST exceto `/healthz` — cobre inclusive o handshake HTTP de `GET /api/channels/{id}/ws`. Configurável via `RATE_LIMIT_RPM`/`RATE_LIMIT_BURST` (mesmos nomes e mesmos padrões de `server-central`: 120/20).
+2. Um por `member.ID`, checado dentro do callback de `Client.ReadPump` em `handleChannelWS` (`internal/httpapi/channel_ws.go`), antes de despachar qualquer frame — tanto em canal de texto quanto forum. Excesso responde com um frame `error` (`"muitas mensagens, aguarde um instante"`) e descarta o frame, sem fechar a conexão. Configurável via `RATE_LIMIT_WS_RPM`/`RATE_LIMIT_WS_BURST`, padrão 60/10 — mais permissivo por minuto que o limite de REST, mas pensado para o ritmo de uma conversa (1 msg/s sustentado, rajada de 10), bem abaixo do que um cliente legítimo de chat de texto jamais precisaria.
+
+**Razão:** a mesma implementação de token bucket à mão (sem `golang.org/x/time/rate`) já vinha da decisão equivalente em `server-central` — sem motivo para trocar de abordagem aqui, só de reaproveitar a chave certa para cada superfície. Responder com frame `error` em vez de fechar a conexão no limiter de WS evita que um cliente legítimo que só mandou rajada maior que o normal (ex. colar várias linhas coladas rápido) perca a conexão e precise reconectar; ele só precisa esperar o bucket recarregar.
+
+**Revisitar quando:** os mesmos gatilhos já registrados na decisão de `server-central` (múltiplas réplicas de `server-channel` tornariam um bucket em memória por processo insuficiente); ou se um self-hoster relatar falso positivo em uso legítimo (ajustar via env, sem mudança de código).
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

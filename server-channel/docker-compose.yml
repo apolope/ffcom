@@ -95,6 +95,12 @@ services:
       # HTTPS". Padrão desligado (vazio), para não quebrar dev local sem
       # proxy na frente.
       REQUIRE_TLS: ${REQUIRE_TLS:-}
+      # Rate limiting — ver docs/architecture.md, "Decisão: rate limiting em
+      # server-channel".
+      RATE_LIMIT_RPM: ${RATE_LIMIT_RPM:-}
+      RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-}
+      RATE_LIMIT_WS_RPM: ${RATE_LIMIT_WS_RPM:-}
+      RATE_LIMIT_WS_BURST: ${RATE_LIMIT_WS_BURST:-}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
       # Endereço público que o client usa para se conectar ao LiveKit

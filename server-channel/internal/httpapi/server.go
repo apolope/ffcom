@@ -23,7 +23,13 @@ import (
 // allowedOrigins vem de CORS_ALLOWED_ORIGINS (ver docs/architecture.md,
 // "Decisão: CORS em server-channel") — origens do client (web/PWA,
 // Electron) autorizadas a chamar esta instância de uma origem diferente.
-func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string, liveKitAPIKey, liveKitAPISecret, liveKitPublicURL, version string, requireTLS bool) http.Handler {
+//
+// restRateLimitRPM/restRateLimitBurst configuram o limiter por IP sobre toda
+// a API REST (incluindo o handshake de WS); wsRateLimitRPM/wsRateLimitBurst
+// configuram o limiter por membro sobre frames recebidos numa conexão já
+// aberta — ver docs/architecture.md, "Decisão: rate limiting em
+// server-channel".
+func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string, liveKitAPIKey, liveKitAPISecret, liveKitPublicURL, version string, requireTLS bool, restRateLimitRPM, restRateLimitBurst, wsRateLimitRPM, wsRateLimitBurst int) http.Handler {
 	mux := http.NewServeMux()
 	hub := realtime.NewHub()
 
@@ -32,6 +38,7 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string
 		allowed[origin] = true
 	}
 	upgrader := newUpgrader(allowed)
+	wsLimiter := newRateLimiter(wsRateLimitRPM, wsRateLimitBurst)
 
 	mux.HandleFunc("GET /healthz", handleHealthz(version))
 
@@ -50,7 +57,7 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string
 	mux.Handle("GET /api/channels/{id}/messages", protected(handleListMessages(db.Channels, db.Roles, db.ChannelOverwrites, db.Messages)))
 	mux.Handle("GET /api/channels/{id}/threads", protected(handleListThreads(db.Channels, db.Roles, db.ChannelOverwrites, db.Messages)))
 	mux.Handle("GET /api/threads/{id}/messages", protected(handleListThreadMessages(db.Roles, db.ChannelOverwrites, db.Messages)))
-	mux.Handle("GET /api/channels/{id}/ws", protected(handleChannelWS(hub, db.Channels, db.Roles, db.ChannelOverwrites, db.Messages, upgrader)))
+	mux.Handle("GET /api/channels/{id}/ws", protected(handleChannelWS(hub, db.Channels, db.Roles, db.ChannelOverwrites, db.Messages, upgrader, wsLimiter)))
 	mux.Handle("POST /api/channels/{id}/voice/token", protected(handleVoiceToken(db.Channels, db.Roles, db.ChannelOverwrites, liveKitAPIKey, liveKitAPISecret, liveKitPublicURL)))
 	mux.Handle("GET /api/channels/{id}/overwrites", protected(handleListChannelOverwrites(db.Channels, db.Roles, db.ChannelOverwrites)))
 	mux.Handle("PUT /api/channels/{id}/overwrites/{roleId}", protected(handleSetChannelOverwrite(db.Channels, db.Roles, db.ChannelOverwrites)))
@@ -65,5 +72,6 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string
 	mux.Handle("POST /api/members/{memberId}/roles/{roleId}", protected(handleAssignRole(db.Members, db.Roles)))
 	mux.Handle("DELETE /api/members/{memberId}/roles/{roleId}", protected(handleRemoveRole(db.Roles)))
 
-	return withRequireTLS(requireTLS, withCORS(allowed, mux))
+	restLimiter := newRateLimiter(restRateLimitRPM, restRateLimitBurst)
+	return withRequireTLS(requireTLS, withCORS(allowed, withRateLimit(restLimiter, mux)))
 }

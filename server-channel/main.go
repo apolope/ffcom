@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
@@ -54,6 +55,10 @@ func main() {
 		liveKitPublicURL,
 		version,
 		envBool("REQUIRE_TLS", false),
+		envInt("RATE_LIMIT_RPM", 120),
+		envInt("RATE_LIMIT_BURST", 20),
+		envInt("RATE_LIMIT_WS_RPM", 60),
+		envInt("RATE_LIMIT_WS_BURST", 10),
 	)
 
 	log.Printf("server-channel: versão %s, ouvindo em :%s (OIDC issuer: %s)", version, port, issuerURL)
@@ -66,6 +71,23 @@ func requireEnv(name string) string {
 	value := os.Getenv(name)
 	if value == "" {
 		log.Fatalf("server-channel: variável de ambiente %s não definida", name)
+	}
+	return value
+}
+
+// envInt lê uma variável de ambiente inteira opcional, com fallback se
+// ausente ou inválida (RATE_LIMIT_RPM/RATE_LIMIT_BURST e
+// RATE_LIMIT_WS_RPM/RATE_LIMIT_WS_BURST — ver
+// internal/httpapi/ratelimit.go).
+func envInt(name string, fallback int) int {
+	raw := os.Getenv(name)
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		log.Printf("server-channel: %s inválido (%q), usando padrão %d", name, raw, fallback)
+		return fallback
 	}
 	return value
 }
