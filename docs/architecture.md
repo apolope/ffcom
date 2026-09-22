@@ -607,6 +607,18 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** `post_logout_redirect_uri` (também `window.location.origin`, hoje sem uso ativo de logout redirect testado) precisar de cadastro equivalente no Authentik; ou se o esquema de deep link para convites (`docs/architecture.md`, "Revisitar quando" da decisão de convites) for implementado — os dois podem reaproveitar o mesmo `protocol.handle`.
 
+## Decisão: CI de testes/lint — workflow novo separado do deploy, disparado em `push`/`pull_request`
+
+**Contexto:** implementar o item de TODO "CI rodar testes/lint de código". Os três workflows existentes (`deploy-ffcom-{central,channel,client}.yml`) só disparam em `workflow_dispatch` ou push de tag (`central-v*`/`channel-v*`/`client-v*`, ver "Decisão: versionamento e release dos binários"), e cada um só faz Hadolint (Dockerfile) + Gitleaks (segredo) antes do build/push/deploy — nenhum roda `go vet`/`go test` nem lint/build do frontend. `CONTRIBUTING.md` já documentava esses comandos como algo a rodar manualmente antes de commitar (`go vet ./...`, `go test ./...` nos dois servidores; `npm run lint`, `npm run build` no client), mas nada os executava automaticamente.
+
+**Alternativas consideradas:** (a) adicionar um job de teste/lint dentro de cada workflow de deploy existente, antes do build; (b) um workflow novo (`ci.yml`), disparado em `push`/`pull_request` em vez de tag.
+
+**Decisão:** (b). `.github/workflows/ci.yml`, com três jobs independentes (`test-central`, `test-channel`, `lint-build-client`), cada um rodando os mesmos comandos já documentados em `CONTRIBUTING.md`. Roda nos mesmos runners self-hosted (`[self-hosted, a3s-network]`) dos outros workflows.
+
+**Razão:** os workflows de deploy só disparam em tag — se o job de teste ficasse lá dentro, um `push` comum (o caso comum durante o desenvolvimento, antes de cortar uma release) nunca rodaria `go test`/lint, só o Hadolint/Gitleaks já existentes. Um workflow separado disparado em `push`/`pull_request` cobre esse caso sem tocar nos workflows de deploy (que continuam só com a checagem de Dockerfile/segredo antes do build, já suficiente ali porque o código já devia ter passado pelo CI antes de virar tag).
+
+**Revisitar quando:** o repositório ganhar teste de integração contra Postgres real (hoje os únicos 2 arquivos `_test.go` são unitários, sem dependência externa) — nesse ponto o job de teste precisa subir um serviço de Postgres (`services:` do GitHub Actions) em vez de só `go test ./...`.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

@@ -57,10 +57,11 @@ Não repetidas aqui porque já estão registradas, decisão a decisão, em
 
 ## Testes e lint
 
-O pipeline de CI (`.github/workflows/deploy-ffcom-*.yml`) hoje só roda lint
-de Dockerfile (Hadolint) e scan de segredo (Gitleaks) — **não** roda testes
-nem lint de aplicação automaticamente (ver `TODO.md`). Até isso mudar, rode
-localmente antes de commitar:
+`.github/workflows/ci.yml` roda em todo `push`/`pull_request` (separado dos
+workflows de deploy, que só disparam em tag — ver `docs/architecture.md`,
+"Decisão: CI de testes/lint"): `go vet`/`go test` para `server-central` e
+`server-channel`, `npm run lint`/`npm run build` para `client`. Rode os
+mesmos comandos localmente antes de commitar, para não depender só do CI:
 
 ```
 # server-central/ e server-channel/

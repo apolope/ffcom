@@ -1,0 +1,55 @@
+name: ci
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  test-central:
+    name: server-central (vet + test)
+    runs-on: [self-hosted, a3s-network]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server-central/go.mod
+      - name: go vet
+        working-directory: server-central
+        run: go vet ./...
+      - name: go test
+        working-directory: server-central
+        run: go test ./...
+
+  test-channel:
+    name: server-channel (vet + test)
+    runs-on: [self-hosted, a3s-network]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server-channel/go.mod
+      - name: go vet
+        working-directory: server-channel
+        run: go vet ./...
+      - name: go test
+        working-directory: server-channel
+        run: go test ./...
+
+  lint-build-client:
+    name: client (lint + build)
+    runs-on: [self-hosted, a3s-network]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: npm ci
+        working-directory: client
+        run: npm ci
+      - name: npm run lint
+        working-directory: client
+        run: npm run lint
+      - name: npm run build
+        working-directory: client
+        run: npm run build

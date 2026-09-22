@@ -21,6 +21,7 @@ Todas as decisões abaixo foram tomadas — ver `docs/architecture.md` para o de
 - [x] Docker Compose de referência para `server-central` (app Go + Postgres — Authentik é a instância central do `abs-3d-printer`, não roda aqui)
 - [x] Documentar port-forwarding / DNS dinâmico para quem for self-hostear `server-channel` atrás de NAT — `server-channel/README.md`, seção "Hospedando atrás de NAT (ex. em casa)": tabela de portas a encaminhar, serviço de DDNS recomendado para `LIVEKIT_PUBLIC_URL`/endereço divulgado, e a limitação de `TURN_EXTERNAL_IP` exigir IP literal (sem hostname)
 - [x] Pipeline de deploy (build + push GHCR + deploy) para os três componentes — `.github/workflows/deploy-ffcom-{central,channel,client}.yml`, ver `docs/architecture.md` ("Decisão: primeira implantação de teste"); ainda sem etapa de testes automatizados (só lint de Dockerfile via Hadolint e scan de segredo via Gitleaks)
+- [x] CI rodar testes/lint de código — `.github/workflows/ci.yml` (novo, roda em `push`/`pull_request`, separado dos workflows de deploy que só disparam em tag): `go vet`/`go test` para `server-central` e `server-channel`, `npm run lint`/`npm run build` para `client`. Ver `docs/architecture.md`
 - [x] Definir versionamento e forma de release dos binários (`server-central`, `server-channel`, `client`) — semver independente por componente, disparado por push de git tag (`central-v*`/`channel-v*`/`client-v*`); imagem GHCR ganha a tag de versão além do sha; `server-central`/`server-channel` expõem a versão em `GET /healthz`. Ver `docs/architecture.md`
 - [x] Provisionar `ffcom.a3sitsolutions.com` (DNS + certificado) para a instância oficial — domínio confirmado como `.com.br` (2026-09-21); coincide com o já usado na implantação de teste (`*.ffcom.a3sitsolutions.com.br`), que passa a ser a instância oficial, sem domínio novo a provisionar. Hostnames mantêm o sufixo `-test` onde já existia. Ver `docs/architecture.md`
 
@@ -59,6 +60,7 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [x] Endpoint/gateway de presença (quem está online)
 - [x] Implementar DMs: `server-central` como gateway de mensagens (armazenamento em Postgres + entrega via WebSocket)
 - [x] API para o client listar/adicionar/remover servidores conhecidos (adição manual via IP/DNS ou convite — sem discovery automático)
+- [ ] Upload de avatar — `avatar_url` já existe no schema e em `GET/PUT /api/me`, mas não há endpoint de upload nem UI que leia/edite o campo; hoje é campo morto
 
 ## server-channel
 
@@ -70,6 +72,10 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [x] Sistema de permissões/roles por servidor e por canal — bits em `internal/permissions` (ViewChannels/SendMessages/Voice/ManageInvites/ManageRoles/Administrator), role default "@everyone" implícita, dono do bootstrap ignora tudo, overwrites de canal por role (`internal/store/channel_overwrites.go`); API: `GET/POST/PATCH/DELETE /api/roles`, `POST/DELETE /api/members/{memberId}/roles/{roleId}`, `GET/PUT/DELETE /api/channels/{id}/overwrites[/{roleId}]`, `GET /api/members`; ver `docs/architecture.md`
 - [x] Convites (geração e validação) — `POST/GET /api/invites`, `DELETE /api/invites/{id}`; entrar no servidor (`POST /api/join`) passou a exigir um convite válido, exceto o primeiro membro (fundador/bootstrap do self-host); agora exige a permissão `ManageInvites` em vez de "é membro"; ver `docs/architecture.md`
 - [x] Registro do endereço do servidor (para o dono divulgar IP/DNS aos membros) — sem mudança de backend: `InviteServerDialog` gera um link com endereço embutido (`<baseUrl>/?invite=<code>`), `AddServerDialog` reconhece e separa endereço/código de volta; ver `docs/architecture.md`
+- [ ] Endpoint para editar/apagar mensagem de texto — `MessageStore.Edit`/`Delete` já existem em `internal/store/messages.go`, mas nenhuma rota REST/WS os expõe; mensagem enviada é permanente na prática
+- [ ] Rate limiting em `server-channel` — hoje só existe em `server-central`; `server-channel` é exposto publicamente por cada self-hoster (REST + WS de chat) e não tem nenhuma proteção contra spam/abuso
+- [ ] Kick/ban de membro — sistema de bits de permissão não tem bit para remover/banir; `docs/architecture.md` já cogita isso como candidato futuro, sem endpoint. Hoje não há forma de expulsar alguém problemático do servidor
+- [ ] Upload de anexo/imagem em mensagem — `messages.content` é só texto; sem campo, endpoint ou storage para arquivo
 
 ## client
 
@@ -87,6 +93,8 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [x] Lista de membros real (`MemberList` via `hooks/useServerMembers.ts`, `GET /api/members`) e painel de administração de roles (`ManageRolesDialog`, botão "Roles" na `ChannelSidebar`, visível só com `ManageRoles`/dono) — overwrite de canal por role ainda não tem UI, só a API (ver server-channel acima)
 - [x] Build Electron para Windows/macOS/Linux — `electron-builder` (`client/package.json`, campo `"build"`), scripts `package`/`package:win`/`package:mac`/`package:linux`; sem ícone customizado nem assinatura de código ainda. Ver `docs/architecture.md`
 - [x] Build web/PWA — `vite-plugin-pwa` (manifest + service worker via Workbox), ícones gerados por `@vite-pwa/assets-generator` a partir de `favicon.svg`, desligado no build Electron; ver `docs/architecture.md`
+- [ ] UI para editar/apagar mensagem própria — depende do endpoint em `server-channel` (ver item acima); hoje não existe em nenhum componente de chat
+- [ ] Notificação/contador de não lidas — nenhum indicador de atividade em canal/DM fechada; usuário só percebe mensagem nova abrindo cada canal manualmente
 
 ## Segurança
 
@@ -94,12 +102,15 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [x] Rate limiting / proteção contra abuso em `server-central` (cadastro, login) — limite geral por IP (token bucket em memória, `internal/httpapi/ratelimit.go`), já que não há endpoint de cadastro/login próprio (conta é criada implicitamente no `auth.Middleware`); configurável via `RATE_LIMIT_RPM`/`RATE_LIMIT_BURST`, padrão 120 req/min e burst 20; `/healthz` isento. Ver `docs/architecture.md`
 - [x] Política de permissões/roles em `server-channel` revisada contra escalonamento de privilégio — achado: `ManageRoles` sozinho permitia auto-conceder `Administrator` (criar role com esse bit + se auto-atribuir); corrigido com `permissions.Grants` (bits concedidos via criação/edição de role, atribuição de role e `Allow` de overwrite de canal não podem exceder a permissão base de quem chama). Ver `docs/architecture.md`
 - [x] Avaliar necessidade de criptografia ponta-a-ponta em DMs — implementado: NaCl box (X25519-XSalsa20-Poly1305) via `tweetnacl`, chave por dispositivo em `localStorage`, `server-central` armazena/roteia só ciphertext opaco. Ver `docs/architecture.md`, "Decisão: criptografia ponta-a-ponta em DMs", para o desenho completo e as limitações de escopo (sem multi-dispositivo, sem forward secrecy, sem proteção contra operador malicioso)
+- [ ] Ligar `automaticSilentRenew: true` (ou mitigar de outra forma) — hoje está desligado (`docs/architecture.md`, decisão consciente na v1), token expira e força novo login sem aviso; fricção real já registrada como "revisitar quando" mas sem item de TODO correspondente
+- [ ] Ligar `REQUIRE_TLS=true` no `.env` real da instância de teste (`/opt/ffcom/envs/`, fora do git) — a checagem já existe no código (`internal/httpapi/requiretls.go`), falta só confirmar que o NPM em `VMSUBS24OCI0102` seta `X-Forwarded-Proto` e ativar a flag
 
 ## Documentação
 
 - [x] Guia de self-hosting de `server-channel` (Docker Compose, TURN, DNS dinâmico, TLS via proxy reverso) — `server-channel/README.md`; READMEs de `server-central`/`client`/raiz também atualizados (estavam desatualizados, ainda descreviam o projeto como scaffolding sem código funcional). Ver `docs/architecture.md`
 - [x] Guia de contribuição (`CONTRIBUTING.md`) — estrutura do repo, ambiente de dev (Docker Compose por componente / `go run .` local), convenções de código (aponta para as decisões já registradas em `docs/architecture.md` em vez de duplicá-las), como rodar testes/lint localmente (CI ainda não roda nenhum dos dois — ver `TODO.md` acima), estilo de commit observado no `git log`, e o processo de marcar item do TODO + registrar decisão em `docs/architecture.md`
 - [x] Documentar protocolo/API entre os três componentes assim que definido — `docs/protocol.md`: endpoints REST, frames de WebSocket, autenticação, CORS e convenções dos dois servidores
+- [ ] Guia de backup/restore do Postgres — nenhum guia de self-hosting cobre como fazer backup/restore dos bancos de `server-central`/`server-channel`, que são a única fonte de dados do sistema
 
 ## Fora de escopo da v1 (registrado para não esquecer)
 
