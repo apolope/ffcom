@@ -86,6 +86,8 @@ Base URL: `KnownServer.baseUrl`, uma por servidor cadastrado no client (endereç
 | GET | `/api/categories` | Bearer + membro | — | `{categories: [{id, name, position, createdAt}]}` — só com canal visível | — |
 | GET | `/api/channels` | Bearer + membro | — | `{channels: [{id, categoryId?, name, type, position, createdAt}]}` — só visíveis | — |
 | GET | `/api/channels/{id}/messages?before=&limit=` | Bearer + membro + `ViewChannels` | — | `{messages: [Message]}` | `400` canal não é texto, `403`, `404` |
+| POST | `/api/channels/{id}/messages` | Bearer + membro + `SendMessages` | `multipart/form-data`: `content?`, `file?` (pelo menos um) | `201` `Message` | `400` sem conteúdo nem anexo, `413` anexo maior que `ATTACHMENT_MAX_MB`, `403`, `404` |
+| GET | `/api/attachments/{id}` | Bearer + membro + `ViewChannels` (do canal da mensagem do anexo) | — | bytes do arquivo (`Content-Type`/`Content-Disposition` do anexo) | `403`, `404` |
 | GET | `/api/channels/{id}/threads` | Bearer + membro + `ViewChannels` | — | `{threads: [Thread]}` | `400` canal não é forum |
 | GET | `/api/threads/{id}/messages?before=&limit=` | Bearer + membro + `ViewChannels` | — | `{messages: [Message]}` | `404` thread |
 | GET | `/api/channels/{id}/ws` | Bearer (subprotocolo) + membro + `ViewChannels` | upgrade WS | ver abaixo | `400` tipo de canal não suporta WS, `403` |
@@ -103,7 +105,7 @@ Base URL: `KnownServer.baseUrl`, uma por servidor cadastrado no client (endereç
 | POST | `/api/members/{memberId}/roles/{roleId}` | Bearer + membro + `ManageRoles` | — | `204` | `400` role default, `403` `Grants`, `404` membro/role |
 | DELETE | `/api/members/{memberId}/roles/{roleId}` | Bearer + membro + `ManageRoles` | — | `204` | `400` role default, `404` |
 
-`Message`: `{id, channelId, threadId?, authorMemberId, content, createdAt, editedAt?}`. `Thread`: `{id, channelId, title, authorMemberId, createdAt}`. `Role`: `{id, name, color?, permissions, position, isDefault, createdAt}`. `Invite`: `{id, code, createdByMemberId, maxUses?, uses, expiresAt?, createdAt}`. `Overwrite`: `{roleId, allow, deny}`.
+`Message`: `{id, channelId, threadId?, authorMemberId, content, createdAt, editedAt?, attachments?: [Attachment]}` — `attachments` só em mensagem de canal de texto (canal forum fora do escopo, ver docs/architecture.md, "Decisão: upload de anexo em mensagem"). `Attachment`: `{id, filename, contentType, sizeBytes, url}` — `url` é relativo (`/api/attachments/{id}`) e exige o mesmo Bearer token de qualquer outra rota, não dá pra usar direto num `<img src>` ou link de download. `Thread`: `{id, channelId, title, authorMemberId, createdAt}`. `Role`: `{id, name, color?, permissions, position, isDefault, createdAt}`. `Invite`: `{id, code, createdByMemberId, maxUses?, uses, expiresAt?, createdAt}`. `Overwrite`: `{roleId, allow, deny}`.
 
 **Bits de permissão** (`internal/permissions`, `int64`): `ViewChannels=1, SendMessages=2, Voice=4, ManageInvites=8, ManageRoles=16, Administrator=32, KickMembers=64, BanMembers=128`. `Owner=-1` (dono do bootstrap, ignora tudo). `Grants(base, target)` impede que `ManageRoles` sozinho conceda um bit que quem chama não possui — ver `docs/architecture.md`, "Decisão: ManageRoles não concede permissões além das próprias". Kick/ban não passam por `Grants` (não concedem bit nenhum a ninguém) e não têm checagem de hierarquia entre roles — só o bit e "não pode ser o dono/você mesmo", ver `docs/architecture.md`, "Decisão: kick/ban de membro".
 

@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useAuth } from '../auth/AuthProvider'
 import { useChannelChat } from '../hooks/useChannelChat'
 import { fetchMe } from '../lib/serverChannelApi'
+import { MessageAttachment } from './MessageAttachment'
 import type { Channel } from '../types'
 import './TextChannelView.css'
 
@@ -14,15 +15,14 @@ export function TextChannelView({ serverBaseUrl, channel }: TextChannelViewProps
   const { accessToken } = useAuth()
   const [selfMemberId, setSelfMemberId] = useState<string>()
   const [draft, setDraft] = useState('')
+  const [pendingFile, setPendingFile] = useState<File>()
   const [editingId, setEditingId] = useState<string>()
   const [editDraft, setEditDraft] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const { messages, status, error, sendMessage, editMessage, deleteMessage } = useChannelChat(
-    serverBaseUrl,
-    channel.id,
-    accessToken!,
-  )
+  const { messages, status, error, sendMessage, sendMessageWithFile, editMessage, deleteMessage } =
+    useChannelChat(serverBaseUrl, channel.id, accessToken!)
 
   useEffect(() => {
     fetchMe(serverBaseUrl, accessToken!)
@@ -39,9 +39,23 @@ export function TextChannelView({ serverBaseUrl, channel }: TextChannelViewProps
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
     const content = draft.trim()
-    if (!content) return
-    sendMessage(content)
+    if (!content && !pendingFile) return
+    if (pendingFile) {
+      sendMessageWithFile(content, pendingFile)
+      clearPendingFile()
+    } else {
+      sendMessage(content)
+    }
     setDraft('')
+  }
+
+  function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
+    setPendingFile(e.target.files?.[0])
+  }
+
+  function clearPendingFile() {
+    setPendingFile(undefined)
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   function startEditing(id: string, content: string) {
@@ -88,8 +102,11 @@ export function TextChannelView({ serverBaseUrl, channel }: TextChannelViewProps
                 </form>
               ) : (
                 <>
-                  <span className="message-content">{m.content}</span>
+                  {m.content && <span className="message-content">{m.content}</span>}
                   {m.editedAt && <span className="message-edited">(editada)</span>}
+                  {m.attachments?.map((a) => (
+                    <MessageAttachment key={a.id} serverBaseUrl={serverBaseUrl} attachment={a} />
+                  ))}
                   {isSelf && (
                     <span className="message-actions">
                       <button type="button" onClick={() => startEditing(m.id, m.content)}>
@@ -110,7 +127,23 @@ export function TextChannelView({ serverBaseUrl, channel }: TextChannelViewProps
         )}
       </div>
       {error && <div className="message-error">{error}</div>}
+      {pendingFile && (
+        <div className="pending-attachment">
+          <span>{pendingFile.name}</span>
+          <button type="button" onClick={clearPendingFile}>
+            remover
+          </button>
+        </div>
+      )}
       <form className="message-form" onSubmit={handleSubmit}>
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileChange}
+          disabled={status !== 'open'}
+          className="message-file-input"
+          title="Anexar arquivo"
+        />
         <input
           type="text"
           value={draft}
@@ -118,7 +151,7 @@ export function TextChannelView({ serverBaseUrl, channel }: TextChannelViewProps
           placeholder={`Enviar mensagem em #${channel.name}`}
           disabled={status !== 'open'}
         />
-        <button type="submit" disabled={status !== 'open' || draft.trim() === ''}>
+        <button type="submit" disabled={status !== 'open' || (draft.trim() === '' && !pendingFile)}>
           Enviar
         </button>
       </form>

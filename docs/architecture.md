@@ -675,6 +675,28 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** existir demanda por banimento com expiração automática (hoje é permanente até um unban manual); ou por hierarquia entre roles para kick/ban, se algum self-hoster relatar moderador expulsando outro moderador de igual ou maior nível.
 
+## Decisão: upload de anexo em mensagem — disco local, mensagem via REST separada do WebSocket
+
+**Contexto:** implementar o item de TODO "Upload de anexo/imagem em mensagem" — `messages.content` era só texto, sem campo, endpoint ou storage para arquivo. Escopo limitado a canal de texto (canal forum fica de fora, mesmo critério já usado na decisão de editar/apagar mensagem).
+
+**Alternativas consideradas (onde guardar o arquivo):** objeto storage compatível com S3 (MinIO self-hosted, ou um bucket de nuvem); disco local do host, atrás de um volume Docker.
+
+**Decisão:** disco local, via `internal/storage.FileStore` — um diretório configurável (`ATTACHMENTS_DIR`, padrão `/data/attachments`) montado como volume Docker (`attachments_data` na referência de self-host, `ffcom_channel_attachments` na implantação de teste), mesmo padrão já usado pelo Postgres.
+
+**Razão:** MinIO (ou equivalente) adicionaria mais um serviço ao Docker Compose de cada self-hoster, na mesma categoria de custo que já pesou contra SFU próprio sobre Pion (ver decisão do LiveKit) e contra o SDK oficial do LiveKit (ver decisão de integração de voz) — mais uma dependência pesada para uma operação que, na escala de uma comunidade self-hosted, não precisa dela. Um bucket de nuvem trocaria a filosofia "self-hosted, sem dependência de terceiro" por uma conta externa obrigatória. Disco local é o que já vale para Postgres; o único custo é não escalar horizontalmente (`server-channel` continua sendo um processo único, mesmo limite já aceito em outras decisões deste sistema).
+
+**Chave de armazenamento:** `storage_key` é gerada pelo servidor (16 bytes aleatórios, hex) — nunca o filename original enviado pelo client, para não abrir path traversal a partir de um nome de arquivo controlado pelo usuário. `filename`/`content_type` originais ficam só como metadado em `attachments` (migration `0004_message_attachments`), usados para exibição e `Content-Disposition` no download.
+
+**Mensagem com anexo não vai pelo WebSocket:** o handshake de `GET /api/channels/{id}/ws` (e o frame `message.create` depois de aberto) não tem como carregar um `multipart/form-data`. Em vez de inventar um jeito de mandar bytes de arquivo por um frame JSON (base64 infla ~33% o payload e o limite de frame do WebSocket já é apertado, ver `maxMessageSize` em `internal/realtime`), mensagem com anexo ganhou uma rota REST própria: `POST /api/channels/{id}/messages` (multipart, campos `content` opcional e `file` opcional — pelo menos um dos dois obrigatório). O broadcast (`message.created`) usa o mesmo `realtime.Hub` do fluxo via WebSocket, então quem está com o canal aberto recebe a mensagem em tempo real por qualquer um dos dois caminhos, inclusive quem enviou.
+
+**Tamanho máximo:** `ATTACHMENT_MAX_MB` (padrão 8 MB), aplicado via `http.MaxBytesReader` sobre o corpo da requisição antes de `ParseMultipartForm`. Self-hoster com proxy reverso na frente (produção sempre tem) precisa confirmar que o `client_max_body_size` (ou equivalente) do proxy acomoda esse valor — documentado no `.env.example` e no `.env` da implantação de teste, não automatizado (mesmo critério já usado para `REQUIRE_TLS`: a checagem existe no código, a config do proxy é responsabilidade de quem hospeda).
+
+**Download exige Bearer token:** `GET /api/attachments/{id}` está atrás do mesmo `auth.RequireMember` + checagem de `ViewChannels` no canal da mensagem do resto da API — não existe rota pública para servir o arquivo direto. Consequência aceita: um `<img src="...">` ou clique direto num link não funciona (a API de fetch do navegador não deixa setar `Authorization` nesses casos), então o client sempre busca via `fetch()` com o Bearer token e monta uma `Blob`/object URL local (`fetchAttachmentBlob` em `client/src/lib/serverChannelApi.ts`, usado por `components/MessageAttachment.tsx`) — mesmo tipo de contorno que o WebSocket de canal já precisa (subprotocolo `access_token`) pela mesma limitação de navegador.
+
+**Exclusão de mensagem limpa o arquivo:** `attachments.message_id` é `ON DELETE CASCADE`, então apagar uma mensagem já limpa a linha em Postgres sozinho — mas não o arquivo em disco. `handleIncomingMessageDelete` busca os anexos antes de apagar a mensagem e chama `FileStore.Delete` depois, best-effort (erro ao apagar o arquivo fica só logado, não desfaz a exclusão da mensagem nem bloqueia a resposta ao client). Editar mensagem (`message.update`) não mexe em anexo — é imutável nesta v1 — mas o broadcast da edição precisa reanexar o que já existia, ou o client perderia a exibição do anexo ao aplicar o `message.updated` (que substitui a mensagem inteira no estado local).
+
+**Revisitar quando:** existir demanda por mais de um anexo por mensagem (schema já é 1:N, só a v1 que assume um só); por anexo em canal forum; ou por um self-hoster relatar que 8 MB é baixo demais para o uso real (ajustar via `ATTACHMENT_MAX_MB`, sem mudança de código).
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

@@ -17,8 +17,17 @@
 
 .message {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: baseline;
+}
+
+/* Anexo (imagem ou chip de download) sempre numa linha própria, abaixo do
+   resto da mensagem, mesmo layout flex de .message sem precisar reestruturar
+   o JSX. */
+.message .attachment {
+  flex-basis: 100%;
+  margin-top: 0;
 }
 
 .message-author {
@@ -106,6 +115,33 @@
   padding: 4px 16px;
   color: #e5484d;
   font-size: 0.9em;
+}
+
+.pending-attachment {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 16px;
+  color: var(--text);
+  font-size: 0.85em;
+}
+
+.pending-attachment button {
+  font: inherit;
+  font-size: 0.85em;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.message-file-input {
+  flex: 0 0 auto;
+  max-width: 160px;
+  font-size: 0.85em;
+  color: var(--text);
 }
 
 .message-form {

@@ -5,6 +5,7 @@ import {
   openChannelSocket,
   sendCreateMessage,
   sendDeleteMessage,
+  sendMessageWithAttachment,
   sendUpdateMessage,
   type ChannelMessage,
 } from '../lib/serverChannelApi'
@@ -16,6 +17,7 @@ interface UseChannelChatResult {
   status: ChatConnectionStatus
   error: string | undefined
   sendMessage: (content: string) => void
+  sendMessageWithFile: (content: string, file: File) => Promise<void>
   editMessage: (id: string, content: string) => void
   deleteMessage: (id: string) => void
 }
@@ -95,6 +97,19 @@ export function useChannelChat(
     sendCreateMessage(socket, content)
   }
 
+  // Vai por REST (não pelo socket) porque o handshake de WebSocket não tem
+  // como carregar um arquivo multipart — ver docs/architecture.md, "Decisão:
+  // upload de anexo em mensagem". A mensagem enviada chega de volta pelo
+  // broadcast do socket já aberto, então não precisa (e não deve) ser
+  // adicionada aqui também.
+  async function sendMessageWithFile(content: string, file: File) {
+    try {
+      await sendMessageWithAttachment(serverBaseUrl, channelId, accessToken, content, file)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'falha ao enviar anexo')
+    }
+  }
+
   function editMessage(id: string, content: string) {
     const socket = socketRef.current
     if (!socket || socket.readyState !== WebSocket.OPEN) return
@@ -107,5 +122,5 @@ export function useChannelChat(
     sendDeleteMessage(socket, id)
   }
 
-  return { messages, status, error, sendMessage, editMessage, deleteMessage }
+  return { messages, status, error, sendMessage, sendMessageWithFile, editMessage, deleteMessage }
 }

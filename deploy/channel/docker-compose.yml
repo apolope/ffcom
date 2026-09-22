@@ -82,6 +82,12 @@ services:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
       LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:?defina LIVEKIT_PUBLIC_URL no .env (wss://livekit-test.ffcom.a3sitsolutions.com.br)}
+      # Upload de anexo/imagem em mensagem — ver docs/architecture.md,
+      # "Decisão: upload de anexo em mensagem".
+      ATTACHMENTS_DIR: /data/attachments
+      ATTACHMENT_MAX_MB: ${ATTACHMENT_MAX_MB:-}
+    volumes:
+      - ffcom_channel_attachments:/data/attachments
     networks:
       - internal
       - a3s-services
@@ -121,6 +127,7 @@ services:
 
 volumes:
   ffcom_channel_db:
+  ffcom_channel_attachments:
 
 networks:
   internal:

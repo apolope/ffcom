@@ -10,6 +10,7 @@ import (
 
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
 	"a3sitsolutions.com/ffcom/server-channel/internal/httpapi"
+	"a3sitsolutions.com/ffcom/server-channel/internal/storage"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
 )
 
@@ -32,6 +33,15 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
+	// Diretório onde os bytes de anexo de mensagem são persistidos (ver
+	// internal/storage.FileStore e docs/architecture.md, "Decisão: upload de
+	// anexo em mensagem") -- precisa ser um volume Docker para sobreviver a
+	// recriação do container, mesmo padrão já usado pelo Postgres.
+	attachmentsDir := os.Getenv("ATTACHMENTS_DIR")
+	if attachmentsDir == "" {
+		attachmentsDir = "/data/attachments"
+	}
+	attachmentMaxBytes := int64(envInt("ATTACHMENT_MAX_MB", 8)) << 20
 
 	ctx := context.Background()
 
@@ -46,9 +56,16 @@ func main() {
 		log.Fatalf("server-channel: %v", err)
 	}
 
+	attachmentFiles, err := storage.NewFileStore(attachmentsDir)
+	if err != nil {
+		log.Fatalf("server-channel: %v", err)
+	}
+
 	router := httpapi.NewRouter(
 		verifier,
 		db,
+		attachmentFiles,
+		attachmentMaxBytes,
 		parseAllowedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS")),
 		liveKitAPIKey,
 		liveKitAPISecret,

@@ -49,6 +49,7 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [ ] Testar convite/entrada de um segundo membro no `channel-test` de ponta a ponta (não só o fundador)
 - [ ] Testar roles/permissões negando `ViewChannels` a um membro de teste
 - [ ] Testar DM cifrada ponta a ponta com duas contas reais (dois logins/navegadores): confirmar que `PUT /api/me/e2e-public-key` é chamado, que o envio funciona nos dois sentidos, e que o payload do frame `dm.create`/`dm.created` (DevTools) é ciphertext opaco — ver `docs/architecture.md`, "Decisão: criptografia ponta-a-ponta em DMs". Verificado nesta sessão só via teste automatizado direto no store (Postgres real, sem UI)
+- [ ] Testar upload de anexo/imagem em mensagem num browser real: enviar imagem (exibição inline) e arquivo não-imagem (link de download), confirmar que `GET /api/attachments/{id}` nega sem `ViewChannels`, e que apagar a mensagem remove o arquivo do volume `ATTACHMENTS_DIR` no host. Verificado nesta sessão só via `go build`/`go vet`/`go test` + migration aplicada contra Postgres 17 real — sem OIDC/browser disponível para rodar o fluxo completo
 
 ## server-central
 
@@ -75,7 +76,7 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [x] Endpoint para editar/apagar mensagem de texto — frames WS `message.update`/`message.delete` em `handleChannelWS` (`internal/httpapi/channel_ws.go`), autor edita/apaga a própria, `Administrator` também apaga qualquer uma; canal forum fora do escopo. Ver `docs/architecture.md`, "Decisão: editar/apagar mensagem de texto"
 - [x] Rate limiting em `server-channel` — dois token buckets em memória (`internal/httpapi/ratelimit.go`): por IP em toda a API REST (`RATE_LIMIT_RPM`/`RATE_LIMIT_BURST`, mesmo padrão de `server-central`) e por membro nos frames recebidos numa conexão de WebSocket de canal já aberta (`RATE_LIMIT_WS_RPM`/`RATE_LIMIT_WS_BURST`). Ver `docs/architecture.md`, "Decisão: rate limiting em server-channel"
 - [x] Kick/ban de membro — bits `KickMembers`/`BanMembers` em `internal/permissions`; `POST /api/members/{id}/kick` remove logicamente (`removed_at`, preserva mensagens/threads já escritas); `POST /api/members/{id}/ban` idem + `member_bans` (por `oidc_subject`) bloqueia reentrada em `POST /api/join`; `GET/DELETE /api/bans[/{oidcSubject}]` para revisar/revogar. UI em `ManageRolesDialog.tsx`. Ver `docs/architecture.md`, "Decisão: kick/ban de membro"
-- [ ] Upload de anexo/imagem em mensagem — `messages.content` é só texto; sem campo, endpoint ou storage para arquivo
+- [x] Upload de anexo/imagem em mensagem — arquivo persistido em disco local via `internal/storage.FileStore` (volume Docker, sem S3/object storage); mensagem com anexo vai por `POST /api/channels/{id}/messages` (REST multipart, WebSocket não carrega arquivo), broadcast pelo mesmo `realtime.Hub` do fluxo via WS; download em `GET /api/attachments/{id}`, exige `ViewChannels` do canal. Escopo: só canal de texto, um anexo por mensagem, máx. `ATTACHMENT_MAX_MB` (padrão 8). Ver `docs/architecture.md`, "Decisão: upload de anexo em mensagem"
 
 ## client
 

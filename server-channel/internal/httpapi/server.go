@@ -6,6 +6,7 @@ import (
 
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
 	"a3sitsolutions.com/ffcom/server-channel/internal/realtime"
+	"a3sitsolutions.com/ffcom/server-channel/internal/storage"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
 )
 
@@ -29,7 +30,12 @@ import (
 // configuram o limiter por membro sobre frames recebidos numa conexão já
 // aberta — ver docs/architecture.md, "Decisão: rate limiting em
 // server-channel".
-func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string, liveKitAPIKey, liveKitAPISecret, liveKitPublicURL, version string, requireTLS bool, restRateLimitRPM, restRateLimitBurst, wsRateLimitRPM, wsRateLimitBurst int) http.Handler {
+//
+// attachmentFiles é onde os bytes de anexo de mensagem são persistidos em
+// disco (ver internal/storage.FileStore); attachmentMaxBytes é o tamanho
+// máximo de um único anexo — ver docs/architecture.md, "Decisão: upload de
+// anexo em mensagem".
+func NewRouter(verifier *auth.Verifier, db *store.Store, attachmentFiles *storage.FileStore, attachmentMaxBytes int64, allowedOrigins []string, liveKitAPIKey, liveKitAPISecret, liveKitPublicURL, version string, requireTLS bool, restRateLimitRPM, restRateLimitBurst, wsRateLimitRPM, wsRateLimitBurst int) http.Handler {
 	mux := http.NewServeMux()
 	hub := realtime.NewHub()
 
@@ -58,10 +64,12 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, allowedOrigins []string
 	mux.Handle("DELETE /api/bans/{oidcSubject}", protected(handleUnbanMember(db.MemberBans, db.Roles)))
 	mux.Handle("GET /api/categories", protected(handleListCategories(db.Categories, db.Channels, db.Roles, db.ChannelOverwrites)))
 	mux.Handle("GET /api/channels", protected(handleListChannels(db.Channels, db.Roles, db.ChannelOverwrites)))
-	mux.Handle("GET /api/channels/{id}/messages", protected(handleListMessages(db.Channels, db.Roles, db.ChannelOverwrites, db.Messages)))
+	mux.Handle("GET /api/channels/{id}/messages", protected(handleListMessages(db.Channels, db.Roles, db.ChannelOverwrites, db.Messages, db.Attachments)))
+	mux.Handle("POST /api/channels/{id}/messages", protected(handleCreateMessageWithAttachment(hub, db.Channels, db.Roles, db.ChannelOverwrites, db.Messages, db.Attachments, attachmentFiles, attachmentMaxBytes)))
+	mux.Handle("GET /api/attachments/{id}", protected(handleGetAttachment(db.Attachments, db.Messages, db.Roles, db.ChannelOverwrites, attachmentFiles)))
 	mux.Handle("GET /api/channels/{id}/threads", protected(handleListThreads(db.Channels, db.Roles, db.ChannelOverwrites, db.Messages)))
 	mux.Handle("GET /api/threads/{id}/messages", protected(handleListThreadMessages(db.Roles, db.ChannelOverwrites, db.Messages)))
-	mux.Handle("GET /api/channels/{id}/ws", protected(handleChannelWS(hub, db.Channels, db.Roles, db.ChannelOverwrites, db.Messages, upgrader, wsLimiter)))
+	mux.Handle("GET /api/channels/{id}/ws", protected(handleChannelWS(hub, db.Channels, db.Roles, db.ChannelOverwrites, db.Messages, db.Attachments, attachmentFiles, upgrader, wsLimiter)))
 	mux.Handle("POST /api/channels/{id}/voice/token", protected(handleVoiceToken(db.Channels, db.Roles, db.ChannelOverwrites, liveKitAPIKey, liveKitAPISecret, liveKitPublicURL)))
 	mux.Handle("GET /api/channels/{id}/overwrites", protected(handleListChannelOverwrites(db.Channels, db.Roles, db.ChannelOverwrites)))
 	mux.Handle("PUT /api/channels/{id}/overwrites/{roleId}", protected(handleSetChannelOverwrite(db.Channels, db.Roles, db.ChannelOverwrites)))

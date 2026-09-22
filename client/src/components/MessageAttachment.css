@@ -1,0 +1,41 @@
+.attachment {
+  display: block;
+  margin-top: 4px;
+}
+
+.attachment-loading,
+.attachment-error {
+  font-size: 0.85em;
+  color: var(--text);
+  opacity: 0.6;
+}
+
+.attachment-error {
+  color: #e5484d;
+  opacity: 1;
+}
+
+.attachment-image img {
+  max-width: 320px;
+  max-height: 320px;
+  border-radius: 6px;
+  display: block;
+}
+
+.attachment-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-h);
+  font-size: 0.9em;
+  text-decoration: none;
+  width: fit-content;
+}
+
+.attachment-file:hover {
+  border-color: var(--accent);
+}

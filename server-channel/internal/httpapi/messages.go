@@ -23,7 +23,7 @@ const (
 // recentes primeiro). Ver docs/architecture.md, "Decisão: protocolo entre
 // client, server-central e server-channel": histórico é REST, tempo real é
 // WebSocket.
-func handleListMessages(channels *store.ChannelStore, roles *store.RoleStore, overwrites *store.ChannelOverwriteStore, messages *store.MessageStore) http.Handler {
+func handleListMessages(channels *store.ChannelStore, roles *store.RoleStore, overwrites *store.ChannelOverwriteStore, messages *store.MessageStore, attachments *store.AttachmentStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		channelID := r.PathValue("id")
 
@@ -82,9 +82,21 @@ func handleListMessages(channels *store.ChannelStore, roles *store.RoleStore, ov
 			return
 		}
 
+		messageIDs := make([]string, len(rows))
+		for i, m := range rows {
+			messageIDs[i] = m.ID
+		}
+		byMessage, err := attachments.ListForMessages(r.Context(), messageIDs)
+		if err != nil {
+			http.Error(w, "erro ao buscar anexos", http.StatusInternalServerError)
+			return
+		}
+
 		out := make([]realtime.MessageView, len(rows))
 		for i, m := range rows {
-			out[i] = toMessageView(m)
+			view := toMessageView(m)
+			view.Attachments = toAttachmentViews(byMessage[m.ID])
+			out[i] = view
 		}
 
 		w.Header().Set("Content-Type", "application/json")

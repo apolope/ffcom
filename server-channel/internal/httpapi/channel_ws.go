@@ -14,6 +14,7 @@ import (
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
 	"a3sitsolutions.com/ffcom/server-channel/internal/permissions"
 	"a3sitsolutions.com/ffcom/server-channel/internal/realtime"
+	"a3sitsolutions.com/ffcom/server-channel/internal/storage"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
 )
 
@@ -66,7 +67,7 @@ func newUpgrader(allowedOrigins map[string]bool) websocket.Upgrader {
 // docs/architecture.md, "Decisão: rate limiting em server-channel") — o
 // limiter por IP em withRateLimit só cobre o handshake HTTP inicial, não
 // protege contra flood de mensagens depois do upgrade.
-func handleChannelWS(hub *realtime.Hub, channels *store.ChannelStore, roles *store.RoleStore, overwrites *store.ChannelOverwriteStore, messages *store.MessageStore, upgrader websocket.Upgrader, wsLimiter *rateLimiter) http.Handler {
+func handleChannelWS(hub *realtime.Hub, channels *store.ChannelStore, roles *store.RoleStore, overwrites *store.ChannelOverwriteStore, messages *store.MessageStore, attachments *store.AttachmentStore, files *storage.FileStore, upgrader websocket.Upgrader, wsLimiter *rateLimiter) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		channelID := r.PathValue("id")
 
@@ -135,7 +136,7 @@ func handleChannelWS(hub *realtime.Hub, channels *store.ChannelStore, roles *sto
 				client.SendError("muitas mensagens, aguarde um instante")
 				return
 			}
-			handleIncomingTextFrame(r.Context(), hub, messages, channelID, member.ID, effective, canSend, client, raw)
+			handleIncomingTextFrame(r.Context(), hub, messages, attachments, files, channelID, member.ID, effective, canSend, client, raw)
 		})
 	})
 }
@@ -146,7 +147,7 @@ func handleChannelWS(hub *realtime.Hub, channels *store.ChannelStore, roles *sto
 // checados por mensagem dentro de cada handler, não pelo bit SendMessages —
 // ver docs/architecture.md, "Decisão: editar/apagar mensagem de texto").
 // Qualquer outro tipo é rejeitado com error.
-func handleIncomingTextFrame(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, channelID, memberID string, effective int64, canSend bool, client *realtime.Client, raw []byte) {
+func handleIncomingTextFrame(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, attachments *store.AttachmentStore, files *storage.FileStore, channelID, memberID string, effective int64, canSend bool, client *realtime.Client, raw []byte) {
 	frameType, err := realtime.FrameType(raw)
 	if err != nil {
 		client.SendError(err.Error())
@@ -161,9 +162,9 @@ func handleIncomingTextFrame(ctx context.Context, hub *realtime.Hub, messages *s
 		}
 		handleIncomingMessage(ctx, hub, messages, channelID, memberID, client, raw)
 	case realtime.TypeMessageUpdate:
-		handleIncomingMessageUpdate(ctx, hub, messages, channelID, memberID, client, raw)
+		handleIncomingMessageUpdate(ctx, hub, messages, attachments, channelID, memberID, client, raw)
 	case realtime.TypeMessageDelete:
-		handleIncomingMessageDelete(ctx, hub, messages, channelID, memberID, effective, client, raw)
+		handleIncomingMessageDelete(ctx, hub, messages, attachments, files, channelID, memberID, effective, client, raw)
 	default:
 		client.SendError(fmt.Sprintf("tipo de frame desconhecido: %q", frameType))
 	}
@@ -204,7 +205,12 @@ func handleIncomingMessage(ctx context.Context, hub *realtime.Hub, messages *sto
 // handleIncomingMessageUpdate edita uma mensagem existente. Só o autor pode
 // editar a própria mensagem — edição por moderação não está no escopo desta
 // v1 (Administrator só pode apagar, ver handleIncomingMessageDelete).
-func handleIncomingMessageUpdate(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, channelID, memberID string, client *realtime.Client, raw []byte) {
+// Edição não mexe em anexo (imutável nesta v1, ver docs/architecture.md,
+// "Decisão: upload de anexo em mensagem") — mas o broadcast precisa
+// reanexar o que já existia, ou o client perderia o anexo da mensagem ao
+// aplicar "message.updated" (que substitui a mensagem inteira no estado
+// local, ver hooks/useChannelChat.ts).
+func handleIncomingMessageUpdate(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, attachments *store.AttachmentStore, channelID, memberID string, client *realtime.Client, raw []byte) {
 	incoming, err := realtime.DecodeMessageUpdate(raw)
 	if err != nil {
 		client.SendError(err.Error())
@@ -247,7 +253,14 @@ func handleIncomingMessageUpdate(ctx context.Context, hub *realtime.Hub, message
 		return
 	}
 
-	payload, err := realtime.EncodeMessageUpdated(toMessageView(m))
+	view := toMessageView(m)
+	if atts, err := attachments.ListForMessage(ctx, m.ID); err != nil {
+		log.Printf("server-channel: erro ao buscar anexos da mensagem editada %s: %v", m.ID, err)
+	} else {
+		view.Attachments = toAttachmentViews(atts)
+	}
+
+	payload, err := realtime.EncodeMessageUpdated(view)
 	if err != nil {
 		log.Printf("server-channel: erro ao codificar mensagem editada: %v", err)
 		return
@@ -258,8 +271,12 @@ func handleIncomingMessageUpdate(ctx context.Context, hub *realtime.Hub, message
 // handleIncomingMessageDelete apaga uma mensagem existente. O autor sempre
 // pode apagar a própria mensagem; Administrator pode apagar qualquer
 // mensagem do canal (moderação — não há bit de permissão dedicado a
-// mensagens, ver docs/architecture.md).
-func handleIncomingMessageDelete(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, channelID, memberID string, effective int64, client *realtime.Client, raw []byte) {
+// mensagens, ver docs/architecture.md). O DELETE em cascata (FK
+// attachments.message_id) já limpa a linha em Postgres, mas não o arquivo
+// em disco -- por isso busca os anexos antes de apagar a mensagem e limpa
+// os arquivos depois, best-effort (erro de limpeza de arquivo não desfaz a
+// exclusão da mensagem, só fica logado).
+func handleIncomingMessageDelete(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, attachments *store.AttachmentStore, files *storage.FileStore, channelID, memberID string, effective int64, client *realtime.Client, raw []byte) {
 	incoming, err := realtime.DecodeMessageDelete(raw)
 	if err != nil {
 		client.SendError(err.Error())
@@ -285,10 +302,20 @@ func handleIncomingMessageDelete(ctx context.Context, hub *realtime.Hub, message
 		return
 	}
 
+	atts, err := attachments.ListForMessage(ctx, incoming.ID)
+	if err != nil {
+		log.Printf("server-channel: erro ao buscar anexos antes de apagar mensagem %s: %v", incoming.ID, err)
+	}
+
 	if err := messages.Delete(ctx, incoming.ID); err != nil {
 		log.Printf("server-channel: erro ao apagar mensagem: %v", err)
 		client.SendError("erro ao apagar mensagem")
 		return
+	}
+	for _, a := range atts {
+		if err := files.Delete(a.StorageKey); err != nil {
+			log.Printf("server-channel: erro ao apagar arquivo do anexo %s: %v", a.ID, err)
+		}
 	}
 
 	payload, err := realtime.EncodeMessageDeleted(incoming.ID, channelID)

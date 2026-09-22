@@ -77,15 +77,31 @@ type IncomingPostCreate struct {
 // MessageView é a representação em fio de uma mensagem, usada tanto no
 // payload de "message.created" (canal de texto) quanto no de
 // "thread.created"/"post.created" (canal forum). ThreadID vem nulo para
-// mensagens de canal de texto.
+// mensagens de canal de texto. Attachments só é preenchido em mensagens de
+// canal de texto (canal forum fora do escopo, ver docs/architecture.md,
+// "Decisão: upload de anexo em mensagem").
 type MessageView struct {
-	ID             string     `json:"id"`
-	ChannelID      string     `json:"channelId"`
-	ThreadID       *string    `json:"threadId,omitempty"`
-	AuthorMemberID string     `json:"authorMemberId"`
-	Content        string     `json:"content"`
-	CreatedAt      time.Time  `json:"createdAt"`
-	EditedAt       *time.Time `json:"editedAt,omitempty"`
+	ID             string           `json:"id"`
+	ChannelID      string           `json:"channelId"`
+	ThreadID       *string          `json:"threadId,omitempty"`
+	AuthorMemberID string           `json:"authorMemberId"`
+	Content        string           `json:"content"`
+	CreatedAt      time.Time        `json:"createdAt"`
+	EditedAt       *time.Time       `json:"editedAt,omitempty"`
+	Attachments    []AttachmentView `json:"attachments,omitempty"`
+}
+
+// AttachmentView é a representação em fio de um anexo de mensagem. URL é
+// relativo (o client resolve contra o baseUrl do server-channel, mesmo
+// padrão do resto da API) e exige o mesmo Bearer token de qualquer outra
+// rota -- não dá para usar direto num <img src>, o client busca via
+// fetch()+Blob (ver client/src/lib/serverChannelApi.ts).
+type AttachmentView struct {
+	ID          string `json:"id"`
+	Filename    string `json:"filename"`
+	ContentType string `json:"contentType"`
+	SizeBytes   int64  `json:"sizeBytes"`
+	URL         string `json:"url"`
 }
 
 // ThreadView é a representação em fio de uma thread de forum, usada no

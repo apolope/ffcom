@@ -34,6 +34,7 @@ type Store struct {
 	Channels          *ChannelStore
 	Roles             *RoleStore
 	Messages          *MessageStore
+	Attachments       *AttachmentStore
 	Invites           *InviteStore
 	ChannelOverwrites *ChannelOverwriteStore
 }
@@ -64,6 +65,7 @@ func Open(ctx context.Context, databaseURL string) (*Store, error) {
 		Channels:          &ChannelStore{pool: pool},
 		Roles:             &RoleStore{pool: pool},
 		Messages:          &MessageStore{pool: pool},
+		Attachments:       &AttachmentStore{pool: pool},
 		Invites:           &InviteStore{pool: pool},
 		ChannelOverwrites: &ChannelOverwriteStore{pool: pool},
 	}, nil

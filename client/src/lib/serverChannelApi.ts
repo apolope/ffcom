@@ -21,6 +21,18 @@ export interface RemoteChannel {
   createdAt: string
 }
 
+// RemoteAttachment.url é relativo e exige o mesmo Bearer token de qualquer
+// outra rota de server-channel — não dá pra usar direto num <img src> ou
+// link de download, ver fetchAttachmentBlob abaixo. Ver docs/architecture.md,
+// "Decisão: upload de anexo em mensagem".
+export interface RemoteAttachment {
+  id: string
+  filename: string
+  contentType: string
+  sizeBytes: number
+  url: string
+}
+
 export interface ChannelMessage {
   id: string
   channelId: string
@@ -32,6 +44,9 @@ export interface ChannelMessage {
   content: string
   createdAt: string
   editedAt?: string
+  // Só preenchido em mensagem de canal de texto (canal forum fora do
+  // escopo, mesmo critério de edição/exclusão de mensagem).
+  attachments?: RemoteAttachment[]
 }
 
 export interface RemoteThread {
@@ -415,6 +430,49 @@ export function openChannelSocket(
 
 export function sendCreateMessage(socket: WebSocket, content: string): void {
   socket.send(JSON.stringify({ type: 'message.create', content }))
+}
+
+// POST /api/channels/{id}/messages — só usada quando a mensagem tem um
+// anexo (multipart/form-data); o handshake de WebSocket não tem como
+// carregar um arquivo, então mensagem só-texto continua indo por
+// sendCreateMessage. O broadcast ("message.created") chega pela mesma
+// conexão de WebSocket já aberta (ver docs/architecture.md, "Decisão:
+// upload de anexo em mensagem") — o retorno desta função só serve pra saber
+// se o upload falhou, não precisa adicionar a mensagem ao estado local.
+export async function sendMessageWithAttachment(
+  baseUrl: string,
+  channelId: string,
+  accessToken: string,
+  content: string,
+  file: File,
+): Promise<ChannelMessage> {
+  const form = new FormData()
+  if (content) form.set('content', content)
+  form.set('file', file)
+  const res = await fetch(`${baseUrl}/api/channels/${channelId}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: form,
+  })
+  return parseJsonOrThrow<ChannelMessage>(res)
+}
+
+// GET /api/attachments/{id} — precisa do mesmo Bearer token de qualquer
+// outra rota, então não dá pra apontar um <img src> ou link direto pra lá;
+// o client busca como Blob e gera uma object URL local (ver
+// components/MessageAttachment.tsx).
+export async function fetchAttachmentBlob(
+  baseUrl: string,
+  attachment: RemoteAttachment,
+  accessToken: string,
+): Promise<Blob> {
+  const res = await fetch(`${baseUrl}${attachment.url}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!res.ok) {
+    throw new Error(`${res.status} ${res.statusText}`)
+  }
+  return res.blob()
 }
 
 export function sendUpdateMessage(socket: WebSocket, id: string, content: string): void {

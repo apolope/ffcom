@@ -3,6 +3,7 @@ networks:
 
 volumes:
   postgres_data:
+  attachments_data:
 
 services:
   postgres:
@@ -107,7 +108,15 @@ services:
       # diretamente (sinalização + mídia) — não passa pelo server-channel.
       # Ver docs/architecture.md, "Decisão: integração de voz com LiveKit".
       LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:?defina LIVEKIT_PUBLIC_URL no .env}
+      # Upload de anexo/imagem em mensagem — ver docs/architecture.md,
+      # "Decisão: upload de anexo em mensagem". ATTACHMENTS_DIR precisa
+      # apontar para um volume (attachments_data abaixo), ou anexos somem a
+      # cada recriação do container.
+      ATTACHMENTS_DIR: /data/attachments
+      ATTACHMENT_MAX_MB: ${ATTACHMENT_MAX_MB:-}
     ports:
       - "${SERVER_CHANNEL_PORT:-8080}:8080"
+    volumes:
+      - attachments_data:/data/attachments
     networks:
       - ffcom-channel

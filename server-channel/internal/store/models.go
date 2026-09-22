@@ -116,6 +116,22 @@ type Message struct {
 	EditedAt       *time.Time
 }
 
+// Attachment é um arquivo anexado a uma mensagem de canal de texto (ver
+// docs/architecture.md, "Decisão: upload de anexo em mensagem"). StorageKey
+// identifica o arquivo em internal/storage.FileStore (disco local do host)
+// -- nunca é o Filename original enviado pelo client, para nunca abrir
+// caminho de path traversal a partir de um nome de arquivo controlado pelo
+// usuário.
+type Attachment struct {
+	ID          string
+	MessageID   string
+	Filename    string
+	ContentType string
+	SizeBytes   int64
+	StorageKey  string
+	CreatedAt   time.Time
+}
+
 // Invite é um código de convite gerado por um membro (ver
 // docs/architecture.md, "descoberta de server-channel: nenhuma, apenas
 // convite ou IP manual"). MaxUses e ExpiresAt nulos significam "sem limite".
