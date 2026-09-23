@@ -72,8 +72,16 @@ function App() {
   const { categories } = useServerStructure(server?.baseUrl ?? '', accessToken ?? '')
 
   const [selectedChannelId, setSelectedChannelId] = useState<string>()
+  // categories muda a cada repoll de useServerStructure (20s), não só ao
+  // trocar de servidor: manter o canal selecionado se ele ainda existe, e só
+  // cair no primeiro canal quando ele sumiu (servidor novo, canal apagado).
+  // Resetar sempre tirava a pessoa do canal a cada poll, e num canal de voz
+  // isso desmontava VoiceChannelView e derrubava a chamada.
   useEffect(() => {
-    setSelectedChannelId(categories[0]?.channels[0]?.id)
+    setSelectedChannelId((prev) => {
+      const all = categories.flatMap((category) => category.channels)
+      return prev && all.some((c) => c.id === prev) ? prev : all[0]?.id
+    })
   }, [categories])
 
   const channel = useMemo(
