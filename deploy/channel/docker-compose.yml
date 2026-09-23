@@ -52,6 +52,21 @@ services:
           # pelo LiveKit".
           use_external_ip: false
           node_ip: ${TURN_EXTERNAL_IP:?defina TURN_EXTERNAL_IP no .env}
+          # Repassa o coturn abaixo aos clients no ICE config. Com `secret` o
+          # LiveKit gera credenciais temporárias no mesmo esquema do
+          # --use-auth-secret do coturn (usuário "<expiração>:<id>", senha
+          # HMAC-SHA1), então não há credencial fixa exposta. Porta é a do
+          # HOST (TURN_LISTEN_PORT), que VMSUBS24OCI0102 encaminha igual. Ver
+          # docs/architecture.md, "Decisão: TURN repassado pelo LiveKit".
+          turn_servers:
+            - host: ${TURN_EXTERNAL_IP}
+              port: ${TURN_LISTEN_PORT:-3478}
+              protocol: udp
+              secret: "${TURN_STATIC_AUTH_SECRET:?defina TURN_STATIC_AUTH_SECRET no .env}"
+            - host: ${TURN_EXTERNAL_IP}
+              port: ${TURN_LISTEN_PORT:-3478}
+              protocol: tcp
+              secret: "${TURN_STATIC_AUTH_SECRET}"
         keys:
           ${LIVEKIT_API_KEY:?defina LIVEKIT_API_KEY no .env}: ${LIVEKIT_API_SECRET:?defina LIVEKIT_API_SECRET no .env}
     ports:

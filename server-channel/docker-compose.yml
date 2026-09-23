@@ -38,6 +38,20 @@ services:
           port_range_start: ${LIVEKIT_RTC_PORT_RANGE_START:-50000}
           port_range_end: ${LIVEKIT_RTC_PORT_RANGE_END:-50100}
           use_external_ip: true
+          # Repassa o coturn abaixo aos clients no ICE config; com `secret` o
+          # LiveKit gera credenciais temporárias no esquema do
+          # --use-auth-secret do coturn. Sem isso o coturn roda mas nenhum
+          # client o usa. Ver docs/architecture.md, "Decisão: TURN repassado
+          # pelo LiveKit".
+          turn_servers:
+            - host: ${TURN_EXTERNAL_IP:?defina TURN_EXTERNAL_IP (IP público do host) no .env}
+              port: 3478
+              protocol: udp
+              secret: "${TURN_STATIC_AUTH_SECRET:?defina TURN_STATIC_AUTH_SECRET no .env}"
+            - host: ${TURN_EXTERNAL_IP}
+              port: 3478
+              protocol: tcp
+              secret: "${TURN_STATIC_AUTH_SECRET}"
         keys:
           ${LIVEKIT_API_KEY:?defina LIVEKIT_API_KEY no .env}: ${LIVEKIT_API_SECRET:?defina LIVEKIT_API_SECRET no .env}
     ports:
