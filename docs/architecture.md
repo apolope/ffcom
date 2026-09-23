@@ -1036,6 +1036,8 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** o teste no Android confirmar ou descartar o autoplay como causa.
 
+**Atualização (2026-09-23):** o `webAudioMix: true` descartado acima como solução do autoplay foi ligado depois por outro motivo, o volume por pessoa acima de 100% (ver "Decisão: volume por pessoa no canal de voz"). O botão "Ativar som" continua, agora retomando o `AudioContext`. O que foi observado no Android até `client-v0.6.x` era com o áudio tocando pelo `<audio>`.
+
 ## Decisão: `CreateInvites` separado de `ManageInvites`
 
 **Contexto:** gerar convite, listar e revogar exigiam o mesmo bit, `ManageInvites`. Para o dono deixar qualquer membro convidar, a única saída era ligar `ManageInvites` na @everyone, o que também deixava qualquer membro listar e apagar os convites dos outros. Além disso, o botão "Convidar" da `ChannelSidebar` aparecia para todo mundo, e quem não tinha o bit levava `403` ao gerar.
@@ -1109,6 +1111,35 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 **Verificado (2026-09-23):** `tsc -b`, `npm run lint` sem aviso novo, `npm run build` e `npm run build:electron`. No Electron rodando de verdade (via DevTools Protocol): a ponte aparece no renderer sem expor `require`, o main aceita um atalho válido e recusa um fora do formato, e `Ctrl+Alt+F9` enviado pelo sistema com o terminal em foco (Electron em segundo plano) chegou duas vezes ao renderer. `shortcutFromEvent`, `isUsableShortcut` e o formato conferidos com casos avulsos (o client não tem runner de teste). Não verificado: a tela de gravar atalho e o `keydown` no web dentro de uma chamada real, que exigem login e LiveKit.
 
 **Revisitar quando:** o push-to-talk precisar do soltar da tecla em segundo plano (hook de teclado nativo), ou aparecerem mais atalhos (ensurdecer, sair da chamada), quando vale uma lista de atalhos no painel de preferências de voz.
+
+## Decisão: volume por pessoa no canal de voz — `webAudioMix` do LiveKit, 0% a 200%, voz e tela separadas
+
+**Contexto:** todo áudio remoto tocava igual, sem como abaixar quem fala alto, aumentar quem fala baixo, baixar o som de um jogo compartilhado sem perder a voz de quem compartilha, ou silenciar alguém só para si.
+
+**Alternativas consideradas:**
+- **Volume do `<audio>` (`el.volume`, o que o `setVolume` do LiveKit faz com `webAudioMix` desligado):** não mexe no caminho de áudio, mas o navegador limita a 1.0 (acima disso lança erro), e no Safari do iOS `el.volume` não tem efeito. Cobre só 0% a 100%. Proposta como passo seguro por não mexer no áudio enquanto o bug do Android (TODO) está aberto; o dono preferiu os 200% agora.
+- **`GainNode` próprio por track, mantendo o resto no `<audio>`:** teria que reimplementar o que o LiveKit já faz com `webAudioMix`, com dois caminhos de reprodução convivendo. Descartada.
+- **`webAudioMix: true` na `Room`:** todo áudio remoto passa por um `AudioContext` com um `GainNode` por track, e o `<audio>` fica mudo, só como fonte do stream. `RemoteAudioTrack.setVolume` vira ganho, sem teto em 1.0. Escolhida.
+- **Silenciar com volume 0:** o `attach()` do LiveKit 2.22 recria o `GainNode` em 100% e só reaplica o volume salvo quando ele é "truthy" (`if (this.elementVolume)`); com 0, a voz vazaria a cada nova assinatura da track (reconexão, tela compartilhada de novo), e mesmo reaplicando logo depois o `setTargetAtTime` desce em rampa de ~0,1 s. Descartada.
+- **Silenciar com `mediaStreamTrack.enabled = false`:** o próprio LiveKit escreve nesse campo quando quem publica muta e desmuta (`RemoteTrack.setMuted`), o que desfaria o silêncio local. Descartada.
+
+**Decisão:**
+1. **`new Room({ webAudioMix: true })`** em `hooks/useVoiceChannel.ts`. O aviso "Ativar som" de "Decisão: som da chamada bloqueado pelo navegador" continua valendo: com `webAudioMix`, `canPlaybackAudio` passa a refletir o estado do `AudioContext` e `room.startAudio()` o retoma.
+2. **`applyRemoteAudio(track, identity)`** decide o volume de cada track remota pela fonte (`Microphone` usa `voice`, `ScreenShareAudio` usa `screen`). Volume efetivo 0 (pessoa silenciada ou controle no zero) **desanexa a track** (`detach`, remove o `<audio>` do DOM, o que também desliga o `GainNode`); acima de 0, anexa se ainda não estiver anexada e chama `track.setVolume`. Roda em `TrackSubscribed` e num efeito que reaplica em todas as tracks quando a escolha muda.
+3. **Armazenamento** (`lib/participantAudio.ts`): `{ voice, screen, muted }` por memberId (a identity na sala LiveKit, um UUID do `server-channel`), em `localStorage` por conta (`ffcom:participantAudio:v1:<sub>`, mesmo padrão de `lib/unread.ts`). Entradas que voltam ao padrão saem do mapa; valores são limitados a 0 a 2 na leitura e na escrita. Vale para a pessoa em qualquer canal de voz daquele servidor.
+4. **UI:** botão 🔉 ao lado de cada pessoa remota na lista do canal de voz abre um painel (`components/ParticipantVolumeControls.tsx`) com "Voz" de 0% a 200% em passos de 5%, "Áudio da tela" (só quando a pessoa está mandando áudio de tela ou já tem um volume de tela escolhido), "Silenciar para mim" e "Restaurar". Na linha da pessoa aparece o percentual da voz quando diferente de 100% e "silenciado para você" (ícone 🔕) quando silenciada. Um painel aberto por vez.
+
+**Escopo aceito:**
+- **Muda o caminho de reprodução de todo mundo**, inclusive no Android, onde o som da chamada já não tocava em `client-v0.6.x` sem causa conhecida. A partir desta versão o troubleshoot do Android investiga o caminho por `AudioContext`, não o do `<audio>`; o que valia antes pode não valer mais, para melhor ou para pior.
+- **Rampa curta ao anexar:** uma track que chega com volume diferente de 100% (ex. 30%) começa no ganho 1 e desce em ~0,1 s, porque o `GainNode` nasce em 1. Só no início da assinatura e bem mais curto que o vazamento do volume 0, que foi evitado.
+- **Ganho acima de 100% amplifica o sinal como veio:** uma voz já alta pode saturar (clipar) em 200%; não há limitador.
+- **Não sincroniza entre dispositivos** e não se aplica às vozes na barra lateral (lá não toca áudio).
+
+**Razão:** cobre os 200% pedidos com o mecanismo que o SDK já tem, sem um segundo caminho de áudio, e o silêncio local é total, sem depender de rampa nem de estado que o LiveKit sobrescreve.
+
+**Verificado (2026-09-23):** `tsc -b`, `npm run lint` sem aviso novo e `npm run build`; `lib/participantAudio.ts` exercitado no Node (limite em 200%, entrada que volta ao padrão sai do mapa, lixo no `localStorage` é descartado, contas isoladas). O comportamento do `livekit-client` 2.22.3 (`RemoteAudioTrack.attach`/`setVolume`/`detach`, `Room.startAudio` com `webAudioMix`) foi lido no código-fonte do pacote. Não verificado numa chamada real: o som em si, o ganho acima de 100% e o silêncio ao reassinar exigem login e LiveKit.
+
+**Revisitar quando:** o teste com duas pessoas ou o troubleshoot do Android apontarem o `webAudioMix` como culpado (aí, voltar ao `<audio>` com teto de 100%), a saturação em 200% incomodar (aí, um `DynamicsCompressorNode` via `setWebAudioPlugins`), ou a supressão de ruído precisar de nós de Web Audio na reprodução.
 
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 

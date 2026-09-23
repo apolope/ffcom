@@ -6,10 +6,12 @@ import {
   type AudioCaptureOptions,
   type LocalParticipant,
   type Participant,
+  type RemoteAudioTrack,
   type RemoteParticipant,
   type TrackPublication,
 } from 'livekit-client'
 import { playMicToggleSound, primeMicToggleSound } from '../lib/micToggleSound'
+import { participantAudioOf, type ParticipantAudioMap } from '../lib/participantAudio'
 import { fetchVoiceToken } from '../lib/serverChannelApi'
 
 export type VoiceChannelStatus = 'idle' | 'connecting' | 'connected' | 'error'
@@ -77,6 +79,10 @@ const SCREEN_SHARE_AUDIO_CONSTRAINTS: AudioCaptureOptions = {
   autoGainControl: false,
 }
 
+// Sem escolha nenhuma: constante do módulo para o efeito que reaplica os
+// volumes não rodar a cada render.
+const NO_PARTICIPANT_AUDIO: ParticipantAudioMap = {}
+
 export function useVoiceChannel(
   baseUrl: string,
   channelId: string,
@@ -84,12 +90,16 @@ export function useVoiceChannel(
   // Aviso sonoro ao mutar/desmutar (lib/voicePrefs.ts). Lido por ref para
   // mudar a preferência sem recriar os callbacks.
   micToggleSound = true,
+  // Volume por pessoa e "silenciar para mim" (lib/participantAudio.ts),
+  // chaveado pela identity LiveKit, que é o memberId.
+  participantAudio: ParticipantAudioMap = NO_PARTICIPANT_AUDIO,
 ): UseVoiceChannelResult {
   const roomRef = useRef<Room | undefined>(undefined)
   const micToggleSoundRef = useRef(micToggleSound)
   useEffect(() => {
     micToggleSoundRef.current = micToggleSound
   }, [micToggleSound])
+  const participantAudioRef = useRef(participantAudio)
   const audioElsRef = useRef<Set<HTMLMediaElement>>(new Set())
   const videoContainerElRef = useRef<HTMLDivElement | null>(null)
   const videoTilesRef = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -104,6 +114,40 @@ export function useVoiceChannel(
     audioElsRef.current.forEach((el) => el.remove())
     audioElsRef.current.clear()
   }, [])
+
+  // Toca uma track de áudio remota (voz ou tela) no volume escolhido para
+  // aquela pessoa. O ganho vem do GainNode do webAudioMix (ver join), por isso
+  // passa de 100%. Volume 0 ou pessoa silenciada desanexa a track em vez de
+  // pôr o ganho em 0: o attach() do LiveKit recria o GainNode em 100% e só
+  // reaplica volumes "truthy", então com 0 a voz vazaria a cada nova
+  // assinatura (reconexão, tela compartilhada de novo).
+  const applyRemoteAudio = useCallback((track: RemoteAudioTrack, identity: string) => {
+    const audio = participantAudioOf(participantAudioRef.current, identity)
+    const volume = audio.muted ? 0 : track.source === Track.Source.ScreenShareAudio ? audio.screen : audio.voice
+    if (volume === 0) {
+      track.detach().forEach((el) => {
+        audioElsRef.current.delete(el)
+        el.remove()
+      })
+      return
+    }
+    if (track.attachedElements.length === 0) {
+      const el = track.attach()
+      document.body.appendChild(el)
+      audioElsRef.current.add(el)
+    }
+    track.setVolume(volume)
+  }, [])
+
+  // Reaplica em todas as tracks já tocando quando a pessoa mexe num volume.
+  useEffect(() => {
+    participantAudioRef.current = participantAudio
+    roomRef.current?.remoteParticipants.forEach((p) => {
+      p.audioTrackPublications.forEach((publication) => {
+        if (publication.audioTrack) applyRemoteAudio(publication.audioTrack as RemoteAudioTrack, p.identity)
+      })
+    })
+  }, [participantAudio, applyRemoteAudio])
 
   const cleanupVideoTiles = useCallback(() => {
     videoTilesRef.current.forEach((tile) => tile.remove())
@@ -223,7 +267,11 @@ export function useVoiceChannel(
     setError(undefined)
     try {
       const { token, url } = await fetchVoiceToken(baseUrl, channelId, accessToken)
-      const room = new Room()
+      // webAudioMix: o áudio remoto toca por um AudioContext com um GainNode
+      // por track em vez do volume do <audio> (limitado a 100%), para o
+      // volume por pessoa ir até 200%. Ver docs/architecture.md, "Decisão:
+      // volume por pessoa no canal de voz".
+      const room = new Room({ webAudioMix: true })
       roomRef.current = room
 
       room.on(RoomEvent.ParticipantConnected, () => refreshParticipants(room))
@@ -240,9 +288,7 @@ export function useVoiceChannel(
       })
       room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
         if (track.kind === Track.Kind.Audio) {
-          const el = track.attach()
-          document.body.appendChild(el)
-          audioElsRef.current.add(el)
+          applyRemoteAudio(track as RemoteAudioTrack, participant.identity)
         } else if (track.kind === Track.Kind.Video) {
           addVideoTile(publication, participant)
         }
@@ -287,7 +333,7 @@ export function useVoiceChannel(
       setStatus('error')
       setError(err instanceof Error ? err.message : 'falha ao conectar à voz')
     }
-  }, [baseUrl, channelId, accessToken, refreshParticipants, disconnect, addVideoTile, removeVideoTile])
+  }, [baseUrl, channelId, accessToken, refreshParticipants, disconnect, addVideoTile, removeVideoTile, applyRemoteAudio])
 
   const leave = useCallback(() => disconnect(roomRef.current), [disconnect])
 

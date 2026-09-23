@@ -162,9 +162,82 @@
 
 .voice-participant {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-h);
+}
+
+.voice-participant-row {
+  display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* Volume por pessoa (ParticipantVolumeControls.tsx, lib/participantAudio.ts). */
+.voice-volume-badge {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.voice-volume-toggle {
+  margin-left: auto;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.voice-volume-toggle:hover,
+.voice-volume-toggle[aria-expanded='true'] {
+  background: var(--bg-tertiary);
+}
+
+.voice-volume-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  color: var(--text);
+}
+
+.voice-volume-slider {
+  display: grid;
+  grid-template-columns: 7.5em minmax(0, 1fr) 3.5em;
+  align-items: center;
+  gap: 8px;
+}
+
+.voice-volume-slider input {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.voice-volume-slider output {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
   color: var(--text-h);
+}
+
+.voice-volume-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.voice-volume-actions button {
+  font: inherit;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-h);
+  cursor: pointer;
 }
 
 .voice-mic-icon.muted {

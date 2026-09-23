@@ -2,8 +2,15 @@ import { useCallback, useState } from 'react'
 import { useAuth } from '../auth/AuthProvider'
 import { useMuteShortcut } from '../hooks/useMuteShortcut'
 import { useVoiceChannel } from '../hooks/useVoiceChannel'
+import {
+  getParticipantAudio,
+  participantAudioOf,
+  updateParticipantAudio,
+  type ParticipantAudio,
+} from '../lib/participantAudio'
 import { getVoicePrefs, setVoicePrefs, type VoicePrefs } from '../lib/voicePrefs'
 import { MuteShortcutSetting } from './MuteShortcutSetting'
+import { ParticipantVolumeControls } from './ParticipantVolumeControls'
 import type { Channel } from '../types'
 import './VoiceChannelView.css'
 
@@ -34,6 +41,15 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
     [updateVoicePrefs],
   )
   const [recordingShortcut, setRecordingShortcut] = useState(false)
+  const [participantAudio, setParticipantAudio] = useState(() => getParticipantAudio(accountSub))
+  const changeParticipantAudio = useCallback(
+    (memberId: string, change: Partial<ParticipantAudio>) => {
+      setParticipantAudio((prev) => updateParticipantAudio(accountSub, prev, memberId, change))
+    },
+    [accountSub],
+  )
+  // No máximo um painel de volume aberto por vez, pela identity da pessoa.
+  const [volumeOpenFor, setVolumeOpenFor] = useState<string>()
   const {
     status,
     error,
@@ -51,7 +67,7 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
     toggleMic,
     toggleCamera,
     toggleScreenShare,
-  } = useVoiceChannel(serverBaseUrl, channel.id, accessToken!, voicePrefs.micToggleSound)
+  } = useVoiceChannel(serverBaseUrl, channel.id, accessToken!, voicePrefs.micToggleSound, participantAudio)
   const { registerFailed: shortcutRegisterFailed } = useMuteShortcut(
     voicePrefs.muteShortcut,
     status === 'connected' && !recordingShortcut,
@@ -92,20 +108,55 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
           )}
           <div className="video-grid" ref={videoContainerRef} />
           <ul className="voice-participant-list">
-            {participants.map((p) => (
-              <li key={p.identity} className="voice-participant">
-                <span className={p.micEnabled ? 'voice-mic-icon' : 'voice-mic-icon muted'}>
-                  {p.micEnabled ? '🎤' : '🔇'}
-                </span>
-                <span>
-                  {p.name}
-                  {p.isLocal ? ' (você)' : ''}
-                  {p.cameraEnabled ? ' 📷' : ''}
-                  {p.screenSharing ? ' 🖥️' : ''}
-                  {p.screenShareAudio ? ' 🔊' : ''}
-                </span>
-              </li>
-            ))}
+            {participants.map((p) => {
+              const audio = participantAudioOf(participantAudio, p.identity)
+              const volumeOpen = !p.isLocal && volumeOpenFor === p.identity
+              return (
+                <li key={p.identity} className="voice-participant">
+                  <div className="voice-participant-row">
+                    <span className={p.micEnabled ? 'voice-mic-icon' : 'voice-mic-icon muted'}>
+                      {p.micEnabled ? '🎤' : '🔇'}
+                    </span>
+                    <span>
+                      {p.name}
+                      {p.isLocal ? ' (você)' : ''}
+                      {p.cameraEnabled ? ' 📷' : ''}
+                      {p.screenSharing ? ' 🖥️' : ''}
+                      {p.screenShareAudio ? ' 🔊' : ''}
+                    </span>
+                    {!p.isLocal && (
+                      <>
+                        {audio.muted ? (
+                          <span className="voice-volume-badge">silenciado para você</span>
+                        ) : (
+                          audio.voice !== 1 && (
+                            <span className="voice-volume-badge">{Math.round(audio.voice * 100)}%</span>
+                          )
+                        )}
+                        <button
+                          type="button"
+                          className="voice-volume-toggle"
+                          aria-expanded={volumeOpen}
+                          aria-label={`Volume de ${p.name}`}
+                          title="Volume"
+                          onClick={() => setVolumeOpenFor(volumeOpen ? undefined : p.identity)}
+                        >
+                          {audio.muted ? '🔕' : '🔉'}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  {volumeOpen && (
+                    <ParticipantVolumeControls
+                      name={p.name}
+                      audio={audio}
+                      screenShareAudio={p.screenShareAudio}
+                      onChange={(change) => changeParticipantAudio(p.identity, change)}
+                    />
+                  )}
+                </li>
+              )
+            })}
           </ul>
           {cameraError && <p className="message-error voice-media-error">{cameraError}</p>}
           {screenSharing && !screenShareAudio && (
