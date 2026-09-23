@@ -33,6 +33,10 @@ interface UseVoiceChannelResult {
   screenSharing: boolean
   // Compartilhando tela com áudio (a pessoa marcou "Compartilhar áudio").
   screenShareAudio: boolean
+  // O navegador bloqueou a reprodução do áudio da sala (autoplay, comum no
+  // Chrome do Android): nada toca até a pessoa tocar em "Ativar som".
+  audioPlaybackBlocked: boolean
+  startAudio: () => void
   videoContainerRef: (node: HTMLDivElement | null) => void
   join: () => void
   leave: () => void
@@ -86,6 +90,7 @@ export function useVoiceChannel(
   const [participants, setParticipants] = useState<VoiceParticipant[]>([])
   const [micEnabled, setMicEnabled] = useState(false)
   const [cameraError, setCameraError] = useState<string>()
+  const [audioPlaybackBlocked, setAudioPlaybackBlocked] = useState(false)
 
   const cleanupAudioEls = useCallback(() => {
     audioElsRef.current.forEach((el) => el.remove())
@@ -193,6 +198,7 @@ export function useVoiceChannel(
       setParticipants([])
       setMicEnabled(false)
       setCameraError(undefined)
+      setAudioPlaybackBlocked(false)
     },
     [cleanupAudioEls, cleanupVideoTiles],
   )
@@ -255,10 +261,17 @@ export function useVoiceChannel(
         refreshParticipants(room)
       })
       room.on(RoomEvent.Disconnected, () => disconnect(room))
+      // Os <audio> das vozes remotas são criados depois do clique em
+      // "Entrar" (quando cada track chega), e o navegador pode bloquear o
+      // play() deles: o LiveKit avisa aqui e só destrava com startAudio()
+      // chamado a partir de um toque. Sem tratar isso, o celular ficava
+      // mudo sem nenhum aviso (o microfone dele funcionava normalmente).
+      room.on(RoomEvent.AudioPlaybackStatusChanged, () => setAudioPlaybackBlocked(!room.canPlaybackAudio))
 
       await room.connect(url, token)
       await room.localParticipant.setMicrophoneEnabled(true)
       setMicEnabled(true)
+      setAudioPlaybackBlocked(!room.canPlaybackAudio)
       setStatus('connected')
       refreshParticipants(room)
     } catch (err) {
@@ -269,6 +282,17 @@ export function useVoiceChannel(
   }, [baseUrl, channelId, accessToken, refreshParticipants, disconnect, addVideoTile, removeVideoTile])
 
   const leave = useCallback(() => disconnect(roomRef.current), [disconnect])
+
+  // Precisa rodar dentro do handler do clique: é o toque que autoriza o
+  // navegador a tocar áudio.
+  const startAudio = useCallback(() => {
+    const room = roomRef.current
+    if (!room) return
+    room
+      .startAudio()
+      .then(() => setAudioPlaybackBlocked(!room.canPlaybackAudio))
+      .catch(() => setAudioPlaybackBlocked(true))
+  }, [])
 
   const toggleMic = useCallback(() => {
     const room = roomRef.current
@@ -342,6 +366,8 @@ export function useVoiceChannel(
     cameraError,
     screenSharing,
     screenShareAudio,
+    audioPlaybackBlocked,
+    startAudio,
     videoContainerRef,
     join,
     leave,

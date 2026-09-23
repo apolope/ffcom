@@ -1015,6 +1015,25 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** o app ganhar estado local que se perde num reload (rascunho de mensagem, por exemplo), caso em que o botão deveria avisar antes; ou se 5 minutos gerar tráfego demais (cada checagem é um GET condicional de `sw.js`).
 
+## Decisão: som da chamada bloqueado pelo navegador — botão "Ativar som" via `room.startAudio()`
+
+**Contexto:** num teste com Android (Chrome) assistindo, o celular não tocava som nenhum da sala, nem as vozes nem o áudio da tela, enquanto o microfone dele chegava normalmente aos outros. O envio funcionava; a reprodução, não.
+
+**Causa provável:** com `webAudioMix` desligado (padrão do `livekit-client` 2.22), cada track de áudio remota toca num `<audio>` criado em `TrackSubscribed`, depois do clique em "Entrar" e de várias etapas assíncronas. O navegador pode recusar o `play()` desses elementos (política de autoplay). O LiveKit detecta isso, emite `RoomEvent.AudioPlaybackStatusChanged` com `room.canPlaybackAudio === false` e só destrava com `room.startAudio()` chamado dentro de um gesto do usuário. O FFCom não tratava esse evento, então o som simplesmente não tocava, sem aviso.
+
+**Alternativas consideradas:**
+- **`webAudioMix: true`** (tocar tudo por um `AudioContext`): troca o mecanismo, mas o `AudioContext` também nasce suspenso sem gesto e precisa do mesmo `startAudio()`. Não resolve sozinho e muda o caminho de áudio de todo mundo. Descartada.
+- **Chamar `startAudio()` no clique de "Entrar":** os elementos de áudio ainda não existem nesse momento (as tracks chegam depois), e a janela do gesto já passou quando chegam. Descartada como solução única.
+- **Tratar o evento e mostrar um botão "Ativar som" quando o navegador bloquear:** padrão documentado do LiveKit. Escolhida.
+
+**Decisão:** `useVoiceChannel` expõe `audioPlaybackBlocked` (atualizado por `AudioPlaybackStatusChanged` e conferido logo depois do `connect`) e `startAudio`, que chama `room.startAudio()` a partir do clique. `VoiceChannelView` mostra um aviso com o botão só enquanto o bloqueio durar.
+
+**Razão:** é o mecanismo que o SDK já oferece para esse caso; o botão só aparece quando o problema existe, e aparecer ou não já serve de diagnóstico.
+
+**Verificado (2026-09-23):** `tsc -b`, `npm run lint` sem aviso novo e `npm run build`. Não verificado no Android: **se o botão não aparecer e o celular continuar mudo, a causa é outra** (por exemplo, a conexão de recebimento do LiveKit, que é separada da de envio, falhando no ICE; conferir se o vídeo da tela aparece no celular).
+
+**Revisitar quando:** o teste no Android confirmar ou descartar o autoplay como causa.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

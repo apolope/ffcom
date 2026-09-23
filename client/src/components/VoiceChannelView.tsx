@@ -22,6 +22,8 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
     cameraError,
     screenSharing,
     screenShareAudio,
+    audioPlaybackBlocked,
+    startAudio,
     videoContainerRef,
     join,
     leave,
@@ -54,6 +56,14 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
 
       {status === 'connected' && (
         <>
+          {audioPlaybackBlocked && (
+            <div className="voice-audio-blocked" role="alert">
+              <span>O navegador bloqueou o som da chamada.</span>
+              <button type="button" onClick={startAudio}>
+                Ativar som
+              </button>
+            </div>
+          )}
           <div className="video-grid" ref={videoContainerRef} />
           <ul className="voice-participant-list">
             {participants.map((p) => (
