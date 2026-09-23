@@ -2,6 +2,30 @@ package permissions
 
 import "testing"
 
+// TestHasAnyOfMask cobre o uso de Has com máscara de mais de um bit (POST
+// /api/invites aceita CreateInvites ou ManageInvites): basta um deles.
+func TestHasAnyOfMask(t *testing.T) {
+	mask := CreateInvites | ManageInvites
+	cases := []struct {
+		name string
+		base int64
+		want bool
+	}{
+		{"só CreateInvites", CreateInvites, true},
+		{"só ManageInvites", ManageInvites, true},
+		{"nenhum dos dois", ViewChannels | SendMessages | ManageRoles, false},
+		{"Administrator", Administrator, true},
+		{"Owner", Owner, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := Has(c.base, mask); got != c.want {
+				t.Errorf("Has(%d, %d) = %v, want %v", c.base, mask, got, c.want)
+			}
+		})
+	}
+}
+
 // TestGrants cobre o caso que motivou esta função: um membro com apenas
 // ManageRoles (sem Administrator) não pode, via Grants, ser autorizado a
 // conceder um bit que ele mesmo não possui — inclusive Administrator. Ver

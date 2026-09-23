@@ -23,6 +23,8 @@ interface ChannelSidebarProps {
   selfMemberId: string | undefined
   onSelectChannel: (channelId: string) => void
   onInvite: () => void
+  // Só com CreateInvites/ManageInvites ou dono; sem o bit o POST daria 403.
+  canCreateInvites: boolean
   canManageMembers: boolean
   onManageRoles: () => void
   onEditNickname: () => void
@@ -49,6 +51,7 @@ export function ChannelSidebar({
   selfMemberId,
   onSelectChannel,
   onInvite,
+  canCreateInvites,
   canManageMembers,
   onManageRoles,
   onEditNickname,
@@ -80,9 +83,11 @@ export function ChannelSidebar({
           <button type="button" className="invite-button" onClick={onEditNickname}>
             Apelido
           </button>
-          <button type="button" className="invite-button" onClick={onInvite}>
-            Convidar
-          </button>
+          {canCreateInvites && (
+            <button type="button" className="invite-button" onClick={onInvite}>
+              Convidar
+            </button>
+          )}
         </div>
       </div>
       <div className="category-list">

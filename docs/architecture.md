@@ -385,7 +385,7 @@ Há bastante espaço sobrando no `BIGINT` para bits futuros (canal forum, gerenc
 
 **Overwrite de canal (`channel_role_overwrites`, `internal/store/channel_overwrites.go`):** `allow`/`deny` por `(channel_id, role_id)`. `internal/permissions.Effective(base, roleIDs, overwrites)` soma todos os `allow` das roles do membro que tiverem overwrite naquele canal, depois remove todos os `deny` — nessa ordem, então `deny` sempre vence quando a mesma role nega e libera o mesmo bit (não deveria acontecer numa única linha, mas evita ambiguidade entre roles diferentes). `Administrator` (ou o dono) ignora overwrites por completo. É isso que torna um canal privado: uma role sem `ViewChannels` na base pode ganhar acesso só a um canal via `allow`, ou uma role com acesso geral pode ser bloqueada só num canal via `deny`.
 
-**Onde é aplicado:** `GET /api/categories`/`GET /api/channels` filtram por `ViewChannels` efetivo (categoria sem nenhum canal visível some da lista, para não vazar nem o nome dela); `GET /api/channels/{id}/messages` e `GET /api/channels/{id}/ws` exigem `ViewChannels`, e o WS também confere `SendMessages` — checado uma única vez na conexão (não por frame), então uma role revogada só produz efeito na próxima reconexão, mesmo tipo de corte já aceito no resto do sistema de tempo real; `POST /api/channels/{id}/voice/token` exige `Voice` (join e falar são um único bit — não há hoje um modo "só ouvir" na UI do client, então não valia diferenciar); `POST/GET/DELETE /api/invites` exigem `ManageInvites` (antes "qualquer membro", ver decisão de convites); `POST/PATCH/DELETE /api/roles`, `POST/DELETE /api/members/{memberId}/roles/{roleId}` e o CRUD de overwrite de canal exigem `ManageRoles`.
+**Onde é aplicado:** `GET /api/categories`/`GET /api/channels` filtram por `ViewChannels` efetivo (categoria sem nenhum canal visível some da lista, para não vazar nem o nome dela); `GET /api/channels/{id}/messages` e `GET /api/channels/{id}/ws` exigem `ViewChannels`, e o WS também confere `SendMessages` — checado uma única vez na conexão (não por frame), então uma role revogada só produz efeito na próxima reconexão, mesmo tipo de corte já aceito no resto do sistema de tempo real; `POST /api/channels/{id}/voice/token` exige `Voice` (join e falar são um único bit — não há hoje um modo "só ouvir" na UI do client, então não valia diferenciar); `POST/GET/DELETE /api/invites` exigem `ManageInvites` (antes "qualquer membro", ver decisão de convites; depois o `POST` passou a aceitar também `CreateInvites`, ver "Decisão: `CreateInvites` separado de `ManageInvites`"); `POST/PATCH/DELETE /api/roles`, `POST/DELETE /api/members/{memberId}/roles/{roleId}` e o CRUD de overwrite de canal exigem `ManageRoles`.
 
 **`GET /api/members` (novo):** lista os membros com `isOwner` e `roleIds`, fechando a lacuna notada em `client/src/App.tsx` ("lista de membros... ainda não tem API real"). Não expõe `oidcSubject` a outros membros — não há necessidade de vazar o identificador do Authentik central.
 
@@ -1035,6 +1035,29 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 **Verificado (2026-09-23):** `tsc -b`, `npm run lint` sem aviso novo e `npm run build`. Não verificado no Android: **se o botão não aparecer e o celular continuar mudo, a causa é outra** (por exemplo, a conexão de recebimento do LiveKit, que é separada da de envio, falhando no ICE; conferir se o vídeo da tela aparece no celular).
 
 **Revisitar quando:** o teste no Android confirmar ou descartar o autoplay como causa.
+
+## Decisão: `CreateInvites` separado de `ManageInvites`
+
+**Contexto:** gerar convite, listar e revogar exigiam o mesmo bit, `ManageInvites`. Para o dono deixar qualquer membro convidar, a única saída era ligar `ManageInvites` na @everyone, o que também deixava qualquer membro listar e apagar os convites dos outros. Além disso, o botão "Convidar" da `ChannelSidebar` aparecia para todo mundo, e quem não tinha o bit levava `403` ao gerar.
+
+**Alternativas consideradas:**
+- **Manter um bit só e liberar pela @everyone quando o dono quiser:** funciona hoje, mas junta uma ação inofensiva (criar convite) com uma administrativa (revogar convite alheio). Descartada.
+- **Bit novo `CreateInvites` exigido sozinho no `POST`:** roles que já tinham `ManageInvites` perderiam o poder de criar até alguém ligar o bit novo nelas, o que exigiria migration ou ajuste manual em cada instância. Descartada.
+- **Bit novo `CreateInvites`, com o `POST` aceitando `CreateInvites` ou `ManageInvites`:** mesma separação do Discord (`CREATE_INSTANT_INVITE` e `MANAGE_GUILD`), sem mexer em dado persistido. Escolhida.
+
+**Decisão:**
+1. **Bit `CreateInvites = 512`** no fim do bloco de `internal/permissions` (mesmo cuidado de não reordenar bits persistidos). Checado só na permissão base.
+2. **`POST /api/invites`** usa `requireCreateInvites`, que passa a máscara `CreateInvites|ManageInvites` para `requireMemberPermission` (`permissions.Has` aceita qualquer bit da máscara). `GET` e `DELETE` continuam exigindo `ManageInvites`.
+3. **@everyone não ganha o bit por padrão:** sem migration, o comportamento de instâncias existentes não muda (só dono, `Administrator` e quem tem `ManageInvites` convidam). O dono libera a todos ligando "Criar convites" na @everyone pelo diálogo de roles.
+4. **Client:** `PERMISSIONS.CreateInvites` em `lib/permissions.ts`, "Criar convites" no `ManageRolesDialog`, e o botão "Convidar" só aparece com `CreateInvites`, `ManageInvites` ou dono (`canCreateInvites` em `App.tsx`, mesmo critério do servidor).
+
+**Escopo aceito:** conceder `CreateInvites` passa por `permissions.Grants`, que não sabe que `ManageInvites` implica criar. Um membro com `ManageRoles` e `ManageInvites`, mas sem `CreateInvites` nem `Administrator`, não consegue dar `CreateInvites` a outra role; o dono ou um `Administrator` consegue. Caso raro, e ensinar implicações a `Grants` complicaria uma regra de segurança por pouco ganho.
+
+**Razão:** o dono passa a escolher quem convida sem entregar a revogação de convites junto, e nenhuma instância existente muda de comportamento no deploy.
+
+**Verificado (2026-09-23):** `go vet`, `go test ./...` (inclui `TestHasAnyOfMask`), `npm run lint` sem aviso novo e `npm run build`. Não verificado num browser real nem contra Postgres (sem Docker disponível nesta sessão).
+
+**Revisitar quando:** aparecer outra permissão que implique uma mais fraca (aí vale ensinar implicações a `Has`/`Grants` de forma geral), ou alguém pedir limite por membro (máximo de convites ativos, validade obrigatória).
 
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 

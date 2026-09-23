@@ -102,7 +102,7 @@ Base URL: `KnownServer.baseUrl`, uma por servidor cadastrado no client (endereç
 | GET | `/api/channels/{id}/overwrites` | Bearer + membro + `ManageRoles` | — | `{overwrites: [{roleId, allow, deny}]}` | `404` canal |
 | PUT | `/api/channels/{id}/overwrites/{roleId}` | Bearer + membro + `ManageRoles` | `{allow, deny}` | `Overwrite` | `403` allow excede permissão própria (`Grants`), `404` canal |
 | DELETE | `/api/channels/{id}/overwrites/{roleId}` | Bearer + membro + `ManageRoles` | — | `204` | `404` |
-| POST | `/api/invites` | Bearer + membro + `ManageInvites` | `{maxUses?, expiresAt?}` | `201` `Invite` | `400` maxUses ≤ 0 |
+| POST | `/api/invites` | Bearer + membro + `CreateInvites` ou `ManageInvites` | `{maxUses?, expiresAt?}` | `201` `Invite` | `400` maxUses ≤ 0 |
 | GET | `/api/invites` | Bearer + membro + `ManageInvites` | — | `{invites: [Invite]}` | — |
 | DELETE | `/api/invites/{id}` | Bearer + membro + `ManageInvites` | — | `204` | `404` |
 | GET | `/api/roles` | Bearer + membro | — | `{roles: [Role]}` — aberto a todo membro | — |
@@ -114,7 +114,7 @@ Base URL: `KnownServer.baseUrl`, uma por servidor cadastrado no client (endereç
 
 `Message`: `{id, channelId, threadId?, authorMemberId, content, createdAt, editedAt?, attachments?: [Attachment]}` — `attachments` só em mensagem de canal de texto (canal forum fora do escopo, ver docs/architecture.md, "Decisão: upload de anexo em mensagem"). `Attachment`: `{id, filename, contentType, sizeBytes, url}` — `url` é relativo (`/api/attachments/{id}`) e exige o mesmo Bearer token de qualquer outra rota, não dá pra usar direto num `<img src>` ou link de download. `Thread`: `{id, channelId, title, authorMemberId, createdAt}`. `Role`: `{id, name, color?, permissions, position, isDefault, createdAt}`. `Invite`: `{id, code, createdByMemberId, maxUses?, uses, expiresAt?, createdAt}`. `Overwrite`: `{roleId, allow, deny}`.
 
-**Bits de permissão** (`internal/permissions`, `int64`): `ViewChannels=1, SendMessages=2, Voice=4, ManageInvites=8, ManageRoles=16, Administrator=32, KickMembers=64, BanMembers=128, ManageChannels=256`. `Owner=-1` (dono do bootstrap, ignora tudo). `Grants(base, target)` impede que `ManageRoles` sozinho conceda um bit que quem chama não possui — ver `docs/architecture.md`, "Decisão: ManageRoles não concede permissões além das próprias". Kick/ban não passam por `Grants` (não concedem bit nenhum a ninguém) e não têm checagem de hierarquia entre roles — só o bit e "não pode ser o dono/você mesmo", ver `docs/architecture.md`, "Decisão: kick/ban de membro".
+**Bits de permissão** (`internal/permissions`, `int64`): `ViewChannels=1, SendMessages=2, Voice=4, ManageInvites=8, ManageRoles=16, Administrator=32, KickMembers=64, BanMembers=128, ManageChannels=256, CreateInvites=512`. `Owner=-1` (dono do bootstrap, ignora tudo). `Grants(base, target)` impede que `ManageRoles` sozinho conceda um bit que quem chama não possui — ver `docs/architecture.md`, "Decisão: ManageRoles não concede permissões além das próprias". Kick/ban não passam por `Grants` (não concedem bit nenhum a ninguém) e não têm checagem de hierarquia entre roles — só o bit e "não pode ser o dono/você mesmo", ver `docs/architecture.md`, "Decisão: kick/ban de membro".
 
 ### WebSocket — `GET /api/channels/{id}/ws`
 

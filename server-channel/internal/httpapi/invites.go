@@ -9,30 +9,20 @@ import (
 	"net/http"
 	"time"
 
-	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
 	"a3sitsolutions.com/ffcom/server-channel/internal/permissions"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
 )
 
-// requireManageInvites resolve a permissão base do membro autenticado e
-// devolve false (já com a resposta HTTP escrita) se ele não tiver
-// ManageInvites nem for dono do servidor.
 func requireManageInvites(w http.ResponseWriter, r *http.Request, roles *store.RoleStore) (store.Member, bool) {
-	member, ok := auth.MemberFromContext(r.Context())
-	if !ok {
-		http.Error(w, "membro não encontrado no contexto", http.StatusInternalServerError)
-		return store.Member{}, false
-	}
-	base, _, err := memberBasePermission(r.Context(), roles, member)
-	if err != nil {
-		http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
-		return store.Member{}, false
-	}
-	if !permissions.Has(base, permissions.ManageInvites) {
-		http.Error(w, "requer a permissão ManageInvites", http.StatusForbidden)
-		return store.Member{}, false
-	}
-	return member, true
+	return requireMemberPermission(w, r, roles, permissions.ManageInvites, "requer a permissão ManageInvites")
+}
+
+// requireCreateInvites aceita CreateInvites ou ManageInvites (permissions.Has
+// passa com qualquer bit da máscara): quem gerencia convites também pode
+// criar, então roles que já tinham ManageInvites antes do bit novo continuam
+// funcionando sem migration.
+func requireCreateInvites(w http.ResponseWriter, r *http.Request, roles *store.RoleStore) (store.Member, bool) {
+	return requireMemberPermission(w, r, roles, permissions.CreateInvites|permissions.ManageInvites, "requer a permissão CreateInvites")
 }
 
 // inviteCodeLength/generateInviteCode seguem o mesmo formato (base32 sem
@@ -78,10 +68,10 @@ func toInviteView(i store.Invite) inviteView {
 
 // POST /api/invites — gera um novo código de convite para este server-channel
 // (ver docs/architecture.md, "Convites obrigatórios para entrar em
-// server-channel"). Requer ManageInvites.
+// server-channel"). Requer CreateInvites ou ManageInvites.
 func handleCreateInvite(invites *store.InviteStore, roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		member, ok := requireManageInvites(w, r, roles)
+		member, ok := requireCreateInvites(w, r, roles)
 		if !ok {
 			return
 		}

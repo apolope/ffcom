@@ -14,6 +14,7 @@ export const PERMISSIONS = {
   KickMembers: 64,
   BanMembers: 128,
   ManageChannels: 256,
+  CreateInvites: 512,
 } as const
 
 export function hasPermission(effective: number, bit: number): boolean {

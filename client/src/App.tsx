@@ -86,6 +86,11 @@ function App() {
   const canKick = me ? hasPermission(me.permissions, PERMISSIONS.KickMembers) || !!me.isOwner : false
   const canBan = me ? hasPermission(me.permissions, PERMISSIONS.BanMembers) || !!me.isOwner : false
   const canOpenMemberAdmin = canManageRoles || canKick || canBan
+  // Mesmo critério do POST /api/invites em server-channel: CreateInvites ou
+  // ManageInvites (quem gerencia também cria).
+  const canCreateInvites = me
+    ? hasPermission(me.permissions, PERMISSIONS.CreateInvites | PERMISSIONS.ManageInvites) || !!me.isOwner
+    : false
   const canManageChannels = me ? hasPermission(me.permissions, PERMISSIONS.ManageChannels) || !!me.isOwner : false
   // Mesmo critério de handleIncomingMessageDelete em server-channel: só
   // Administrator apaga mensagem alheia (não há bit dedicado a mensagens).
@@ -251,6 +256,7 @@ function App() {
             selfMemberId={me?.memberId}
             onSelectChannel={setSelectedChannelId}
             onInvite={() => setShowInviteServer(true)}
+            canCreateInvites={canCreateInvites}
             canManageMembers={canOpenMemberAdmin}
             onManageRoles={() => setShowManageRoles(true)}
             onEditNickname={() => setShowEditNickname(true)}

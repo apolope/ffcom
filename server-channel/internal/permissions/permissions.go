@@ -24,6 +24,13 @@ const (
 	// depois — ver docs/architecture.md, "Decisão: gerenciar categorias e
 	// canais". Mesmo critério: sempre no fim do bloco.
 	ManageChannels
+	// CreateInvites (só gerar convite) veio depois e fica separado de
+	// ManageInvites (listar e revogar convites de qualquer um), como o
+	// Discord separa: assim o dono libera convite a todos pela @everyone sem
+	// deixar qualquer membro apagar os convites alheios. ManageInvites
+	// continua bastando para criar — ver docs/architecture.md, "Decisão:
+	// CreateInvites separado de ManageInvites".
+	CreateInvites
 )
 
 // Owner é o valor de retorno de quem é dono do servidor (member.IsOwner):

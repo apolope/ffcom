@@ -65,7 +65,7 @@ func resolveModerationTarget(w http.ResponseWriter, r *http.Request, members *st
 // POST /api/members/{memberId}/kick — expulsa um membro (ver
 // docs/architecture.md, "Decisão: kick/ban de membro"). Requer
 // KickMembers. Não impede reentrada: quem for expulso volta a participar
-// assim que resgatar um novo convite de alguém com ManageInvites.
+// assim que resgatar um novo convite de alguém com CreateInvites ou ManageInvites.
 func handleKickMember(members *store.MemberStore, roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requester, ok := requireMemberPermission(w, r, roles, permissions.KickMembers, "requer a permissão KickMembers")
