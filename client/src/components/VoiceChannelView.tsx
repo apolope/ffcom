@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { useAuth } from '../auth/AuthProvider'
 import { useVoiceChannel } from '../hooks/useVoiceChannel'
+import { getVoicePrefs, setVoicePrefs } from '../lib/voicePrefs'
 import type { Channel } from '../types'
 import './VoiceChannelView.css'
 
@@ -12,7 +14,14 @@ interface VoiceChannelViewProps {
 // de voz com LiveKit"). Cada canal de voz é uma sala LiveKit própria; entrar
 // pede um token novo em server-channel (hooks/useVoiceChannel.ts).
 export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewProps) {
-  const { accessToken } = useAuth()
+  const { accessToken, user } = useAuth()
+  const accountSub = user?.profile.sub ?? ''
+  const [voicePrefs, setVoicePrefsState] = useState(() => getVoicePrefs(accountSub))
+  const toggleMicSoundPref = () => {
+    const next = { ...voicePrefs, micToggleSound: !voicePrefs.micToggleSound }
+    setVoicePrefsState(next)
+    setVoicePrefs(accountSub, next)
+  }
   const {
     status,
     error,
@@ -30,7 +39,7 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
     toggleMic,
     toggleCamera,
     toggleScreenShare,
-  } = useVoiceChannel(serverBaseUrl, channel.id, accessToken!)
+  } = useVoiceChannel(serverBaseUrl, channel.id, accessToken!, voicePrefs.micToggleSound)
 
   return (
     <div className="voice-channel">
@@ -102,6 +111,10 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
             <button type="button" onClick={leave}>
               Sair do canal de voz
             </button>
+            <label className="voice-pref">
+              <input type="checkbox" checked={voicePrefs.micToggleSound} onChange={toggleMicSoundPref} />
+              Som ao mutar
+            </label>
           </div>
         </>
       )}

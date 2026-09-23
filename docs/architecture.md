@@ -1059,6 +1059,29 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** aparecer outra permissão que implique uma mais fraca (aí vale ensinar implicações a `Has`/`Grants` de forma geral), ou alguém pedir limite por membro (máximo de convites ativos, validade obrigatória).
 
+## Decisão: som ao mutar e desmutar — dois bipes num `AudioContext` próprio, depois da troca confirmada
+
+**Contexto:** mutar ou desmutar o microfone não dava retorno nenhum além do texto do botão, e com o atalho de teclado e o push-to-talk (itens seguintes do TODO) a pessoa vai trocar o microfone sem olhar a tela.
+
+**Alternativas consideradas:**
+- **Arquivo de áudio (`.mp3`/`.ogg`) num `<audio>`:** exige asset novo no build e no precache do PWA, e um `<audio>` criado depois de uma espera assíncrona esbarra na mesma política de autoplay de "Decisão: som da chamada bloqueado pelo navegador". Descartada.
+- **Tons gerados por `OscillatorNode` num `AudioContext` da página:** sem asset, alguns bytes de código, e o som fica totalmente separado da track publicada. Escolhida.
+- **Tocar o som no clique, antes da troca:** mais responsivo, mas avisaria uma troca que pode falhar (permissão negada, dispositivo sumiu). Descartada, como o próprio TODO pedia.
+
+**Decisão:**
+1. **`lib/micToggleSound.ts`:** dois bipes senoidais de 70 ms (660 Hz e 440 Hz), descendentes ao mutar e ascendentes ao desmutar, com ataque e soltura curtos para não estalar. Um `AudioContext` único, criado sob demanda e ligado só a `ctx.destination`; nunca passa pela track do LiveKit.
+2. **Quando toca:** `toggleMic` em `hooks/useVoiceChannel.ts` chama `primeMicToggleSound()` ainda dentro do gesto (o `AudioContext` nasce suspenso sem gesto, e quando a troca resolve o gesto pode ter expirado) e só chama `playMicToggleSound(next)` no `then` do `setMicrophoneEnabled`. Falha na troca não toca nada e agora também não deixa promise rejeitada sem tratamento. Entrar no canal (que liga o microfone) não toca: não é uma troca da pessoa.
+3. **Qualquer origem:** o som mora em `toggleMic`, então o atalho de teclado e o push-to-talk, quando existirem, herdam o aviso se passarem por ele. Para o push-to-talk, decidir no item dele se usa o mesmo som, um mais discreto ou nenhum.
+4. **Preferência:** `lib/voicePrefs.ts` guarda `{ micToggleSound }` no `localStorage` por conta (`ffcom:voicePrefs:v1:<sub>`, mesmo padrão de `lib/unread.ts`), ligado por padrão. O liga/desliga é um checkbox "Som ao mutar" na barra de controles do canal de voz, que também passou a quebrar linha (`flex-wrap`) para caber no celular. É o primeiro item de "preferências de voz"; quando vierem atalho, push-to-talk e supressão de ruído, vale juntar tudo num painel próprio.
+
+**Escopo aceito:** o som não vai para a sala pela rede, mas com alto-falante (sem fone) o microfone pode captá-lo pelo ar, principalmente o bipe de desmutar, que toca com o microfone já aberto. O cancelamento de eco do navegador (`echoCancellation`, ligado por padrão no `getUserMedia`) deve remover boa parte, mas não tenho certeza de que o som tocado por um `AudioContext` entra como referência do cancelamento de eco em todo navegador e sistema; fica para confirmar no teste com duas pessoas. O volume baixo (pico de 0,12) e a duração curta limitam o efeito.
+
+**Razão:** retorno audível sem asset novo, sem mexer no caminho de áudio da sala e sem mentir sobre o estado do microfone.
+
+**Verificado (2026-09-23):** `tsc -b`, `npm run lint` sem aviso novo e `npm run build`. Não verificado num browser real com LiveKit (a saída de áudio não é observável nesta sessão).
+
+**Revisitar quando:** o teste mostrar o bipe de desmutar chegando aos outros pelo ar (aí, tocar mais baixo ou só o de mutar com alto-falante), ou quando o painel de preferências de voz existir.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

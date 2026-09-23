@@ -175,6 +175,7 @@
   flex: 0 0 auto;
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
   padding: 16px;
   border-top: 1px solid var(--border);
 }
@@ -221,5 +222,15 @@
   border-radius: 4px;
   background: var(--bg-tertiary);
   color: var(--text-h);
+  cursor: pointer;
+}
+
+/* Preferência de voz na barra de controles (lib/voicePrefs.ts). */
+.voice-pref {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: var(--text);
   cursor: pointer;
 }

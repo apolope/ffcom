@@ -9,6 +9,7 @@ import {
   type RemoteParticipant,
   type TrackPublication,
 } from 'livekit-client'
+import { playMicToggleSound, primeMicToggleSound } from '../lib/micToggleSound'
 import { fetchVoiceToken } from '../lib/serverChannelApi'
 
 export type VoiceChannelStatus = 'idle' | 'connecting' | 'connected' | 'error'
@@ -80,8 +81,15 @@ export function useVoiceChannel(
   baseUrl: string,
   channelId: string,
   accessToken: string,
+  // Aviso sonoro ao mutar/desmutar (lib/voicePrefs.ts). Lido por ref para
+  // mudar a preferência sem recriar os callbacks.
+  micToggleSound = true,
 ): UseVoiceChannelResult {
   const roomRef = useRef<Room | undefined>(undefined)
+  const micToggleSoundRef = useRef(micToggleSound)
+  useEffect(() => {
+    micToggleSoundRef.current = micToggleSound
+  }, [micToggleSound])
   const audioElsRef = useRef<Set<HTMLMediaElement>>(new Set())
   const videoContainerElRef = useRef<HTMLDivElement | null>(null)
   const videoTilesRef = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -298,10 +306,17 @@ export function useVoiceChannel(
     const room = roomRef.current
     if (!room) return
     const next = !room.localParticipant.isMicrophoneEnabled
-    room.localParticipant.setMicrophoneEnabled(next).then(() => {
-      setMicEnabled(next)
-      refreshParticipants(room)
-    })
+    // Destrava o AudioContext ainda dentro do gesto; o som só toca depois
+    // que a troca resolver, para não avisar uma troca que falhou.
+    if (micToggleSoundRef.current) primeMicToggleSound()
+    room.localParticipant
+      .setMicrophoneEnabled(next)
+      .then(() => {
+        setMicEnabled(next)
+        if (micToggleSoundRef.current) playMicToggleSound(next)
+        refreshParticipants(room)
+      })
+      .catch(() => refreshParticipants(room))
   }, [refreshParticipants])
 
   // Diferente do seletor de tela (ver toggleScreenShare), recusar a permissão
