@@ -758,7 +758,7 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Escopo aceito, para não vender além do que entrega:**
 - **Sem contagem** — só bolinha binária (tem/não tem mensagem nova), não "3 não lidas".
-- **Sem indicador agregado no `ServerRail`** (ex. bolinha no ícone do servidor quando há canal não lido em qualquer lugar dele) — exigiria buscar a estrutura de **todos** os servidores conhecidos, não só o selecionado (`useServerStructure` hoje só busca o servidor ativo). Fora do escopo desta v1; a bolinha aparece no `ChannelSidebar` do servidor aberto e na lista de amigos.
+- **Sem indicador agregado no `ServerRail`** (ex. bolinha no ícone do servidor quando há canal não lido em qualquer lugar dele) — exigiria buscar a estrutura de **todos** os servidores conhecidos, não só o selecionado (`useServerStructure` hoje só busca o servidor ativo). Fora do escopo desta v1; a bolinha aparece no `ChannelSidebar` do servidor aberto e na lista de amigos. *(Implementado depois, ver "Decisão: indicador agregado de não lida no `ServerRail`".)*
 - **Atraso de até ~20s para atividade em canal de texto/forum fora do selecionado** (intervalo de poll), e nenhuma atualização enquanto nenhum servidor está selecionado (tela de Amigos) — poll só roda com um `serverBaseUrl` ativo.
 
 **Razão:** o servidor já grava tudo que esse recurso precisa (timestamp de mensagem) sem schema novo; o que falta é só "o que este dispositivo específico já viu", que é inerentemente um dado de cliente — guardá-lo no servidor implicaria sincronizar estado entre N dispositivos por conta, problema que o NaCl box por dispositivo já decidiu não resolver nesta v1 pelo mesmo motivo (ver "Decisão: criptografia ponta-a-ponta em DMs"). Reaproveita a infraestrutura de tempo real que já existe (WebSocket de presença já entrega todo `dm.created`) em vez de abrir uma conexão nova, e usa polling só onde de fato não existe alternativa (canais de `server-channel`), evitando o custo de projetar um hub por servidor para um indicador que não precisa ser instantâneo.
@@ -916,6 +916,54 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 **Verificado (2026-09-22):** `tsc -b`, `npm run lint` sem aviso novo, `npm run build`, e o diálogo montado com React num DOM de teste (`happy-dom`, instalado fora do repo): estado inicial lido dos overwrites, ordem das roles, "Permitir" desligado sem o bit, "Salvar" desligado sem mudança e, ao salvar, só as chamadas esperadas (`PUT` preservando o bit fora da UI, `DELETE` da role que voltou a herdar). Não verificado num browser com login OIDC contra o servidor real.
 
 **Revisitar quando:** aparecer pedido de overwrite por membro individual ou por categoria, ou de salvar tudo numa transação só (nesse ponto, um `PUT /api/channels/{id}/overwrites` com a lista inteira).
+
+## Decisão: indicador agregado de não lida no `ServerRail` — poll só de `GET /api/channels` dos servidores fechados, a cada 60s
+
+**Contexto:** fechar o item que "Decisão: indicador de não lida" deixou fora do escopo: a bolinha só aparecia no `ChannelSidebar` do servidor aberto e na lista de amigos, então atividade em outro servidor ou numa DM ficava invisível sem abrir cada um.
+
+**Alternativas consideradas:**
+- **Endpoint novo e mais barato em `server-channel`** (ex. só `max(lastMessageAt)` dos canais visíveis): economiza bytes, mas o custo real de `GET /api/channels` já é pequeno (lista de canais + um `MAX(created_at) GROUP BY`), e o client continuaria precisando do `lastMessageAt` por canal para comparar com os cursores locais, que são por canal. Descartada: mudança de backend sem ganho.
+- **Estender `useServerStructure` para todos os servidores:** buscaria categorias também, que o rail não usa, e misturaria o estado do servidor aberto (tela de erro, `refresh`) com o dos demais. Descartada.
+- **Hook separado (`hooks/useServersUnread.ts`) que busca só `GET /api/channels` de cada servidor conhecido fora o aberto, a cada 60s:** escolhida.
+
+**Decisão:**
+1. **Servidor aberto fica fora do poll novo:** ele já é repassado a cada 20s por `useServerStructure`, e `App.tsx` usa o `unreadChannelIds` que já existe. Trocar de servidor refaz o poll na hora com o conjunto novo.
+2. **Mesma regra de "não lido" dos canais:** a lógica de `useUnread` virou a função pura `unreadIds` em `lib/unread.ts`, usada pelos dois hooks, inclusive a semeadura (canal visto pela primeira vez conta como lido, para um servidor recém-adicionado não acender).
+3. **Só acende o que a pessoa não está vendo:** servidores fechados acendem sempre; o servidor aberto só quando a tela de Amigos está na frente; o ícone de Amigos só fora da tela de Amigos (DMs vêm de `unreadFriendIds`, que já existia, sem poll novo). Dentro do servidor aberto a bolinha por canal já faz esse papel.
+4. **Visual:** pílula de 4×8px na borda esquerda do rail, fora do ícone, como no Discord; o `title` do botão ganha "(mensagens não lidas)" para leitor de tela e hover.
+5. **Falha é silenciosa:** servidor fora do ar ou membro removido só fica sem pílula; o rail não tem onde mostrar erro.
+
+**Escopo aceito:**
+- **Atraso de até ~60s** para acender a pílula de um servidor fechado. O intervalo é maior que os 20s do servidor aberto porque são N requisições, e cada `server-channel` limita por IP (120/min por padrão, ver "Decisão: rate limiting em server-channel"): 1/min fica longe disso mesmo com o poll de estrutura e o de participantes de voz do servidor aberto.
+- **Poll roda também com a aba em segundo plano.** Revisitar se a lista de servidores por conta crescer a ponto de pesar.
+
+**Razão:** reaproveita o endpoint e os cursores que já existem, sem mudança de backend, e isola o custo novo num hook com intervalo próprio.
+
+**Verificado (2026-09-22):** `npm run lint` sem aviso novo nos arquivos tocados e `npm run build`. Não verificado num browser com dois servidores e login OIDC real.
+
+**Revisitar quando:** houver um feed de atividade por servidor (WebSocket), que substituiria os dois polls; ou muitos servidores por conta (nesse ponto, pausar o poll com `document.hidden` ou criar o endpoint agregado descartado acima).
+
+## Decisão: ampliar vídeo no canal de voz — foco por clique na tile + Fullscreen API, layout só em CSS
+
+**Contexto:** item de TODO "Expandir compartilhamento de tela": a tela compartilhada só aparecia no tamanho da grade (`max-width: 480px` por tile), pequena demais para ler código ou texto.
+
+**Alternativas consideradas:**
+- **Só tela cheia (Fullscreen API):** resolve leitura, mas tira a pessoa do app (sem controles de voz, sem lista de participantes). Insuficiente sozinha.
+- **Estado React de "tile focada" no hook e re-render do layout:** as tiles são criadas de forma imperativa (ver "Decisão: compartilhamento de tela"), então o React não as conhece; guardar o `trackSid` focado em state exigiria sincronizar com remoção/mute de tile. Descartada.
+- **Classe `focused` na tile + layout inteiro em CSS, com botão de tela cheia na própria tile:** escolhida.
+
+**Decisão:**
+1. **Clique (ou Enter/Espaço com a tile focada no teclado) alterna o foco** em `addVideoTile` (`hooks/useVoiceChannel.ts`): no máximo uma tile tem `focused`. Vale para câmera e tela, já que dividem a grade.
+2. **Layout do foco em CSS** (`VoiceChannelView.css`): quando existe `.video-tile.focused:not(.muted)`, a grade vira CSS grid, a tile focada ocupa a primeira linha inteira com `object-fit: contain`, as demais viram miniaturas de 160px embaixo e a lista de participantes encolhe para 25% da altura. Tile focada removida (track saiu) ou escondida (câmera desligada) desfaz o layout sozinha, sem código no hook para isso.
+3. **Botão ⛶ no canto da tile** (aparece no hover/foco) chama `tile.requestFullscreen()`; Esc ou o mesmo botão saem. Erro do `requestFullscreen` é ignorado: o foco na grade continua disponível.
+
+**Escopo aceito:** sem layout de palco/falante ativo nem troca automática de foco para quem começa a compartilhar; o foco é só local, não vai para a sala.
+
+**Razão:** mantém o padrão imperativo das tiles e deixa ao CSS o que é só apresentação, então os casos de borda (tile some, câmera desliga) não precisam de estado paralelo.
+
+**Verificado (2026-09-22):** `npm run lint` sem aviso novo e `npm run build`. Não verificado num browser com tela compartilhada real nem no Electron (a Fullscreen API de elemento funciona no Electron por padrão, mas não foi testada neste app).
+
+**Revisitar quando:** entrar layout de falante ativo ou muitos participantes com vídeo (mesmo gatilho de "Decisão: câmera no canal de voz").
 
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 

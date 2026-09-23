@@ -16,6 +16,7 @@ import { CategoryDialog, ChannelDialog } from './components/StructureDialogs'
 import { ChannelPermissionsDialog } from './components/ChannelPermissionsDialog'
 import { useAuth } from './auth/AuthProvider'
 import { useServerStructure } from './hooks/useServerStructure'
+import { useServersUnread } from './hooks/useServersUnread'
 import { useKnownServers } from './hooks/useKnownServers'
 import { useFriends } from './hooks/useFriends'
 import { useE2EKeys } from './hooks/useE2EKeys'
@@ -165,6 +166,17 @@ function App() {
     showFriends ? selectedFriendId : undefined,
   )
 
+  // Agregado do ServerRail: só acende o que a pessoa não está vendo. O
+  // servidor aberto conta pelo unreadChannelIds acima (já sem o canal
+  // selecionado) e só quando a tela de Amigos está na frente; os demais
+  // vêm de useServersUnread. DMs, idem, só fora da tela de Amigos.
+  const backgroundUnreadServerIds = useServersUnread(servers, selectedServerId, accessToken ?? '', accountSub)
+  const openServerUnread = showFriends && unreadChannelIds.size > 0
+  const unreadServerIds = useMemo(() => {
+    if (!openServerUnread || !selectedServerId) return backgroundUnreadServerIds
+    return new Set([...backgroundUnreadServerIds, selectedServerId])
+  }, [backgroundUnreadServerIds, openServerUnread, selectedServerId])
+
   if (status === 'loading') {
     return null
   }
@@ -179,6 +191,8 @@ function App() {
         servers={servers}
         selectedServerId={selectedServerId}
         friendsSelected={showFriends}
+        unreadServerIds={unreadServerIds}
+        friendsUnread={!showFriends && unreadFriendIds.size > 0}
         myProfile={myProfile}
         onSelectServer={(id) => {
           setShowFriends(false)

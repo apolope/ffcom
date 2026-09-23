@@ -37,6 +37,23 @@
     background 0.15s;
 }
 
+.server-icon {
+  position: relative;
+}
+
+/* Pílula na borda esquerda do rail (12px = (72 - 48) / 2), fora do ícone,
+   para não brigar com as iniciais nem com o hover do botão. */
+.rail-unread-pill {
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  width: 4px;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 0 4px 4px 0;
+  background: var(--text-h);
+}
+
 .server-icon:hover {
   background: var(--accent);
   color: #fff;

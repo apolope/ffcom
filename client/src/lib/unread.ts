@@ -30,3 +30,37 @@ export function markRead(accountSub: string, kind: UnreadKind, id: string, at: s
     // não lida simplesmente não persiste, sem outro efeito.
   }
 }
+
+export interface UnreadEntry {
+  id: string
+  lastMessageAt: string | undefined
+}
+
+// Ids de `entries` com mensagem mais nova que o cursor local. activeId é
+// excluído (o que está aberto nunca conta como não lido). Uma entrada sem
+// cursor ainda (primeira vez que este dispositivo vê esse id -- rollout da
+// feature, ou servidor/amigo recém-adicionado) é semeada como já lida em vez
+// de contar como atrasada, para não acender bolinha em tudo que já existia.
+// Compartilhado por hooks/useUnread.ts (servidor aberto, DMs) e
+// hooks/useServersUnread.ts (demais servidores, agregado no ServerRail).
+export function unreadIds(
+  accountSub: string,
+  kind: UnreadKind,
+  entries: UnreadEntry[],
+  activeId: string | undefined,
+): Set<string> {
+  const unread = new Set<string>()
+  if (!accountSub) return unread
+  for (const entry of entries) {
+    if (!entry.lastMessageAt || entry.id === activeId) continue
+    const lastRead = getLastRead(accountSub, kind, entry.id)
+    if (!lastRead) {
+      markRead(accountSub, kind, entry.id, entry.lastMessageAt)
+      continue
+    }
+    if (new Date(entry.lastMessageAt).getTime() > new Date(lastRead).getTime()) {
+      unread.add(entry.id)
+    }
+  }
+  return unread
+}

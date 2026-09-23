@@ -7,6 +7,11 @@ interface ServerRailProps {
   servers: KnownServer[]
   selectedServerId: string | undefined
   friendsSelected: boolean
+  // Indicador agregado de não lida (ver docs/architecture.md, "Decisão:
+  // indicador de não lida"): servidores com canal não lido e se há DM não
+  // lida. App.tsx só acende o que a pessoa não está vendo agora.
+  unreadServerIds: Set<string>
+  friendsUnread: boolean
   myProfile: MyProfile | undefined
   onSelectServer: (serverId: string) => void
   onSelectFriends: () => void
@@ -19,6 +24,8 @@ export function ServerRail({
   servers,
   selectedServerId,
   friendsSelected,
+  unreadServerIds,
+  friendsUnread,
   myProfile,
   onSelectServer,
   onSelectFriends,
@@ -32,8 +39,9 @@ export function ServerRail({
         type="button"
         className={friendsSelected ? 'server-icon active' : 'server-icon'}
         onClick={onSelectFriends}
-        title="Amigos"
+        title={friendsUnread ? 'Amigos (mensagens não lidas)' : 'Amigos'}
       >
+        {friendsUnread && <span className="rail-unread-pill" aria-hidden="true" />}
         <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">
           <path d="M12 3 2 12h3v8h6v-6h2v6h6v-8h3L12 3z" />
         </svg>
@@ -47,8 +55,9 @@ export function ServerRail({
                 server.id === selectedServerId ? 'server-icon active' : 'server-icon'
               }
               onClick={() => onSelectServer(server.id)}
-              title={server.name}
+              title={unreadServerIds.has(server.id) ? `${server.name} (mensagens não lidas)` : server.name}
             >
+              {unreadServerIds.has(server.id) && <span className="rail-unread-pill" aria-hidden="true" />}
               {server.initials}
             </button>
           </li>

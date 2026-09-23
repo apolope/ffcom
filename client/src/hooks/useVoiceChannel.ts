@@ -112,8 +112,43 @@ export function useVoiceChannel(
     const tile = document.createElement('div')
     tile.className = participant.isLocal ? 'video-tile local' : 'video-tile'
     if (publication.isMuted) tile.classList.add('muted')
+    // Foco: no máximo uma tile com a classe "focused"; o CSS amplia essa
+    // tile e reduz as demais a miniaturas. Uma tile focada que some
+    // (removida) ou é escondida (câmera desligada) desfaz o layout sozinha,
+    // porque o seletor é :has(.video-tile.focused:not(.muted)).
+    tile.tabIndex = 0
+    tile.title = 'Clique para ampliar'
+    const toggleFocus = () => {
+      const focusing = !tile.classList.contains('focused')
+      videoTilesRef.current.forEach((t) => t.classList.remove('focused'))
+      tile.classList.toggle('focused', focusing)
+    }
+    tile.addEventListener('click', toggleFocus)
+    tile.addEventListener('keydown', (event) => {
+      if (event.target !== tile || (event.key !== 'Enter' && event.key !== ' ')) return
+      event.preventDefault()
+      toggleFocus()
+    })
+    const fullscreen = document.createElement('button')
+    fullscreen.type = 'button'
+    fullscreen.className = 'video-tile-fullscreen'
+    fullscreen.title = 'Tela cheia'
+    fullscreen.setAttribute('aria-label', `Tela cheia: ${label.textContent}`)
+    fullscreen.textContent = '⛶'
+    fullscreen.addEventListener('click', (event) => {
+      event.stopPropagation()
+      if (document.fullscreenElement === tile) {
+        void document.exitFullscreen()
+      } else {
+        void tile.requestFullscreen().catch(() => {
+          // Fullscreen negado (iframe sem allowfullscreen, política do
+          // navegador): o foco na grade continua disponível.
+        })
+      }
+    })
     tile.appendChild(video)
     tile.appendChild(label)
+    tile.appendChild(fullscreen)
     videoTilesRef.current.set(publication.trackSid, tile)
     videoContainerElRef.current?.appendChild(tile)
   }, [])
