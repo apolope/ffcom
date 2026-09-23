@@ -18,11 +18,14 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
     error,
     participants,
     micEnabled,
+    cameraEnabled,
+    cameraError,
     screenSharing,
-    screenShareContainerRef,
+    videoContainerRef,
     join,
     leave,
     toggleMic,
+    toggleCamera,
     toggleScreenShare,
   } = useVoiceChannel(serverBaseUrl, channel.id, accessToken!)
 
@@ -50,7 +53,7 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
 
       {status === 'connected' && (
         <>
-          <div className="screen-share-grid" ref={screenShareContainerRef} />
+          <div className="video-grid" ref={videoContainerRef} />
           <ul className="voice-participant-list">
             {participants.map((p) => (
               <li key={p.identity} className="voice-participant">
@@ -60,14 +63,19 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
                 <span>
                   {p.name}
                   {p.isLocal ? ' (você)' : ''}
+                  {p.cameraEnabled ? ' 📷' : ''}
                   {p.screenSharing ? ' 🖥️' : ''}
                 </span>
               </li>
             ))}
           </ul>
+          {cameraError && <p className="message-error voice-media-error">{cameraError}</p>}
           <div className="voice-controls">
             <button type="button" onClick={toggleMic}>
               {micEnabled ? 'Silenciar microfone' : 'Ativar microfone'}
+            </button>
+            <button type="button" onClick={toggleCamera}>
+              {cameraEnabled ? 'Desligar câmera' : 'Ligar câmera'}
             </button>
             <button type="button" onClick={toggleScreenShare}>
               {screenSharing ? 'Parar compartilhamento' : 'Compartilhar tela'}

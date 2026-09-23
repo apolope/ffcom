@@ -51,6 +51,7 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [ ] Testar roles/permissões negando `ViewChannels` a um membro de teste
 - [ ] Testar DM cifrada ponta a ponta com duas contas reais (dois logins/navegadores): confirmar que `PUT /api/me/e2e-public-key` é chamado, que o envio funciona nos dois sentidos, e que o payload do frame `dm.create`/`dm.created` (DevTools) é ciphertext opaco — ver `docs/architecture.md`, "Decisão: criptografia ponta-a-ponta em DMs". Verificado nesta sessão só via teste automatizado direto no store (Postgres real, sem UI)
 - [ ] Testar upload de anexo/imagem em mensagem num browser real: enviar imagem (exibição inline) e arquivo não-imagem (link de download), confirmar que `GET /api/attachments/{id}` nega sem `ViewChannels`, e que apagar a mensagem remove o arquivo do volume `ATTACHMENTS_DIR` no host. Verificado nesta sessão só via `go build`/`go vet`/`go test` + migration aplicada contra Postgres 17 real — sem OIDC/browser disponível para rodar o fluxo completo
+- [ ] Testar câmera no canal de voz com 2 pessoas: ligar/desligar câmera dos dois lados (tile some ao desligar, volta ao religar, sem congelar no último quadro), preview local espelhado, e negar a permissão da câmera no navegador para ver a mensagem de erro sem cair da voz. Verificado nesta sessão só via `npm run lint`/`npm run build`, sem browser com câmera
 
 ## server-central
 
@@ -85,8 +86,9 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [x] Login OIDC (Authorization Code + PKCE, `oidc-client-ts`) contra o Authentik central — tela de login antes do shell principal
 - [x] Tela de adicionar servidor via IP/DNS (`client/src/components/AddServerDialog.tsx`, via API de `server-central`; ver `client/src/hooks/useKnownServers.ts`)
 - [x] API REST em `server-channel` para o client listar categorias/canais reais
-- [x] Integração de voz/vídeo via `livekit-client` (`client/src/components/VoiceChannelView.tsx` + `client/src/hooks/useVoiceChannel.ts`; vídeo em si — publicar câmera — ainda não tem controle na UI, só áudio)
-- [x] Compartilhamento de tela — `toggleScreenShare`/`screenShareContainerRef` em `client/src/hooks/useVoiceChannel.ts`, botão "Compartilhar tela" em `VoiceChannelView.tsx`; ver `docs/architecture.md`
+- [x] Integração de voz/vídeo via `livekit-client` (`client/src/components/VoiceChannelView.tsx` + `client/src/hooks/useVoiceChannel.ts`)
+- [x] Câmera no canal de voz — botão "Ligar câmera" em `VoiceChannelView.tsx` (`toggleCamera` em `useVoiceChannel.ts`), câmera remota e preview local espelhado na mesma grade de vídeo da tela compartilhada; permissão negada/sem câmera aparece como erro sem derrubar a voz. Ver `docs/architecture.md`, "Decisão: câmera no canal de voz"
+- [x] Compartilhamento de tela — `toggleScreenShare`/`videoContainerRef` em `client/src/hooks/useVoiceChannel.ts`, botão "Compartilhar tela" em `VoiceChannelView.tsx`; ver `docs/architecture.md`
 - [x] Chat de texto em tempo real (histórico via REST + WebSocket, ver `client/src/hooks/useChannelChat.ts`)
 - [x] Canal forum (UI de threads) — `client/src/components/ForumChannelView.tsx` + `client/src/hooks/useForumChannel.ts`, ligado em `MainPanel.tsx`; ver `docs/architecture.md`
 - [x] Lista de amigos + presença (via `server-central`)
@@ -96,6 +98,9 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [x] Build Electron para Windows/macOS/Linux — `electron-builder` (`client/package.json`, campo `"build"`), scripts `package`/`package:win`/`package:mac`/`package:linux`; sem ícone customizado nem assinatura de código ainda. Ver `docs/architecture.md`
 - [x] Build web/PWA — `vite-plugin-pwa` (manifest + service worker via Workbox), ícones gerados por `@vite-pwa/assets-generator` a partir de `favicon.svg`, desligado no build Electron; ver `docs/architecture.md`
 - [x] UI para editar/apagar mensagem própria — `TextChannelView.tsx`, botões "editar"/"apagar" visíveis ao passar o mouse na própria mensagem; editar troca por um form inline. Sem botão para Administrator apagar mensagem de outro (permissão já existe no servidor). Ver `docs/architecture.md`
+- [ ] UI de overwrite de canal por role (a API `GET/PUT/DELETE /api/channels/{id}/overwrites[/{roleId}]` já existe em `server-channel`, só falta tela)
+- [ ] Botão para quem tem `Administrator` apagar mensagem de outro membro em `TextChannelView.tsx` (o servidor já aceita, ver "Decisão: editar/apagar mensagem de texto")
+- [ ] Indicador agregado de não lida no `ServerRail` (hoje a bolinha só aparece por canal e por DM, ver "Decisão: indicador de não lida")
 - [x] Notificação/contador de não lidas — bolinha de "não lida" (sem contagem) em canal e em DM fechada: `lastMessageAt` por canal (`GET /api/channels` em `server-channel`) e por amigo (`GET /api/friends` em `server-central`), comparado contra um cursor local ao dispositivo (`client/src/lib/unread.ts`, `hooks/useUnread.ts`); DM atualiza via WebSocket de presença já existente, canal via poll de 20s (sem feed cruzando canais). Sem indicador agregado no `ServerRail` ainda. Ver `docs/architecture.md`, "Decisão: indicador de não lida"
 
 ## Segurança

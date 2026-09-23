@@ -25,7 +25,7 @@
   cursor: pointer;
 }
 
-.screen-share-grid {
+.video-grid {
   flex: 0 1 auto;
   display: flex;
   flex-wrap: wrap;
@@ -33,11 +33,24 @@
   padding: 16px 16px 0;
 }
 
-.screen-share-grid:empty {
+.video-grid:empty,
+.video-grid:not(:has(.video-tile:not(.muted))) {
   display: none;
 }
 
-.screen-share-tile {
+/* Câmera desligada: a track continua publicada, só silenciada (ver
+   useVoiceChannel.ts), então a tile é escondida em vez de removida. */
+.video-tile.muted {
+  display: none;
+}
+
+/* Preview da própria câmera espelhado, como num espelho; o vídeo que os
+   outros recebem continua sem espelhar. */
+.video-tile.local video {
+  transform: scaleX(-1);
+}
+
+.video-tile {
   position: relative;
   flex: 1 1 320px;
   max-width: 480px;
@@ -46,13 +59,13 @@
   overflow: hidden;
 }
 
-.screen-share-tile video {
+.video-tile video {
   display: block;
   width: 100%;
   height: auto;
 }
 
-.screen-share-label {
+.video-tile-label {
   position: absolute;
   left: 8px;
   bottom: 8px;
@@ -91,6 +104,11 @@
   gap: 8px;
   padding: 16px;
   border-top: 1px solid var(--border);
+}
+
+.voice-media-error {
+  margin: 0;
+  padding: 0 16px 12px;
 }
 
 .voice-controls button {
