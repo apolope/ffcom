@@ -68,6 +68,7 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 ## server-channel
 
 - [x] Modelo de dados: categorias, canais (texto/voz/forum), mensagens, permissões/roles, convites
+- [ ] Criar/renomear/apagar categoria e canal (API + UI) — hoje não existe endpoint nem tela: `store.CategoryStore.Create`/`ChannelStore.Create` só são usados em teste, então um `server-channel` recém-instalado fica sem nenhum canal. Descoberto em 2026-09-22 ao preparar o teste com 2 pessoas; na instância oficial a categoria "Geral" com `geral` (texto), `Voz` (voz) e `forum` (fórum) foi criada à mão via `psql`. Provavelmente exige um bit de permissão novo (`ManageChannels`), ver "Decisão: sistema de permissões/roles"
 - [x] Integração com LiveKit: criar sala por canal de voz, emitir token de acesso (`POST /api/channels/{id}/voice/token`, sala criada implicitamente pelo LiveKit); agora exige o bit `Voice` da permissão efetiva do canal em vez de só "é membro", ver `docs/architecture.md`
 - [x] Canal de texto: envio/histórico de mensagens via WebSocket
 - [x] CORS configurável (`CORS_ALLOWED_ORIGINS`) para o client chamar de outra origem (REST + WebSocket)
