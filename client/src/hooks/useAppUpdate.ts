@@ -6,6 +6,9 @@ import { useRegisterSW } from 'virtual:pwa-register/react'
 // celular fica dias aberto em segundo plano sem navegar.
 const UPDATE_CHECK_INTERVAL_MS = 5 * 60_000
 
+// Prazo para recarregar mesmo que o worker novo não avise que ativou.
+const RELOAD_FALLBACK_MS = 3_000
+
 interface UseAppUpdateResult {
   // Uma versão nova já foi baixada e está esperando para ativar.
   updateReady: boolean
@@ -52,7 +55,31 @@ export function useAppUpdate(): UseAppUpdateResult {
     }
   }, [])
 
-  const applyUpdate = useCallback(() => void updateServiceWorker(true), [updateServiceWorker])
+  // updateServiceWorker(true) só manda SKIP_WAITING: o reload do
+  // vite-plugin-pwa depende do evento "controlling" com isUpdate, que não
+  // vem numa página aberta sem service worker controlando (Ctrl+F5, ou a
+  // primeira visita). Nesse caso a versão nova ativava em silêncio e o
+  // clique "não fazia nada". Por isso o reload é feito aqui: quando o
+  // worker que estava esperando chega a "activated", com um prazo de
+  // segurança; sem nada esperando (já ativou antes), recarrega direto.
+  const applyUpdate = useCallback(() => {
+    const waiting = registrationRef.current?.waiting
+    if (!waiting) {
+      window.location.reload()
+      return
+    }
+    let reloading = false
+    const reload = () => {
+      if (reloading) return
+      reloading = true
+      window.location.reload()
+    }
+    waiting.addEventListener('statechange', () => {
+      if (waiting.state === 'activated') reload()
+    })
+    setTimeout(reload, RELOAD_FALLBACK_MS)
+    void updateServiceWorker(true)
+  }, [updateServiceWorker])
 
   return { updateReady, applyUpdate }
 }
