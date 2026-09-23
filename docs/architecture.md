@@ -976,13 +976,15 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Decisão:**
 1. `toggleScreenShare` (`hooks/useVoiceChannel.ts`) passa `SCREEN_SHARE_AUDIO_CONSTRAINTS` como `audio`. O `livekit-client` 2.22 repassa esse objeto cru ao `getDisplayMedia` (`screenCaptureToDisplayMediaStreamOptions`), por isso uma constraint fora do tipo `AudioCaptureOptions` chega ao navegador.
-2. **`restrictOwnAudio: true`** (Chrome 141+): tira do áudio do sistema o som tocado pela própria página, que é a voz dos outros participantes. Sem isso, a tela inteira com áudio do sistema no Windows devolveria a voz de cada um para a sala. Navegador que não conhece a constraint a ignora.
+2. **`restrictOwnAudio` saiu depois do primeiro teste real (2026-09-23):** a versão `client-v0.5.0` pedia `restrictOwnAudio: true` (Chrome 141+), que tira do áudio do sistema o som tocado pela própria página, ou seja, as vozes da sala. No teste, tela inteira com áudio do sistema no Windows publicou a track (🔊 na lista) mas ela chegou muda, com o som vindo de outro programa. Como era a única opção fora do padrão, saiu para isolar a causa; `toggleScreenShare` agora loga no console de quem compartilha o `getSettings()` da track de áudio. **Custo enquanto isso:** na tela inteira com áudio do sistema, as vozes da sala tocadas pelo FFCom podem voltar para a sala com atraso. Compartilhar uma aba não tem esse problema.
 3. **Quem assiste não muda:** o `TrackSubscribed` já anexa toda track de áudio remota, inclusive `ScreenShareAudio`.
 4. **Aviso na UI:** o áudio só vem se a pessoa marcar "Compartilhar áudio" no seletor. Compartilhando sem track `ScreenShareAudio`, `VoiceChannelView` mostra como refazer com som; a lista de participantes mostra 🔊 para quem compartilha com áudio.
 
 **Escopo aceito, limites do navegador:** Chrome e Edge capturam o áudio de uma aba e, só no Windows, o do sistema na tela inteira; janela avulsa não tem áudio; Firefox e Safari não capturam áudio de tela. **Electron fica de fora:** ali não existe seletor nativo, e sem `session.setDisplayMediaRequestHandler` no processo main o próprio compartilhamento de tela falha hoje (item próprio no TODO).
 
 **Razão:** o SDK já resolve captura e publicação; o trabalho real é não estragar o som com filtros de voz e não criar eco.
+
+**Pendente:** se o áudio voltar sem `restrictOwnAudio`, reintroduzir a proteção contra eco de forma verificada (pedir a constraint só quando `getSupportedConstraints().restrictOwnAudio`, conferir no `getSettings()` que foi aplicada e que a track não está muda) em vez de pedir às cegas.
 
 **Verificado (2026-09-23):** `tsc -b`, `npm run lint` sem aviso novo e `npm run build`. Não verificado num browser com dois participantes (o seletor de tela exige interação humana).
 

@@ -60,17 +60,17 @@ function toParticipant(p: LocalParticipant | RemoteParticipant): VoiceParticipan
 // (nome = id do canal); entrar busca um token novo em
 // POST /api/channels/{id}/voice/token a cada tentativa, em vez de cachear.
 // Constraints do áudio da tela, repassadas cruas ao getDisplayMedia pelo
-// livekit-client. restrictOwnAudio (Chrome 141+) tira do áudio do sistema o
-// som tocado por esta própria página, ou seja, as vozes da sala: sem isso,
-// compartilhar a tela inteira com áudio no Windows devolveria a voz de cada
-// um para a sala. Não está no tipo AudioCaptureOptions (daí o cast), e
-// navegador que não conhece a constraint a ignora.
-const SCREEN_SHARE_AUDIO_CONSTRAINTS = {
+// livekit-client. Sem restrictOwnAudio por enquanto: com ele (Chrome 141+),
+// tela inteira com áudio do sistema no Windows publicou a track (🔊 na
+// lista) mas sem som nenhum, mesmo com o som vindo de outro programa. Sem
+// ele, as vozes da sala tocadas por esta página podem voltar para a sala
+// nesse caso. Ver docs/architecture.md, "Decisão: áudio da tela
+// compartilhada".
+const SCREEN_SHARE_AUDIO_CONSTRAINTS: AudioCaptureOptions = {
   echoCancellation: false,
   noiseSuppression: false,
   autoGainControl: false,
-  restrictOwnAudio: true,
-} as AudioCaptureOptions
+}
 
 export function useVoiceChannel(
   baseUrl: string,
@@ -316,6 +316,13 @@ export function useVoiceChannel(
         audio: SCREEN_SHARE_AUDIO_CONSTRAINTS,
         systemAudio: 'include',
       })
+      // Diagnóstico do áudio da tela: o que o navegador aplicou de fato
+      // (dispositivo, filtros, restrictOwnAudio quando suportado). Fica no
+      // console de quem compartilha, para investigar áudio mudo sem chute.
+      const screenAudio = room.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio)?.track
+      if (next) {
+        console.info('[ffcom] áudio da tela', screenAudio ? screenAudio.mediaStreamTrack.getSettings() : 'sem track de áudio')
+      }
     } catch {
       return
     }
