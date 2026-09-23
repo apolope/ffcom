@@ -1168,6 +1168,39 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** o Electron empacotado for distribuído e alguém pedir push-to-talk em segundo plano (aí, `uiohook-napi` ou similar só no Electron), ou o teste mostrar a primeira sílaba cortada no aperto (aí, medir o `unmute` e considerar manter a track sempre transmitindo silêncio).
 
+## Decisão: supressão de ruído no microfone — a do navegador como padrão, RNNoise opcional como "reforçada"
+
+**Contexto:** barulho de teclado, ventilador ou rua vaza pelo microfone aberto. O item do TODO pedia um discovery antes de qualquer código, com critérios de qualidade percebida, CPU e latência, licença (o repo é público), paridade entre web/PWA e Electron e interação com o push-to-talk e o som de mute.
+
+**Achado principal:** **o FFCom já roda supressão de ruído hoje.** O `livekit-client` 2.22.3 captura o microfone com `audioDefaults = { echoCancellation: true, noiseSuppression: true, autoGainControl: true, voiceIsolation: true }` (`src/room/defaults.ts`), e os dois caminhos de entrada (`setMicrophoneEnabled` e a track criada para o push-to-talk com `createLocalAudioTrack(room.options.audioCaptureDefaults)`) herdam esses padrões. O `voiceIsolation` é uma variante mais forte, mas segundo o Intent to Ship do Chrome só tem efeito onde o sistema oferece esse processamento, que na época era um grupo de aparelhos ChromeOS (Chrome 123+). Em Windows, Android e Linux, na prática vale o `noiseSuppression` clássico do WebRTC.
+
+**Alternativas consideradas:**
+- **Só a supressão do navegador (o que já existe):** custo zero, nada a baixar, igual no web e no Electron (ambos Chromium). Pelo que se sabe do supressor do WebRTC, ele lida bem com ruído constante (ventilador, chiado) e mal com ruído de impulso (teclado, cachorro, louça), mas a qualidade varia por navegador e sistema e não medi nada aqui. Continua como padrão.
+- **RNNoise (Xiph, BSD-3-Clause) em WASM num `AudioWorklet`:** rede pequena feita para voz em tempo real, usada em vários projetos WebRTC. O pacote `@sapphi-red/web-noise-suppressor` (MIT; versão 0.4.1 publicada em 2026-09-19) traz o nó pronto: `rnnoise_simd.wasm` com ~157 KB mais um worklet de ~64 KB, carregados só quando a opção está ligada. Processa quadros de 480 amostras a 48 kHz. Pelo buffer do worklet, a latência extra parece ficar na ordem de 10 a 20 ms, a medir. Escolhida como opção "reforçada".
+- **GTCRN (MIT, mesmo pacote, `gtcrn.wasm` de ~197 KB):** modelo mais novo e aceita contexto de 16 kHz ou 48 kHz. Não achei comparação confiável com o RNNoise, e trocar um pelo outro no mesmo pacote é trocar o nó. Fica como candidata no teste de escuta, sem decisão.
+- **DeepFilterNet (código MIT ou Apache-2.0):** em geral mais eficaz, porém mais pesado. Os ports para navegador são comunitários, e o caminho via ONNX Runtime Web pesa ~11,8 MB e historicamente teve dificuldade de rodar dentro de um `AudioWorklet`. Descartada por agora.
+- **Krisp (`@livekit/krisp-noise-filter`, o "enhanced noise cancellation" do LiveKit):** a licença do pacote é "SEE LICENSE IN https://livekit.io/legal/terms-of-service" (proprietária), os modelos são baixados em tempo de execução, e a documentação do LiveKit o apresenta como parte da LiveKit Cloud. Para self-hosted, o caminho documentado é outro fornecedor (ai-coustics) com chave de licença própria. Não serve a um projeto público e self-hosted. Descartada. Não testei se o pacote chegaria a funcionar contra o nosso servidor.
+
+**Decisão:**
+1. **Padrão:** continua a supressão do navegador, sem mudança de código.
+2. **Opção "Supressão de ruído reforçada"** nas preferências de voz (`lib/voicePrefs.ts`, desligada por padrão): o RNNoise do `@sapphi-red/web-noise-suppressor` como `TrackProcessor` do LiveKit (`LocalAudioTrack.setProcessor`, API marcada como experimental), aplicado à track do microfone depois de publicada, nos dois caminhos de entrada.
+3. **Pontos de implementação já identificados:**
+   - **`AudioContext` próprio a 48 kHz dentro do processador.** O `setProcessor` entrega o `AudioContext` da sala, que o LiveKit cria com `new AudioContext({ latencyHint: 'interactive' })` na taxa do dispositivo (pode ser 44,1 kHz), e o RNNoise espera 48 kHz.
+   - **Com a reforçada ligada, capturar com `noiseSuppression: false` e `voiceIsolation: false`**, mantendo `echoCancellation` e `autoGainControl`, para não empilhar dois supressores. Trocar a opção conectado exige `restartTrack` com as novas constraints ou vale na próxima entrada; decidir na implementação.
+   - **WASM e worklet via `?url` do Vite, carregados só ao ligar.** Conferir que o precache do PWA pega o `.wasm` (o padrão do Workbox deve incluir, mas o build dirá) e que o `app://` do Electron serve os dois (o pacote baixa o WASM com `fetch().arrayBuffer()`, o que não depende do MIME).
+   - **Áudio da tela nunca passa pelo supressor:** é outra track, já capturada sem filtros ("Decisão: áudio da tela compartilhada").
+4. **Push-to-talk e som de mute:** mutar a track (`enabled = false`) entrega silêncio ao RNNoise, então o push-to-talk funciona igual. O som de mute toca num `AudioContext` separado e não passa pela track. Não sei se o RNNoise reduz o bipe de desmutar que vaza pelo ar, e isso fica para o teste com alto-falante.
+
+**Escopo aceito:**
+- **Nenhuma qualidade foi medida nesta sessão.** A escolha do padrão e do modelo reforçado se apoia em licença, peso e integração. A qualidade percebida sai do teste de escuta, que pode ser feito antes de qualquer código na demo do pacote (web-noise-suppressor.sapphi.red, com RNNoise, Speex, GTCRN e o supressor do navegador lado a lado).
+- **CPU não medida:** o RNNoise tem fama de leve, mas em celular antigo é preciso conferir.
+
+**Razão:** a supressão que já existe cobre o caso comum sem custo. A reforçada tem licença compatível com repo público, peso de algumas centenas de KB só para quem liga e encaixe na API de processador que o SDK já oferece. As opções descartadas falham em licença (Krisp) ou em peso e maturidade no navegador (DeepFilterNet).
+
+**Verificado (2026-09-23):** padrões de captura, `setProcessor`, `getNewAudioContext` e o caminho da track do push-to-talk lidos no código-fonte do `livekit-client` 2.22.3. Licença, versão e arquivos do `@sapphi-red/web-noise-suppressor` 0.4.1 e do `@livekit/krisp-noise-filter` 0.4.5 conferidos no registro do npm. Licenças do RNNoise (BSD-3-Clause) e do GTCRN (MIT) conferidas na API do GitHub. `voiceIsolation` conferido no Intent to Ship do Chrome e no chromestatus. A cobrança do Krisp e a restrição à Cloud vêm da documentação do LiveKit, que não detalha os planos.
+
+**Revisitar quando:** o teste de escuta apontar a reforçada como claramente melhor (aí, considerar torná-la o padrão), o GTCRN ganhar do RNNoise no mesmo teste, ou o Chrome passar a oferecer `voiceIsolation` no Windows ou no Android.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.
