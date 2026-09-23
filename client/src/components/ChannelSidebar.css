@@ -30,10 +30,14 @@
   flex: 1 1 auto;
 }
 
+/* Linha própria abaixo do nome, com a largura da barra: com flex 0 0 auto o
+   bloco ficava com a largura de todos os botões numa linha só, o wrap
+   interno nunca agia e o último botão era cortado pela barra de 240px. */
 .server-name-actions {
   display: flex;
   flex-wrap: wrap;
-  flex: 0 0 auto;
+  flex: 1 1 100%;
+  min-width: 0;
   gap: 6px;
 }
 
