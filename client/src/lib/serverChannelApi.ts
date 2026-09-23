@@ -464,6 +464,27 @@ export async function fetchVoiceToken(
   return parseJsonOrThrow<VoiceToken>(res)
 }
 
+export interface VoiceParticipant {
+  memberId: string
+  // Nome com que a pessoa entrou na sala (apelido na hora do token).
+  name: string
+}
+
+// GET /api/voice/participants — quem está em cada canal de voz visível,
+// indexado pelo id do canal; canal vazio não aparece. O servidor guarda a
+// foto do LiveKit por alguns segundos (ver docs/architecture.md, "Decisão:
+// participantes da sala de voz na barra lateral").
+export async function fetchVoiceParticipants(
+  baseUrl: string,
+  accessToken: string,
+): Promise<Record<string, VoiceParticipant[]>> {
+  const res = await fetch(`${baseUrl}/api/voice/participants`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  const body = await parseJsonOrThrow<{ channels: Record<string, VoiceParticipant[]> }>(res)
+  return body.channels
+}
+
 function toWebSocketUrl(baseUrl: string, channelId: string): string {
   const url = new URL(`${baseUrl}/api/channels/${channelId}/ws`)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'

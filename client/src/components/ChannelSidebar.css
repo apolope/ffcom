@@ -186,3 +186,31 @@
   cursor: pointer;
   text-decoration: underline;
 }
+
+.category ul.voice-participants {
+  margin: 0 0 4px 32px;
+}
+
+.voice-participant {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.voice-participant-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--online, #3ba55d);
+  flex: 0 0 6px;
+}
+
+.voice-participant-self {
+  opacity: 0.7;
+}

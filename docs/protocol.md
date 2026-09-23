@@ -98,6 +98,7 @@ Base URL: `KnownServer.baseUrl`, uma por servidor cadastrado no client (endereç
 | GET | `/api/threads/{id}/messages?before=&limit=` | Bearer + membro + `ViewChannels` | — | `{messages: [Message]}` | `404` thread |
 | GET | `/api/channels/{id}/ws` | Bearer (subprotocolo) + membro + `ViewChannels` | upgrade WS | ver abaixo | `400` tipo de canal não suporta WS, `403` |
 | POST | `/api/channels/{id}/voice/token` | Bearer + membro + `Voice` | — | `{token, roomName, url}` | `400` canal não é voz, `403` |
+| GET | `/api/voice/participants` | Bearer + membro | — | `{channels: {<channelId>: [{memberId, name}]}}` — só canais de voz com `ViewChannels` e com alguém dentro; foto do LiveKit guardada por 5s | `502` LiveKit indisponível |
 | GET | `/api/channels/{id}/overwrites` | Bearer + membro + `ManageRoles` | — | `{overwrites: [{roleId, allow, deny}]}` | `404` canal |
 | PUT | `/api/channels/{id}/overwrites/{roleId}` | Bearer + membro + `ManageRoles` | `{allow, deny}` | `Overwrite` | `403` allow excede permissão própria (`Grants`), `404` canal |
 | DELETE | `/api/channels/{id}/overwrites/{roleId}` | Bearer + membro + `ManageRoles` | — | `204` | `404` |

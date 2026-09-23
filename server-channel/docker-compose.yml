@@ -122,6 +122,9 @@ services:
       # diretamente (sinalização + mídia) — não passa pelo server-channel.
       # Ver docs/architecture.md, "Decisão: integração de voz com LiveKit".
       LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:?defina LIVEKIT_PUBLIC_URL no .env}
+      # API do LiveKit por dentro da rede do compose, usada para listar quem
+      # está em cada sala de voz (GET /api/voice/participants).
+      LIVEKIT_API_URL: http://livekit:7880
       # Upload de anexo/imagem em mensagem — ver docs/architecture.md,
       # "Decisão: upload de anexo em mensagem". ATTACHMENTS_DIR precisa
       # apontar para um volume (attachments_data abaixo), ou anexos somem a

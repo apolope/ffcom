@@ -10,6 +10,7 @@ import (
 
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
 	"a3sitsolutions.com/ffcom/server-channel/internal/httpapi"
+	"a3sitsolutions.com/ffcom/server-channel/internal/livekit"
 	"a3sitsolutions.com/ffcom/server-channel/internal/storage"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
 )
@@ -25,6 +26,13 @@ func main() {
 	liveKitAPIKey := requireEnv("LIVEKIT_API_KEY")
 	liveKitAPISecret := requireEnv("LIVEKIT_API_SECRET")
 	liveKitPublicURL := requireEnv("LIVEKIT_PUBLIC_URL")
+	// Endereço da API do LiveKit visto de dentro (ex. http://livekit:7880),
+	// usado para listar quem está em cada sala de voz. Opcional: sem ele,
+	// deriva de LIVEKIT_PUBLIC_URL e dá a volta pelo proxy reverso.
+	liveKitAPIURL := os.Getenv("LIVEKIT_API_URL")
+	if liveKitAPIURL == "" {
+		liveKitAPIURL = livekit.APIURLFromPublicURL(liveKitPublicURL)
+	}
 	// A porta interna do container é sempre 8080 (ver Dockerfile e
 	// docker-compose.yml: SERVER_CHANNEL_PORT só controla o mapeamento de
 	// porta do host, não é repassada ao container). SERVER_PORT permite
@@ -70,6 +78,7 @@ func main() {
 		liveKitAPIKey,
 		liveKitAPISecret,
 		liveKitPublicURL,
+		liveKitAPIURL,
 		version,
 		envBool("REQUIRE_TLS", false),
 		envInt("RATE_LIMIT_RPM", 120),

@@ -867,6 +867,31 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** alguém relatar voz sem conectar numa rede restritiva, ou quando o roteamento SNI na 443 de `VMSUBS24OCI0102` estiver disponível.
 
+## Decisão: participantes da sala de voz na barra lateral — poll da RoomService do LiveKit, sem SDK nem webhook
+
+**Contexto:** a `ChannelSidebar` não mostrava quem estava num canal de voz; só dava para saber entrando. `server-channel` não guarda estado de voz (a sala é criada implicitamente pelo LiveKit, ver "Decisão: integração de voz com LiveKit").
+
+**Alternativas consideradas:**
+- **Webhook do LiveKit (`participant_joined`/`participant_left`) + estado em memória no `server-channel`:** atualiza na hora, mas o estado some a cada restart do app (e volta errado até o próximo evento), exige configurar o webhook nos dois composes e validar a assinatura dele. Adiado.
+- **O client entrar "oculto" em cada sala para ver quem está lá:** uma conexão WebRTC por canal de voz por pessoa, só para ler uma lista. Descartada.
+- **`server-channel` consultar a RoomService (`ListRooms` + `ListParticipants`) sob demanda, com cache curto, e o client fazer poll:** escolhida. Sem estado próprio para ficar dessincronizado; o LiveKit já é a fonte da verdade.
+- **SDK oficial (`server-sdk-go`) para essas chamadas:** descartado pelo mesmo motivo de `internal/livekit/token.go` (arrasta pion/webrtc, redis e prometheus). A RoomService é Twirp e aceita JSON por HTTP; `internal/livekit/rooms.go` assina um JWT de admin (`roomList`, ou `roomAdmin` + `room`) com o mesmo `golang-jwt` e faz dois POSTs.
+
+**Decisão:**
+1. **`GET /api/voice/participants`** (`internal/httpapi/voice_participants.go`) devolve `{channels: {<channelId>: [{memberId, name}]}}`, só com os canais de voz em que quem pede tem `ViewChannels` (mesma regra de `GET /api/channels`) e que têm alguém dentro. Não exige o bit `Voice`: ver quem está na sala é como ver o canal na lista, entrar é que exige `Voice`. `502` se o LiveKit não responder.
+2. **Cache de 5s compartilhado** (`voicePresence`): uma foto crua de todas as salas, reusada por todos os membros; o filtro de permissão é por requisição. O lock fica preso durante a busca, então pedidos simultâneos esperam a mesma rodada em vez de dispararem uma cada. Erro do LiveKit não entra na cache. Sala que falha no `ListParticipants` (fechou entre as duas chamadas) é pulada, as outras continuam.
+3. **Só `identity` e `name` saem do LiveKit.** O `ListRooms` devolve também o `turn_password` da sala, que nunca é repassado; participante `hidden` ou `DISCONNECTED` é descartado. `num_participants` do `ListRooms` não serve para pular sala vazia: veio `0` com alguém `JOINED` no teste.
+4. **`LIVEKIT_API_URL`** (novo, opcional): endereço da API do LiveKit visto de dentro (`http://ffcom-livekit:7880` no compose de implantação, `http://livekit:7880` no de referência). Sem ele, deriva de `LIVEKIT_PUBLIC_URL` (`wss://` → `https://`), que funciona em qualquer instalação mas dá a volta pelo proxy reverso. Um `.env` antigo continua subindo sem mudança.
+5. **Client:** `hooks/useVoiceParticipants.ts` faz poll a cada 10s (mais curto que os 20s da estrutura, porque entrar e sair de sala é muito mais frequente que criar canal), só quando o servidor tem algum canal de voz visível. Erro de poll mantém a última lista. A `ChannelSidebar` lista os nomes embaixo do canal, preferindo o apelido atual da lista de membros ao nome gravado no token, e marca "(você)".
+
+**Escopo aceito:**
+- **Atraso de até ~15s** (10s de poll + 5s de cache) para a lista refletir alguém entrando ou saindo, inclusive a própria pessoa.
+- **Sem estado de microfone/câmera/tela** na lista, só o nome. O `ListParticipants` já traz as tracks; dá para acrescentar sem mudar o desenho.
+
+**Verificado (2026-09-22):** `go vet`/`go test` de `server-channel`, incluindo testes da cache (reuso dentro do ttl, sala vazia/que falha pulada, erro não cacheado) e um teste de integração de `RoomClient` contra `livekit-server` 1.13.7 local (`FFCOM_TEST_LIVEKIT_URL`, participante entra pela sinalização e aparece com identity e nome certos; segredo errado dá erro). Client: `tsc -b`, `npm run lint` sem aviso novo, `npm run build` e a `ChannelSidebar` renderizada com `renderToStaticMarkup` e dados falsos. Não verificado: o handler com Postgres real e a tela num browser com login OIDC.
+
+**Revisitar quando:** o atraso incomodar (nesse ponto, webhook do LiveKit empurrando para um feed de estrutura por servidor, o mesmo que o indicador de não lida adiou), ou quando a lista precisar de ícone de mudo/câmera.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

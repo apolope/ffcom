@@ -22,6 +22,7 @@ import { useMe } from './hooks/useMe'
 import { useMyProfile } from './hooks/useMyProfile'
 import { useServerMembers } from './hooks/useServerMembers'
 import { useUnread } from './hooks/useUnread'
+import { useVoiceParticipants } from './hooks/useVoiceParticipants'
 import {
   UNCATEGORIZED_ID,
   createCategory,
@@ -92,6 +93,8 @@ function App() {
 
   const { categories, refresh: refreshStructure } = useServerStructure(server?.baseUrl ?? '', accessToken ?? '')
   const realCategories = useMemo(() => categories.filter((c) => c.id !== UNCATEGORIZED_ID), [categories])
+  const hasVoiceChannel = categories.some((category) => category.channels.some((c) => c.type === 'voice'))
+  const voiceParticipants = useVoiceParticipants(server?.baseUrl ?? '', accessToken ?? '', hasVoiceChannel)
 
   const [selectedChannelId, setSelectedChannelId] = useState<string>()
   // categories muda a cada repoll de useServerStructure (20s), não só ao
@@ -208,6 +211,9 @@ function App() {
             categories={categories}
             selectedChannelId={selectedChannelId}
             unreadChannelIds={unreadChannelIds}
+            voiceParticipants={voiceParticipants}
+            members={members}
+            selfMemberId={me?.memberId}
             onSelectChannel={setSelectedChannelId}
             onInvite={() => setShowInviteServer(true)}
             canManageMembers={canOpenMemberAdmin}

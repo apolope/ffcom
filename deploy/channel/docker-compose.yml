@@ -106,6 +106,9 @@ services:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
       LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:?defina LIVEKIT_PUBLIC_URL no .env (wss://livekit-test.ffcom.a3sitsolutions.com.br)}
+      # API do LiveKit por dentro (rede a3s-services), para listar quem está
+      # em cada sala de voz sem dar a volta pelo NPM.
+      LIVEKIT_API_URL: http://ffcom-livekit:7880
       # Upload de anexo/imagem em mensagem — ver docs/architecture.md,
       # "Decisão: upload de anexo em mensagem".
       ATTACHMENTS_DIR: /data/attachments

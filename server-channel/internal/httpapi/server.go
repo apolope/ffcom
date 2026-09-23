@@ -3,8 +3,10 @@ package httpapi
 
 import (
 	"net/http"
+	"time"
 
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
+	"a3sitsolutions.com/ffcom/server-channel/internal/livekit"
 	"a3sitsolutions.com/ffcom/server-channel/internal/realtime"
 	"a3sitsolutions.com/ffcom/server-channel/internal/storage"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
@@ -35,7 +37,10 @@ import (
 // disco (ver internal/storage.FileStore); attachmentMaxBytes é o tamanho
 // máximo de um único anexo — ver docs/architecture.md, "Decisão: upload de
 // anexo em mensagem".
-func NewRouter(verifier *auth.Verifier, db *store.Store, attachmentFiles *storage.FileStore, attachmentMaxBytes int64, allowedOrigins []string, liveKitAPIKey, liveKitAPISecret, liveKitPublicURL, version string, requireTLS bool, restRateLimitRPM, restRateLimitBurst, wsRateLimitRPM, wsRateLimitBurst int) http.Handler {
+//
+// liveKitAPIURL é onde server-channel consulta a RoomService do LiveKit
+// (quem está em cada sala de voz, ver voice_participants.go).
+func NewRouter(verifier *auth.Verifier, db *store.Store, attachmentFiles *storage.FileStore, attachmentMaxBytes int64, allowedOrigins []string, liveKitAPIKey, liveKitAPISecret, liveKitPublicURL, liveKitAPIURL, version string, requireTLS bool, restRateLimitRPM, restRateLimitBurst, wsRateLimitRPM, wsRateLimitBurst int) http.Handler {
 	mux := http.NewServeMux()
 	hub := realtime.NewHub()
 
@@ -77,6 +82,8 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, attachmentFiles *storag
 	mux.Handle("GET /api/threads/{id}/messages", protected(handleListThreadMessages(db.Roles, db.ChannelOverwrites, db.Messages)))
 	mux.Handle("GET /api/channels/{id}/ws", protected(handleChannelWS(hub, db.Channels, db.Roles, db.ChannelOverwrites, db.Messages, db.Attachments, attachmentFiles, upgrader, wsLimiter)))
 	mux.Handle("POST /api/channels/{id}/voice/token", protected(handleVoiceToken(db.Channels, db.Roles, db.ChannelOverwrites, liveKitAPIKey, liveKitAPISecret, liveKitPublicURL)))
+	voicePresence := newVoicePresence(livekit.NewRoomClient(liveKitAPIURL, liveKitAPIKey, liveKitAPISecret), 5*time.Second)
+	mux.Handle("GET /api/voice/participants", protected(handleListVoiceParticipants(voicePresence, db.Channels, db.Roles, db.ChannelOverwrites)))
 	mux.Handle("GET /api/channels/{id}/overwrites", protected(handleListChannelOverwrites(db.Channels, db.Roles, db.ChannelOverwrites)))
 	mux.Handle("PUT /api/channels/{id}/overwrites/{roleId}", protected(handleSetChannelOverwrite(db.Channels, db.Roles, db.ChannelOverwrites)))
 	mux.Handle("DELETE /api/channels/{id}/overwrites/{roleId}", protected(handleDeleteChannelOverwrite(db.Roles, db.ChannelOverwrites)))

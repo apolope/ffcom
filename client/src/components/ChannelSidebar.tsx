@@ -1,5 +1,6 @@
-import type { Category, ChannelType, KnownServer } from '../types'
-import { UNCATEGORIZED_ID } from '../lib/serverChannelApi'
+import { Fragment } from 'react'
+import type { Category, ChannelType, KnownServer, Member } from '../types'
+import { UNCATEGORIZED_ID, type VoiceParticipant } from '../lib/serverChannelApi'
 import './ChannelSidebar.css'
 
 const CHANNEL_ICON: Record<ChannelType, string> = {
@@ -15,6 +16,11 @@ interface ChannelSidebarProps {
   // Ver hooks/useUnread.ts e docs/architecture.md, "Decisão: indicador de
   // não lida".
   unreadChannelIds: Set<string>
+  // Quem está em cada sala de voz, por id do canal (hooks/useVoiceParticipants.ts).
+  // members resolve o apelido atual; selfMemberId marca "você".
+  voiceParticipants: Record<string, VoiceParticipant[]>
+  members: Member[]
+  selfMemberId: string | undefined
   onSelectChannel: (channelId: string) => void
   onInvite: () => void
   canManageMembers: boolean
@@ -34,6 +40,9 @@ export function ChannelSidebar({
   categories,
   selectedChannelId,
   unreadChannelIds,
+  voiceParticipants,
+  members,
+  selfMemberId,
   onSelectChannel,
   onInvite,
   canManageMembers,
@@ -45,6 +54,8 @@ export function ChannelSidebar({
   onCreateChannel,
   onEditChannel,
 }: ChannelSidebarProps) {
+  const nicknameById = new Map(members.map((m) => [m.id, m.nickname]))
+
   return (
     <nav className="channel-sidebar" aria-label="Canais">
       <div className="server-name">
@@ -107,36 +118,51 @@ export function ChannelSidebar({
             </div>
             <ul>
               {category.channels.map((channel) => (
-                <li key={channel.id} className="channel-row">
-                  <button
-                    type="button"
-                    className={
-                      channel.id === selectedChannelId
-                        ? 'channel-item active'
-                        : 'channel-item'
-                    }
-                    onClick={() => onSelectChannel(channel.id)}
-                  >
-                    <span className="channel-icon">
-                      {CHANNEL_ICON[channel.type]}
-                    </span>
-                    {channel.name}
-                    {unreadChannelIds.has(channel.id) && (
-                      <span className="unread-dot" aria-label="mensagens não lidas" />
-                    )}
-                  </button>
-                  {canManageChannels && (
+                <Fragment key={channel.id}>
+                  <li className="channel-row">
                     <button
                       type="button"
-                      className="channel-edit-button"
-                      title="Editar canal"
-                      aria-label={`Editar canal ${channel.name}`}
-                      onClick={() => onEditChannel(channel.id)}
+                      className={
+                        channel.id === selectedChannelId
+                          ? 'channel-item active'
+                          : 'channel-item'
+                      }
+                      onClick={() => onSelectChannel(channel.id)}
                     >
-                      ✎
+                      <span className="channel-icon">
+                        {CHANNEL_ICON[channel.type]}
+                      </span>
+                      {channel.name}
+                      {unreadChannelIds.has(channel.id) && (
+                        <span className="unread-dot" aria-label="mensagens não lidas" />
+                      )}
                     </button>
+                    {canManageChannels && (
+                      <button
+                        type="button"
+                        className="channel-edit-button"
+                        title="Editar canal"
+                        aria-label={`Editar canal ${channel.name}`}
+                        onClick={() => onEditChannel(channel.id)}
+                      >
+                        ✎
+                      </button>
+                    )}
+                  </li>
+                  {channel.type === 'voice' && voiceParticipants[channel.id] && (
+                    <li>
+                      <ul className="voice-participants" aria-label={`Na sala ${channel.name}`}>
+                        {voiceParticipants[channel.id].map((p) => (
+                          <li key={p.memberId} className="voice-participant">
+                            <span className="voice-participant-dot" aria-hidden="true" />
+                            {nicknameById.get(p.memberId) ?? (p.name || p.memberId.slice(0, 8))}
+                            {p.memberId === selfMemberId && <span className="voice-participant-self">(você)</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
                   )}
-                </li>
+                </Fragment>
               ))}
             </ul>
           </div>
