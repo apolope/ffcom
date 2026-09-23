@@ -1201,6 +1201,23 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** o teste de escuta apontar a reforçada como claramente melhor (aí, considerar torná-la o padrão), o GTCRN ganhar do RNNoise no mesmo teste, ou o Chrome passar a oferecer `voiceIsolation` no Windows ou no Android.
 
+## Decisão: acesso ao FFCom restrito ao grupo `ffcom-users` do Authentik
+
+**Contexto:** qualquer usuário ativo da instância central de Authentik (compartilhada com o `abs-3d-printer`, o `a3s-network` e outros projetos) conseguia logar no FFCom, porque a Application `ffcom` não tinha nenhum `PolicyBinding`. O registro original do provider (ver "Status do cadastro do app "ffcom"" acima) deixou isso aberto de propósito, já que as permissões de servidor e canal ficam no `server-channel`. Mas o login em si criava conta no `server-central` para gente que nunca foi convidada.
+
+**Alternativas consideradas:**
+- **Deixar aberto e confiar nos convites do `server-channel`:** ninguém entra num servidor sem convite, mas a conta no `server-central` (amigos, DMs, diretório de servidores) continuava aberta a toda a instância. Descartada.
+- **Checar o claim `groups` no `server-central`:** exigiria o scope mapping `groups` no provider e código novo nos dois servidores, só para repetir o que o Authentik já faz na autorização. Descartada.
+- **Grupo no Authentik mais `PolicyBinding` na Application:** o Authentik nega no próprio fluxo de autorização, antes de emitir token, sem mudar nada no FFCom. Escolhida.
+
+**Decisão:** grupo `ffcom-users` e `PolicyBinding` (Application `ffcom` → grupo, `order: 0`) em `abs-3d-printer/infra/authentik/blueprints/providers-ffcom.yaml` (commit `a38392f`). O blueprint não declara os membros, para que reaplicar o arquivo nunca tire ninguém do grupo: quem entra ou sai é gerido na UI do Authentik. Para não trancar ninguém fora, o grupo foi criado antes do binding, via `ak shell`, já com todas as contas que tinham login no FFCom (cruzando `accounts.oidc_subject` do `server-central` com `User.uid` do Authentik): `apolonio.serafim`, `jorgebigj`, `ivaldoneto19`, `teste-ffcom01` e `teste-ffcom02`. O `akadmin` ficou de fora de propósito, para que o login acidental com a conta de admin (que abre um FFCom vazio) passe a ser negado.
+
+**Razão:** fecha o acesso sem código novo no FFCom, usando o mecanismo que a instância já tem. O `target` do binding casa de forma estável na reaplicação porque o pk de `Application` é o próprio `pbm_uuid`, diferente do `FlowStageBinding` que quebrou a reaplicação do `samba-password-sync.yaml` no `abs-3d-printer`.
+
+**Verificado (2026-09-23):** blueprint validado em simulação (`Importer.validate()`), publicado pelo deploy do `abs-3d` e aplicado duas vezes com `ak apply_blueprint` (status `successful`, um único binding, os cinco membros preservados). `PolicyEngine` da Application: os membros passam, `akadmin` e um usuário de fora do grupo são negados. Não verificado num navegador: o que a pessoa negada vê (a tela de "acesso negado" do Authentik, sem voltar ao client) e se um refresh token emitido antes do binding continua renovando até expirar.
+
+**Revisitar quando:** o FFCom tiver pessoas de fora da instância central (aí, cadastro próprio ou convite do Authentik amarrado ao grupo), ou se virar rotina adicionar gente ao grupo (aí, documentar o passo no guia de convite).
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.
