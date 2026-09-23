@@ -17,6 +17,7 @@ import { ChannelPermissionsDialog } from './components/ChannelPermissionsDialog'
 import { useAuth } from './auth/AuthProvider'
 import { useServerStructure } from './hooks/useServerStructure'
 import { useServersUnread } from './hooks/useServersUnread'
+import { useAppUpdate } from './hooks/useAppUpdate'
 import { useKnownServers } from './hooks/useKnownServers'
 import { useFriends } from './hooks/useFriends'
 import { useE2EKeys } from './hooks/useE2EKeys'
@@ -48,6 +49,12 @@ function App() {
   // `sub` do OIDC: chave de E2E e cursores de não lida em localStorage são
   // por conta, não por navegador (ver crypto/e2e.ts, lib/unread.ts).
   const accountSub = user?.profile.sub ?? ''
+  const { updateReady, applyUpdate } = useAppUpdate()
+  // Sem sessão não há chamada de voz para derrubar: aplica a versão nova
+  // sozinha. Logado, só pelo botão do ServerRail.
+  useEffect(() => {
+    if (updateReady && status === 'signed-out') applyUpdate()
+  }, [updateReady, status, applyUpdate])
   const { servers, addServer } = useKnownServers(accessToken ?? '')
   const { friends, createInvite, redeemInvite, socket: presenceSocket } = useFriends(accessToken ?? '')
   const { keyPair: myE2EKeyPair } = useE2EKeys(accessToken ?? '', accountSub)
@@ -193,6 +200,8 @@ function App() {
         friendsSelected={showFriends}
         unreadServerIds={unreadServerIds}
         friendsUnread={!showFriends && unreadFriendIds.size > 0}
+        updateReady={updateReady}
+        onUpdate={applyUpdate}
         myProfile={myProfile}
         onSelectServer={(id) => {
           setShowFriends(false)

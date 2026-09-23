@@ -564,7 +564,7 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 1. `vite-plugin-pwa` (`registerType: 'autoUpdate'`) adicionado a `vite.config.ts`, condicionado a `mode !== 'electron'` (mesmo padrão de flag condicional já usado pelo plugin do Electron) — o shell desktop já é o "app instalado" e não deve ganhar service worker/manifest.
 2. Ícones gerados uma vez com `@vite-pwa/assets-generator` (`client/pwa-assets.config.ts`, preset `minimal2023Preset`) a partir de `public/favicon.svg`: `pwa-64/192/512.png` (transparente), `maskable-icon-512x512.png` (fundo branco + padding 30%, safe zone para launcher Android), `apple-touch-icon-180x180.png` e `favicon.ico`. Gerados uma vez e commitados em `public/` (não gerados no build) para não depender de `resvg`/`sharp` no pipeline de CI/Docker; script `npm run generate:pwa-assets` reroda se `favicon.svg` mudar.
 3. `workbox.navigateFallbackDenylist: [/^\/api\//, /^\/auth\//]` — o fallback de SPA do service worker (servir `index.html` para rotas sem arquivo, necessário para `/auth/callback`) não deve interceptar chamadas de API real; sem isso, uma rota `/api/...` sem conectividade cairia silenciosamente no `index.html` em vez de falhar visivelmente.
-4. `registerType: 'autoUpdate'` (troca silenciosa para a versão nova assim que baixada, sem prompt) em vez de `prompt` — consistente com a UX de um SPA que já não tem histórico/estado de navegação persistente entre versões; o chat em si é stateless o bastante (histórico vem sempre do backend) para não haver risco real de perder algo no meio de uma troca de versão.
+4. *(Substituído em 2026-09-23 por `prompt` + botão de atualizar, ver "Decisão: botão de atualizar o client".)* `registerType: 'autoUpdate'` (troca silenciosa para a versão nova assim que baixada, sem prompt) em vez de `prompt` — consistente com a UX de um SPA que já não tem histórico/estado de navegação persistente entre versões; o chat em si é stateless o bastante (histórico vem sempre do backend) para não haver risco real de perder algo no meio de uma troca de versão.
 5. `theme_color`/`background_color` do manifest usam os tokens já existentes em `src/index.css` (`--accent: #aa3bff` do tema claro, `--bg: #fff`) em vez de escolher uma cor nova — mantém o manifest consistente com o CSS sem introduzir uma segunda fonte de cor de marca.
 
 **Razão:** `vite-plugin-pwa` evita reimplementar cache/versionamento de service worker (problema já resolvido pelo Workbox) com uma dependência que já se integra à mesma config do Vite usada pelo resto do projeto — mesma filosofia já registrada nas decisões de LiveKit, `oidc-client-ts` e `electron-builder` ("não reinventar o que uma lib madura já cobre"). Gerar os ícones uma vez e commitar os PNGs (em vez de gerar no build) segue a mesma razão já registrada para não trazer `resvg`/`sharp` como dependência de build de produção — o Dockerfile do client já não tem esse tipo de ferramenta de imagem.
@@ -989,6 +989,31 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 **Verificado (2026-09-23):** `tsc -b`, `npm run lint` sem aviso novo e `npm run build`. Não verificado num browser com dois participantes (o seletor de tela exige interação humana).
 
 **Revisitar quando:** entrar volume por participante e por fonte (item de TODO), que vai tratar `ScreenShareAudio` separado do microfone; ou quando o Electron ganhar seletor de tela.
+
+## Decisão: botão de atualizar o client — `registerType: 'prompt'`, checagem a cada 5 min e ao voltar ao app
+
+**Contexto:** depois do deploy do áudio da tela, o Chrome do computador pegou a versão nova e o celular não. Com `autoUpdate` e o `registerSW.js` injetado, o service worker novo até instalava sozinho, mas a página aberta seguia com o JavaScript antigo até ser recarregada, e o navegador só procura `sw.js` novo quando há uma navegação. Um PWA instalado no celular fica dias aberto em segundo plano sem navegar.
+
+**Alternativas consideradas:**
+- **Manter `autoUpdate` e recarregar sozinho ao detectar versão nova:** resolve o atraso, mas recarregar no meio de uma chamada de voz derruba a chamada sem aviso. Descartada.
+- **Checar versão por um endpoint próprio (`/version.json`) e comparar com a do bundle:** reimplementa o que o service worker já faz (baixar, comparar por hash, trocar). Descartada.
+- **`registerType: 'prompt'` + `useRegisterSW` + botão no `ServerRail`, como o do Discord:** escolhida.
+
+**Decisão:**
+1. `vite.config.ts`: `registerType: 'prompt'` e `injectRegister: false`. O registro é feito por `hooks/useAppUpdate.ts` (`useRegisterSW` de `virtual:pwa-register/react`), chamado no topo do `App`, antes do login, para registrar também para quem ainda não entrou.
+2. **Checagem ativa:** `registration.update()` a cada 5 minutos e sempre que a página volta a ficar visível (`visibilitychange`), que é o momento em que um PWA parado volta a ser usado.
+3. **Logado, a troca é por clique:** com versão nova esperando, o `ServerRail` mostra um ícone verde de download (`components/UpdateButton.tsx`) e o `title` avisa que recarregar sai da chamada de voz. Clicar chama `updateServiceWorker(true)`: `SKIP_WAITING` no service worker novo e reload.
+4. **Sem sessão, a troca é automática:** na tela de login não há chamada para derrubar, então `App.tsx` aplica a versão nova assim que ela fica pronta.
+5. **Electron:** o plugin fica carregado com `disable: true` para o módulo virtual resolver vazio; o build Electron continua sem manifest nem service worker, e o botão nunca aparece.
+6. `workbox-window` (usado pelo módulo virtual em runtime) virou dependência declarada, em vez de peer opcional.
+
+**Transição, uma vez só:** aparelhos ainda na versão `autoUpdate` recebem o service worker novo, que fica esperando, e a página antiga não tem o botão para ativá-lo. A versão nova entra quando todas as abas/janelas do app forem fechadas (no celular, fechar o app de vez, não só minimizar). Daí em diante vale o botão.
+
+**Razão:** reaproveita o ciclo de vida do service worker que já existe e deixa a pessoa decidir quando recarregar, que é o que protege a chamada de voz.
+
+**Verificado (2026-09-23):** `tsc -b`, `npm run lint` sem aviso novo, `npm run build` (o `sw.js` trata `SKIP_WAITING`) e `npm run build:electron` (sem manifest nem `sw.js` no `dist`). No Chrome, com `vite preview`: o service worker registra já na tela de login; depois de gerar um segundo build com um texto marcado, `registration.update()` achou a versão nova e a tela de login recarregou sozinha já com o texto novo, sem service worker esperando. O botão do `ServerRail` (estado logado) não foi testado num browser, porque exige login OIDC; ele usa o mesmo `updateReady`/`applyUpdate` do caminho testado.
+
+**Revisitar quando:** o app ganhar estado local que se perde num reload (rascunho de mensagem, por exemplo), caso em que o botão deveria avisar antes; ou se 5 minutos gerar tráfego demais (cada checagem é um GET condicional de `sw.js`).
 
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 

@@ -17,10 +17,19 @@ export default defineConfig(({ mode }) => ({
         },
       }),
     // Só faz sentido no build web/PWA — o shell Electron já é o próprio
-    // "app instalado" e não precisa de service worker/manifest.
-    mode !== 'electron' &&
-      VitePWA({
-        registerType: 'autoUpdate',
+    // "app instalado" e não precisa de service worker/manifest. No Electron
+    // o plugin fica carregado mas com `disable`, para o import de
+    // `virtual:pwa-register/react` (components/UpdateButton.tsx) resolver
+    // para um módulo vazio em vez de quebrar o build.
+    VitePWA({
+        disable: mode === 'electron',
+        // 'prompt': a versão nova baixa e espera o clique no botão de
+        // atualizar do ServerRail, em vez de trocar sozinha (recarregar
+        // derruba uma chamada de voz). Ver docs/architecture.md, "Decisão:
+        // botão de atualizar o client".
+        registerType: 'prompt',
+        // O registro é feito por useRegisterSW em UpdateButton.tsx.
+        injectRegister: false,
         includeAssets: ['favicon.svg', 'favicon.ico', 'apple-touch-icon-180x180.png'],
         manifest: {
           name: 'FFCom',
@@ -50,6 +59,6 @@ export default defineConfig(({ mode }) => ({
           // handler do service worker, então nem precisa de exclusão.
           navigateFallbackDenylist: [/^\/api\//, /^\/auth\//],
         },
-      }),
+    }),
   ],
 }))

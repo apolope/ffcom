@@ -1,5 +1,6 @@
 import type { KnownServer } from '../types'
 import type { MyProfile } from '../lib/serverCentralApi'
+import { UpdateButton } from './UpdateButton'
 import { UserAvatar } from './UserAvatar'
 import './ServerRail.css'
 
@@ -12,6 +13,9 @@ interface ServerRailProps {
   // lida. App.tsx só acende o que a pessoa não está vendo agora.
   unreadServerIds: Set<string>
   friendsUnread: boolean
+  // Versão nova do client esperando (hooks/useAppUpdate.ts).
+  updateReady: boolean
+  onUpdate: () => void
   myProfile: MyProfile | undefined
   onSelectServer: (serverId: string) => void
   onSelectFriends: () => void
@@ -26,6 +30,8 @@ export function ServerRail({
   friendsSelected,
   unreadServerIds,
   friendsUnread,
+  updateReady,
+  onUpdate,
   myProfile,
   onSelectServer,
   onSelectFriends,
@@ -71,6 +77,7 @@ export function ServerRail({
       >
         +
       </button>
+      {updateReady && <UpdateButton onUpdate={onUpdate} />}
       <button type="button" className="account-button" title="Seu avatar" onClick={onOpenMyAvatar}>
         <UserAvatar
           avatarUrl={myProfile?.avatarUrl}

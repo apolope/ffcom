@@ -75,6 +75,35 @@
   margin-bottom: 4px;
 }
 
+.update-button {
+  margin-top: auto;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-tertiary);
+  color: #23a55a;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    border-radius 0.15s,
+    background 0.15s;
+}
+
+.update-button:hover {
+  background: #23a55a;
+  color: #fff;
+  border-radius: 30%;
+}
+
+/* Com o botão de atualizar na tela, ele empurra o bloco da conta para baixo
+   (margin-top: auto); sem ele, a conta faz isso sozinha. */
+.update-button + .account-button {
+  margin-top: 0;
+}
+
 .account-button {
   margin-top: auto;
   width: 44px;
