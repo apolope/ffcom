@@ -42,7 +42,16 @@ services:
           tcp_port: 7881
           port_range_start: ${LIVEKIT_RTC_PORT_RANGE_START:-50000}
           port_range_end: ${LIVEKIT_RTC_PORT_RANGE_END:-50100}
-          use_external_ip: true
+          # IP fixo em vez de use_external_ip: nesta infra o IP de saída do
+          # host (descoberto por STUN, ex. 179.34.63.42 da WAN do site IPS01)
+          # não é o IP de entrada da mídia; toda entrada passa por
+          # VMSUBS24OCI0102 (TURN_EXTERNAL_IP), que encaminha as portas RTC
+          # até aqui. Com use_external_ip: true o LiveKit anunciava o IP de
+          # saída e o ICE nunca conectava ("removing participant without
+          # connection"). Ver docs/architecture.md, "Correção: IP anunciado
+          # pelo LiveKit".
+          use_external_ip: false
+          node_ip: ${TURN_EXTERNAL_IP:?defina TURN_EXTERNAL_IP no .env}
         keys:
           ${LIVEKIT_API_KEY:?defina LIVEKIT_API_KEY no .env}: ${LIVEKIT_API_SECRET:?defina LIVEKIT_API_SECRET no .env}
     ports:
