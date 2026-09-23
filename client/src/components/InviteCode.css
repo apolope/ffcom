@@ -40,11 +40,23 @@
 
 .invite-code code {
   flex: 1;
+  /* Sem isso o min-width automático do flex item é a largura do texto
+     inteiro: um link de convite (sem espaço onde quebrar) empurrava o
+     "Copiar" para fora do diálogo. */
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: 16px;
   letter-spacing: 1px;
 }
 
+/* Link de convite de servidor (URL inteira), não um código curto. */
+.invite-code.link code {
+  font-size: 13px;
+  letter-spacing: normal;
+}
+
 .invite-code button {
+  flex: 0 0 auto;
   font: inherit;
   padding: 8px 12px;
   border: 1px solid var(--border);

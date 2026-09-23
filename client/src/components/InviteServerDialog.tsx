@@ -69,7 +69,7 @@ export function InviteServerDialog({
             deste servidor, então basta colar em "Adicionar servidor".
           </p>
           {invite ? (
-            <div className="invite-code">
+            <div className="invite-code link">
               <code>{invite}</code>
               <button type="button" onClick={handleCopyInvite}>
                 {copied ? 'Copiado!' : 'Copiar'}
