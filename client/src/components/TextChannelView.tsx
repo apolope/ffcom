@@ -9,15 +9,21 @@ import './TextChannelView.css'
 interface TextChannelViewProps {
   serverBaseUrl: string
   channel: Channel
+  // Administrator ou dono: pode apagar mensagem de qualquer membro.
+  canModerateMessages: boolean
 }
 
-export function TextChannelView({ serverBaseUrl, channel }: TextChannelViewProps) {
+export function TextChannelView({ serverBaseUrl, channel, canModerateMessages }: TextChannelViewProps) {
   const { accessToken } = useAuth()
   const [selfMemberId, setSelfMemberId] = useState<string>()
   const [draft, setDraft] = useState('')
   const [pendingFile, setPendingFile] = useState<File>()
   const [editingId, setEditingId] = useState<string>()
   const [editDraft, setEditDraft] = useState('')
+  // Apagar mensagem alheia pede um segundo clique (mesmo padrão dos
+  // diálogos de estrutura, sem confirm() do navegador): quem modera não
+  // tem como recuperar o que apagou por engano.
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string>()
   const listRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -115,6 +121,32 @@ export function TextChannelView({ serverBaseUrl, channel }: TextChannelViewProps
                       <button type="button" onClick={() => deleteMessage(m.id)}>
                         apagar
                       </button>
+                    </span>
+                  )}
+                  {!isSelf && canModerateMessages && (
+                    <span
+                      className={
+                        confirmingDeleteId === m.id ? 'message-actions message-actions-confirming' : 'message-actions'
+                      }
+                    >
+                      {confirmingDeleteId === m.id ? (
+                        <>
+                          <button type="button" className="message-action-danger" onClick={() => deleteMessage(m.id)}>
+                            confirmar apagar
+                          </button>
+                          <button type="button" onClick={() => setConfirmingDeleteId(undefined)}>
+                            cancelar
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          title="Apagar mensagem de outro membro (moderação)"
+                          onClick={() => setConfirmingDeleteId(m.id)}
+                        >
+                          apagar
+                        </button>
+                      )}
                     </span>
                   )}
                 </>

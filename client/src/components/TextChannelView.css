@@ -64,7 +64,8 @@
   flex: 0 0 auto;
 }
 
-.message:hover .message-actions {
+.message:hover .message-actions,
+.message-actions-confirming {
   display: flex;
 }
 
@@ -82,6 +83,11 @@
 .message-actions button:hover {
   opacity: 1;
   text-decoration: underline;
+}
+
+.message-actions .message-action-danger {
+  color: var(--danger, #ed4245);
+  opacity: 1;
 }
 
 .message-edit-form {

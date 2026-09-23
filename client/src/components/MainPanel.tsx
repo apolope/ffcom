@@ -13,9 +13,10 @@ const CHANNEL_ICON: Record<ChannelType, string> = {
 interface MainPanelProps {
   channel: Channel | undefined
   serverBaseUrl: string
+  canModerateMessages: boolean
 }
 
-export function MainPanel({ channel, serverBaseUrl }: MainPanelProps) {
+export function MainPanel({ channel, serverBaseUrl, canModerateMessages }: MainPanelProps) {
   return (
     <section className="main-panel">
       <header className="channel-header">
@@ -31,7 +32,12 @@ export function MainPanel({ channel, serverBaseUrl }: MainPanelProps) {
       <div className="channel-content">
         {!channel && <p className="placeholder">Selecione um canal para começar.</p>}
         {channel?.type === 'text' && (
-          <TextChannelView key={channel.id} serverBaseUrl={serverBaseUrl} channel={channel} />
+          <TextChannelView
+            key={channel.id}
+            serverBaseUrl={serverBaseUrl}
+            channel={channel}
+            canModerateMessages={canModerateMessages}
+          />
         )}
         {channel?.type === 'voice' && (
           <VoiceChannelView key={channel.id} serverBaseUrl={serverBaseUrl} channel={channel} />

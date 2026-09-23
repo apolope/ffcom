@@ -73,6 +73,9 @@ function App() {
   const canBan = me ? hasPermission(me.permissions, PERMISSIONS.BanMembers) || !!me.isOwner : false
   const canOpenMemberAdmin = canManageRoles || canKick || canBan
   const canManageChannels = me ? hasPermission(me.permissions, PERMISSIONS.ManageChannels) || !!me.isOwner : false
+  // Mesmo critério de handleIncomingMessageDelete em server-channel: só
+  // Administrator apaga mensagem alheia (não há bit dedicado a mensagens).
+  const canModerateMessages = me ? hasPermission(me.permissions, PERMISSIONS.Administrator) || !!me.isOwner : false
   const {
     members,
     roles,
@@ -216,7 +219,7 @@ function App() {
             onCreateChannel={(categoryId) => setChannelDialog({ categoryId })}
             onEditChannel={(id) => setChannelDialog({ id })}
           />
-          <MainPanel channel={channel} serverBaseUrl={server.baseUrl} />
+          <MainPanel channel={channel} serverBaseUrl={server.baseUrl} canModerateMessages={canModerateMessages} />
           <MemberList members={members} roles={roles} />
         </>
       ) : (
