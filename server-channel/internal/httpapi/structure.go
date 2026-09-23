@@ -48,7 +48,10 @@ func visibleChannels(ctx context.Context, roles *store.RoleStore, overwrites *st
 // menos um canal visível ao membro autenticado (ver visibleChannels), na
 // mesma ordem por posição. Categoria sem nenhum canal visível não aparece —
 // do contrário o nome de uma categoria privada vazaria mesmo com todo canal
-// dentro dela restrito.
+// dentro dela restrito. Exceção: quem tem ManageChannels (ou é dono) vê
+// todas, inclusive vazias, senão uma categoria recém-criada ficaria
+// invisível justamente para quem precisa pôr o primeiro canal nela (ver
+// "Decisão: gerenciar categorias e canais").
 func handleListCategories(categories *store.CategoryStore, channels *store.ChannelStore, roles *store.RoleStore, overwrites *store.ChannelOverwriteStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		member, ok := auth.MemberFromContext(r.Context())
@@ -73,6 +76,13 @@ func handleListCategories(categories *store.CategoryStore, channels *store.Chann
 			return
 		}
 
+		base, _, err := memberBasePermission(r.Context(), roles, member)
+		if err != nil {
+			http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+			return
+		}
+		showAll := permissions.Has(base, permissions.ManageChannels)
+
 		withVisibleChannel := make(map[string]bool, len(visible))
 		for _, c := range visible {
 			if c.CategoryID != nil {
@@ -82,7 +92,7 @@ func handleListCategories(categories *store.CategoryStore, channels *store.Chann
 
 		out := make([]categoryView, 0, len(allCategories))
 		for _, c := range allCategories {
-			if withVisibleChannel[c.ID] {
+			if showAll || withVisibleChannel[c.ID] {
 				out = append(out, toCategoryView(c))
 			}
 		}

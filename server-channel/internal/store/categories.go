@@ -13,16 +13,31 @@ type CategoryStore struct {
 	pool *pgxpool.Pool
 }
 
-func (s *CategoryStore) Create(ctx context.Context, name string, position int) (Category, error) {
+// Create cria uma categoria. position nulo coloca a categoria depois de
+// todas as existentes.
+func (s *CategoryStore) Create(ctx context.Context, name string, position *int) (Category, error) {
 	const query = `
 		INSERT INTO categories (name, position)
-		VALUES ($1, $2)
+		VALUES ($1, COALESCE($2, (SELECT COALESCE(MAX(position) + 1, 0) FROM categories)))
 		RETURNING id, name, position, created_at
 	`
 	var c Category
 	err := s.pool.QueryRow(ctx, query, name, position).Scan(&c.ID, &c.Name, &c.Position, &c.CreatedAt)
 	if err != nil {
 		return Category{}, fmt.Errorf("categories: create: %w", err)
+	}
+	return c, nil
+}
+
+func (s *CategoryStore) GetByID(ctx context.Context, id string) (Category, error) {
+	const query = `SELECT id, name, position, created_at FROM categories WHERE id = $1`
+	var c Category
+	err := s.pool.QueryRow(ctx, query, id).Scan(&c.ID, &c.Name, &c.Position, &c.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Category{}, ErrNotFound
+	}
+	if err != nil {
+		return Category{}, fmt.Errorf("categories: get por id: %w", err)
 	}
 	return c, nil
 }
@@ -44,6 +59,8 @@ func (s *CategoryStore) Update(ctx context.Context, id, name string, position in
 	return c, nil
 }
 
+// Delete apaga a categoria; os canais dela ficam sem categoria (FK com ON
+// DELETE SET NULL, ver migration 0001_init), não são apagados junto.
 func (s *CategoryStore) Delete(ctx context.Context, id string) error {
 	const query = `DELETE FROM categories WHERE id = $1`
 	tag, err := s.pool.Exec(ctx, query, id)

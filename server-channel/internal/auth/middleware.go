@@ -122,3 +122,10 @@ func MemberFromContext(ctx context.Context) (store.Member, bool) {
 	member, ok := ctx.Value(memberContextKey).(store.Member)
 	return member, ok
 }
+
+// WithMember anexa member ao contexto do mesmo jeito que RequireMember.
+// Usado pelos testes de handler em internal/httpapi, que não passam por um
+// token OIDC real.
+func WithMember(ctx context.Context, member store.Member) context.Context {
+	return context.WithValue(ctx, memberContextKey, member)
+}

@@ -29,6 +29,7 @@ const PERMISSION_LABELS: { bit: number; label: string }[] = [
   { bit: PERMISSIONS.Voice, label: 'Conectar e falar em voz' },
   { bit: PERMISSIONS.ManageInvites, label: 'Gerenciar convites' },
   { bit: PERMISSIONS.ManageRoles, label: 'Gerenciar roles' },
+  { bit: PERMISSIONS.ManageChannels, label: 'Gerenciar categorias e canais' },
   { bit: PERMISSIONS.KickMembers, label: 'Expulsar membros' },
   { bit: PERMISSIONS.BanMembers, label: 'Banir membros' },
   { bit: PERMISSIONS.Administrator, label: 'Administrador (ignora tudo acima)' },

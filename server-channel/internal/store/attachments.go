@@ -95,3 +95,33 @@ func (s *AttachmentStore) ListForMessage(ctx context.Context, messageID string) 
 	}
 	return byMessage[messageID], nil
 }
+
+// StorageKeysForChannel devolve a chave em disco de todo anexo de mensagem
+// do canal -- usado antes de apagar o canal inteiro, já que o CASCADE do
+// Postgres apaga as linhas mas não os arquivos (ver ChannelStore.Delete).
+func (s *AttachmentStore) StorageKeysForChannel(ctx context.Context, channelID string) ([]string, error) {
+	const query = `
+		SELECT a.storage_key
+		FROM attachments a
+		JOIN messages m ON m.id = a.message_id
+		WHERE m.channel_id = $1
+	`
+	rows, err := s.pool.Query(ctx, query, channelID)
+	if err != nil {
+		return nil, fmt.Errorf("attachments: storage keys por canal: %w", err)
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var key string
+		if err := rows.Scan(&key); err != nil {
+			return nil, fmt.Errorf("attachments: scan: %w", err)
+		}
+		out = append(out, key)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("attachments: iterar linhas: %w", err)
+	}
+	return out, nil
+}

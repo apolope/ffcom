@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { fetchCategories, fetchChannels, groupIntoCategories } from '../lib/serverChannelApi'
 import type { Category } from '../types'
 
@@ -8,6 +8,9 @@ interface UseServerStructureResult {
   categories: Category[]
   status: ServerStructureStatus
   error: string | undefined
+  // Recarrega na hora, sem esperar o próximo poll -- usado depois de
+  // criar/editar/apagar categoria ou canal.
+  refresh: () => void
 }
 
 // Intervalo de repolling da estrutura (categorias/canais). server-channel não
@@ -31,12 +34,11 @@ export function useServerStructure(
   const [categories, setCategories] = useState<Category[]>([])
   const [status, setStatus] = useState<ServerStructureStatus>('loading')
   const [error, setError] = useState<string>()
+  const [refreshToken, setRefreshToken] = useState(0)
+  const refresh = useCallback(() => setRefreshToken((n) => n + 1), [])
 
   useEffect(() => {
     let cancelled = false
-    setCategories([])
-    setStatus('loading')
-    setError(undefined)
 
     function load(isFirstLoad: boolean) {
       return Promise.all([fetchCategories(serverBaseUrl, accessToken), fetchChannels(serverBaseUrl, accessToken)])
@@ -61,7 +63,15 @@ export function useServerStructure(
       cancelled = true
       clearInterval(interval)
     }
+  }, [serverBaseUrl, accessToken, refreshToken])
+
+  // Só troca de servidor (ou de sessão) limpa a lista; um refresh() mantém
+  // a estrutura atual na tela até a nova chegar.
+  useEffect(() => {
+    setCategories([])
+    setStatus('loading')
+    setError(undefined)
   }, [serverBaseUrl, accessToken])
 
-  return { categories, status, error }
+  return { categories, status, error, refresh }
 }

@@ -800,6 +800,33 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** `server-central` (instância única, sem isolamento por comunidade) justificar RPO menor que "uma vez por dia" — nesse ponto PITR via WAL archiving passa a valer o custo de operação adicional, especificamente para esse componente.
 
+## Decisão: gerenciar categorias e canais — bit `ManageChannels` no nível do servidor, apagar canal leva o conteúdo junto
+
+**Contexto:** até aqui não existia endpoint nem tela para criar categoria ou canal (`CategoryStore.Create`/`ChannelStore.Create` existiam sem nenhum chamador). Um `server-channel` recém-instalado ficava sem nenhum canal, e na instância oficial a estrutura "Geral / geral / Voz / forum" foi inserida à mão via `psql`. Isso quebrava a proposta central do projeto (qualquer comunidade sobe o próprio servidor e usa).
+
+**Alternativas consideradas:**
+- **Reusar `Administrator`:** sem bit novo, só admin mexe na estrutura. Descartada porque obriga a dar tudo a quem só precisa organizar canais, o mesmo motivo que já separou `ManageInvites`, `ManageRoles`, `KickMembers` e `BanMembers`.
+- **Bit novo que também valesse em overwrite de canal** (como o `MANAGE_CHANNELS` do Discord, que pode ser concedido num canal só): mais flexível, mas criar canal e mexer em categoria não pertencem a nenhum canal específico, e o caso "pode editar só este canal" não apareceu. Adiado.
+- **Bit novo `ManageChannels` checado só na permissão base:** escolhida.
+- **Apagar categoria:** recusar enquanto houver canal dentro (`409`) vs. apagar os canais em cascata vs. deixar os canais sem categoria. Escolhida a última, que já é o que o schema faz (`channels.category_id ... ON DELETE SET NULL`, migration `0001_init`) e é o comportamento do Discord; nenhuma mensagem se perde por apagar uma categoria.
+- **Apagar canal:** apagar só logicamente (`deleted_at`, recuperável) vs. apagar de verdade. Escolhido apagar de verdade, com confirmação em dois cliques na UI avisando que não dá para desfazer; as FKs já estavam em `ON DELETE CASCADE` para mensagens, threads, anexos e overwrites.
+
+**Decisão:**
+1. **Bit `ManageChannels = 256`** em `internal/permissions`, no fim do bloco (mesmo cuidado de não reordenar bits persistidos, ver "Decisão: kick/ban de membro"). Checado só na permissão base (`requireManageChannels`, `internal/httpapi/channels_admin.go`); dono e `Administrator` passam sempre. Conceder o bit a uma role passa pela regra de `permissions.Grants` já existente, então `ManageRoles` sozinho não consegue se dar `ManageChannels`.
+2. **Rotas:** `POST/PATCH/DELETE /api/categories[/{id}]` e `POST/PATCH/DELETE /api/channels[/{id}]` (ver `docs/protocol.md`). Nome com espaço nas pontas cortado, obrigatório, até 100 caracteres. Sem `position` na criação, o item vai para o fim (categoria: fim da lista; canal: fim da própria categoria, ou dos sem categoria). O `PATCH` de canal lê o corpo como mapa para distinguir `categoryId` ausente (mantém) de `null` (tira da categoria). O tipo do canal não muda depois de criado: histórico de texto não faz sentido num canal de voz.
+3. **Apagar canal apaga os arquivos de anexo do disco:** as linhas vão por CASCADE, mas os arquivos em `ATTACHMENTS_DIR` não. O handler busca as `storage_key` do canal antes (`AttachmentStore.StorageKeysForChannel`) e apaga os arquivos depois do `DELETE`, igual a apagar uma mensagem (ver "Decisão: upload de anexo em mensagem"). Falha ao apagar um arquivo só é logada: o canal já sumiu e o arquivo órfão não é servido por nenhuma rota.
+4. **`GET /api/categories` mostra categoria vazia para quem tem `ManageChannels`:** a regra "categoria sem canal visível não aparece" (para não vazar nome de categoria privada) deixaria uma categoria recém-criada invisível justamente para quem precisa pôr o primeiro canal nela. Quem não gerencia continua vendo só categorias com canal visível.
+5. **Client:** botão "+ Categoria" no topo da `ChannelSidebar`; ao passar o mouse, "+" (novo canal) e "✎" (editar) no cabeçalho de cada categoria, e "✎" em cada canal. Diálogos em `components/StructureDialogs.tsx` (renomear, mover de categoria, apagar com confirmação em dois cliques, sem `confirm()` do navegador). Tudo só aparece com `ManageChannels` ou dono. Servidor sem nenhum canal mostra uma dica para quem pode criar. Depois de cada mudança, `useServerStructure` recarrega na hora (`refresh()`), sem esperar o poll de 20s; canal recém-criado já abre selecionado.
+
+**Escopo aceito:**
+- **Sem reordenar pela UI** (arrastar e soltar): a ordem muda só pelo `position` do `PATCH`, que a UI ainda não expõe.
+- **Sem aviso em tempo real a quem está no canal apagado:** o `realtime.Hub` não é avisado; quem está com o canal aberto continua conectado até o próximo poll de estrutura (até 20s) tirar o canal da lista e o client trocar de canal. Numa sala de voz, a chamada no LiveKit continua até a pessoa sair, porque o token já emitido não é revogado.
+- **Outros membros veem a mudança em até 20s** (mesmo poll do indicador de não lida), não na hora.
+
+**Razão:** fecha a lacuna que impedia um self-host novo de funcionar sem `psql`, reaproveitando o que já existia (stores, FKs em cascata, `Grants`, poll de estrutura) em vez de criar mecanismo novo. Manter o bit só no nível do servidor evita decidir agora a semântica de overwrite para uma permissão que, na prática, é sobre a estrutura do servidor inteiro.
+
+**Revisitar quando:** alguém precisar delegar a edição de um canal só (nesse ponto, deixar `ManageChannels` valer também em overwrite, checando o canal no `PATCH`/`DELETE`); ou a demora de até 20s para outros membros verem canal novo/apagado incomodar (nesse ponto, um feed de estrutura por servidor, o mesmo que o indicador de não lida adiou).
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

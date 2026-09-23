@@ -12,6 +12,7 @@ import { AddFriendDialog } from './components/AddFriendDialog'
 import { DirectMessageView } from './components/DirectMessageView'
 import { NicknameDialog } from './components/NicknameDialog'
 import { AvatarDialog } from './components/AvatarDialog'
+import { CategoryDialog, ChannelDialog } from './components/StructureDialogs'
 import { useAuth } from './auth/AuthProvider'
 import { useServerStructure } from './hooks/useServerStructure'
 import { useKnownServers } from './hooks/useKnownServers'
@@ -21,9 +22,19 @@ import { useMe } from './hooks/useMe'
 import { useMyProfile } from './hooks/useMyProfile'
 import { useServerMembers } from './hooks/useServerMembers'
 import { useUnread } from './hooks/useUnread'
-import { createServerInvite } from './lib/serverChannelApi'
+import {
+  UNCATEGORIZED_ID,
+  createCategory,
+  createChannel,
+  createServerInvite,
+  deleteCategory,
+  deleteChannel,
+  updateCategory,
+  updateChannel,
+} from './lib/serverChannelApi'
 import { markRead } from './lib/unread'
 import { PERMISSIONS, hasPermission } from './lib/permissions'
+import type { Category } from './types'
 import './App.css'
 
 function App() {
@@ -41,6 +52,9 @@ function App() {
   const [showEditNickname, setShowEditNickname] = useState(false)
   const [showMyAvatar, setShowMyAvatar] = useState(false)
   const [selectedFriendId, setSelectedFriendId] = useState<string>()
+  // Diálogos de estrutura: undefined = fechado; id ausente = criar.
+  const [categoryDialog, setCategoryDialog] = useState<{ id?: string }>()
+  const [channelDialog, setChannelDialog] = useState<{ id?: string; categoryId?: string }>()
 
   const selectedFriend = friends.find((f) => f.accountId === selectedFriendId)
 
@@ -55,6 +69,7 @@ function App() {
   const canKick = me ? hasPermission(me.permissions, PERMISSIONS.KickMembers) || !!me.isOwner : false
   const canBan = me ? hasPermission(me.permissions, PERMISSIONS.BanMembers) || !!me.isOwner : false
   const canOpenMemberAdmin = canManageRoles || canKick || canBan
+  const canManageChannels = me ? hasPermission(me.permissions, PERMISSIONS.ManageChannels) || !!me.isOwner : false
   const {
     members,
     roles,
@@ -69,7 +84,8 @@ function App() {
     refresh: refreshMembers,
   } = useServerMembers(server?.baseUrl ?? '', accessToken ?? '', canBan)
 
-  const { categories } = useServerStructure(server?.baseUrl ?? '', accessToken ?? '')
+  const { categories, refresh: refreshStructure } = useServerStructure(server?.baseUrl ?? '', accessToken ?? '')
+  const realCategories = useMemo(() => categories.filter((c) => c.id !== UNCATEGORIZED_ID), [categories])
 
   const [selectedChannelId, setSelectedChannelId] = useState<string>()
   // categories muda a cada repoll de useServerStructure (20s), não só ao
@@ -184,6 +200,11 @@ function App() {
             canManageMembers={canOpenMemberAdmin}
             onManageRoles={() => setShowManageRoles(true)}
             onEditNickname={() => setShowEditNickname(true)}
+            canManageChannels={canManageChannels}
+            onCreateCategory={() => setCategoryDialog({})}
+            onEditCategory={(id) => setCategoryDialog({ id })}
+            onCreateChannel={(categoryId) => setChannelDialog({ categoryId })}
+            onEditChannel={(id) => setChannelDialog({ id })}
           />
           <MainPanel channel={channel} serverBaseUrl={server.baseUrl} />
           <MemberList members={members} roles={roles} />
@@ -226,6 +247,50 @@ function App() {
           onClose={() => setShowManageRoles(false)}
         />
       )}
+      {categoryDialog && server && (
+        <CategoryDialog
+          category={realCategories.find((c) => c.id === categoryDialog.id)}
+          onSave={async (name) => {
+            if (categoryDialog.id) {
+              await updateCategory(server.baseUrl, accessToken ?? '', categoryDialog.id, { name })
+            } else {
+              await createCategory(server.baseUrl, accessToken ?? '', name)
+            }
+            refreshStructure()
+          }}
+          onDelete={async () => {
+            if (!categoryDialog.id) return
+            await deleteCategory(server.baseUrl, accessToken ?? '', categoryDialog.id)
+            refreshStructure()
+          }}
+          onClose={() => setCategoryDialog(undefined)}
+        />
+      )}
+      {channelDialog && server && (
+        <ChannelDialog
+          channel={findChannelForDialog(categories, channelDialog.id)}
+          initialCategoryId={channelDialog.categoryId}
+          categories={realCategories}
+          onSave={async ({ name, type, categoryId }) => {
+            if (channelDialog.id) {
+              await updateChannel(server.baseUrl, accessToken ?? '', channelDialog.id, {
+                name,
+                categoryId: categoryId ?? null,
+              })
+            } else {
+              const created = await createChannel(server.baseUrl, accessToken ?? '', { name, type, categoryId })
+              setSelectedChannelId(created.id)
+            }
+            refreshStructure()
+          }}
+          onDelete={async () => {
+            if (!channelDialog.id) return
+            await deleteChannel(server.baseUrl, accessToken ?? '', channelDialog.id)
+            refreshStructure()
+          }}
+          onClose={() => setChannelDialog(undefined)}
+        />
+      )}
       {showAddFriend && (
         <AddFriendDialog
           onCreateInvite={createInvite}
@@ -253,6 +318,19 @@ function App() {
       )}
     </div>
   )
+}
+
+// Canal em edição com a categoria real dele (a sintética "Canais" vira
+// "sem categoria"), no formato esperado por ChannelDialog.
+function findChannelForDialog(categories: Category[], channelId: string | undefined) {
+  if (!channelId) return undefined
+  for (const category of categories) {
+    const found = category.channels.find((c) => c.id === channelId)
+    if (found) {
+      return { ...found, categoryId: category.id === UNCATEGORIZED_ID ? undefined : category.id }
+    }
+  }
+  return undefined
 }
 
 export default App

@@ -73,7 +73,8 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 ## server-channel
 
 - [x] Modelo de dados: categorias, canais (texto/voz/forum), mensagens, permissões/roles, convites
-- [ ] Criar/renomear/apagar categoria e canal (API + UI) — hoje não existe endpoint nem tela: `store.CategoryStore.Create`/`ChannelStore.Create` só são usados em teste, então um `server-channel` recém-instalado fica sem nenhum canal. Descoberto em 2026-09-22 ao preparar o teste com 2 pessoas; na instância oficial a categoria "Geral" com `geral` (texto), `Voz` (voz) e `forum` (fórum) foi criada à mão via `psql`. Provavelmente exige um bit de permissão novo (`ManageChannels`), ver "Decisão: sistema de permissões/roles"
+- [x] Criar/renomear/apagar categoria e canal (API + UI) — bit novo `ManageChannels` (256, só na permissão base); `POST/PATCH/DELETE /api/categories[/{id}]` e `/api/channels[/{id}]` (`internal/httpapi/channels_admin.go`); apagar categoria deixa os canais sem categoria, apagar canal leva mensagens, threads e arquivos de anexo junto. UI na `ChannelSidebar` + `components/StructureDialogs.tsx`. Teste de integração em `channels_admin_test.go` (roda só com `FFCOM_TEST_DATABASE_URL`, validado contra Postgres 17 real); a UI passou só por `npm run lint`/`npm run build`, sem browser com login OIDC. Ver `docs/architecture.md`, "Decisão: gerenciar categorias e canais"
+- [ ] Testar criação de categoria/canal pela UI num browser real, depois do deploy de `channel-v*`/`client-v*`: montar uma estrutura do zero (dono), dar `ManageChannels` a uma role de teste e repetir com `teste-ffcom01`, conferir que `teste-ffcom02` sem o bit não vê os botões e que apagar canal com anexo remove o arquivo de `ATTACHMENTS_DIR` no host
 - [x] Integração com LiveKit: criar sala por canal de voz, emitir token de acesso (`POST /api/channels/{id}/voice/token`, sala criada implicitamente pelo LiveKit); agora exige o bit `Voice` da permissão efetiva do canal em vez de só "é membro", ver `docs/architecture.md`
 - [x] Canal de texto: envio/histórico de mensagens via WebSocket
 - [x] CORS configurável (`CORS_ALLOWED_ORIGINS`) para o client chamar de outra origem (REST + WebSocket)
@@ -108,6 +109,8 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [ ] UI de overwrite de canal por role (a API `GET/PUT/DELETE /api/channels/{id}/overwrites[/{roleId}]` já existe em `server-channel`, só falta tela)
 - [ ] Botão para quem tem `Administrator` apagar mensagem de outro membro em `TextChannelView.tsx` (o servidor já aceita, ver "Decisão: editar/apagar mensagem de texto")
 - [ ] Indicador agregado de não lida no `ServerRail` (hoje a bolinha só aparece por canal e por DM, ver "Decisão: indicador de não lida")
+- [ ] Mostrar quem está na sala de voz — listar os participantes conectados embaixo do canal de voz na `ChannelSidebar` (estilo Discord), visível também para quem ainda não entrou na sala
+- [ ] Expandir compartilhamento de tela — poder ampliar a tela compartilhada (tela cheia ou foco num único tile) em vez de vê-la só no tamanho da grade de vídeo de `VoiceChannelView.tsx`
 - [x] Notificação/contador de não lidas — bolinha de "não lida" (sem contagem) em canal e em DM fechada: `lastMessageAt` por canal (`GET /api/channels` em `server-channel`) e por amigo (`GET /api/friends` em `server-central`), comparado contra um cursor local ao dispositivo (`client/src/lib/unread.ts`, `hooks/useUnread.ts`); DM atualiza via WebSocket de presença já existente, canal via poll de 20s (sem feed cruzando canais). Sem indicador agregado no `ServerRail` ainda. Ver `docs/architecture.md`, "Decisão: indicador de não lida"
 
 ## Segurança

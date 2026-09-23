@@ -73,6 +73,17 @@ npm run lint
 npm run build   # tsc -b pega erro de tipo que o lint sozinho não pega
 ```
 
+Os testes de handler que precisam de banco (hoje `server-channel/internal/httpapi/channels_admin_test.go`)
+são pulados sem `FFCOM_TEST_DATABASE_URL`, e o CI não sobe Postgres. Para
+rodá-los, aponte a variável para um banco descartável (as migrations são
+aplicadas nele):
+
+```
+docker run -d --rm --name ffcom-test-pg -e POSTGRES_PASSWORD=test -e POSTGRES_DB=ffcom_test -p 55432:5432 postgres:17-alpine
+FFCOM_TEST_DATABASE_URL="postgres://postgres:test@localhost:55432/ffcom_test?sslmode=disable" go test ./...
+docker stop ffcom-test-pg
+```
+
 ## Commits
 
 Mensagens em português, imperativo, sem prefixo de tipo (`feat:`/`fix:` etc.)

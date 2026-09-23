@@ -20,6 +20,10 @@ const (
 	// significado de valores de roles.permissions já persistidos.
 	KickMembers
 	BanMembers
+	// ManageChannels (criar/renomear/mover/apagar categoria e canal) veio
+	// depois — ver docs/architecture.md, "Decisão: gerenciar categorias e
+	// canais". Mesmo critério: sempre no fim do bloco.
+	ManageChannels
 )
 
 // Owner é o valor de retorno de quem é dono do servidor (member.IsOwner):

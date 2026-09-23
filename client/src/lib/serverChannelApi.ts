@@ -308,7 +308,53 @@ export function unbanMember(baseUrl: string, accessToken: string, oidcSubject: s
   return postJsonOrThrow(baseUrl, `/api/bans/${encodeURIComponent(oidcSubject)}`, accessToken, 'DELETE')
 }
 
-const UNCATEGORIZED_ID = 'uncategorized'
+// Criar/renomear/mover/apagar categoria e canal (requer ManageChannels) --
+// ver docs/architecture.md, "Decisão: gerenciar categorias e canais".
+export function createCategory(baseUrl: string, accessToken: string, name: string): Promise<RemoteCategory> {
+  return postJsonOrThrow(baseUrl, '/api/categories', accessToken, 'POST', { name })
+}
+
+export function updateCategory(
+  baseUrl: string,
+  accessToken: string,
+  categoryId: string,
+  changes: { name?: string; position?: number },
+): Promise<RemoteCategory> {
+  return postJsonOrThrow(baseUrl, `/api/categories/${categoryId}`, accessToken, 'PATCH', changes)
+}
+
+// Os canais da categoria apagada continuam existindo, sem categoria.
+export function deleteCategory(baseUrl: string, accessToken: string, categoryId: string): Promise<void> {
+  return postJsonOrThrow(baseUrl, `/api/categories/${categoryId}`, accessToken, 'DELETE')
+}
+
+export function createChannel(
+  baseUrl: string,
+  accessToken: string,
+  channel: { name: string; type: ChannelType; categoryId?: string },
+): Promise<RemoteChannel> {
+  return postJsonOrThrow(baseUrl, '/api/channels', accessToken, 'POST', channel)
+}
+
+// categoryId: null tira o canal da categoria; ausente mantém a atual.
+export function updateChannel(
+  baseUrl: string,
+  accessToken: string,
+  channelId: string,
+  changes: { name?: string; categoryId?: string | null; position?: number },
+): Promise<RemoteChannel> {
+  return postJsonOrThrow(baseUrl, `/api/channels/${channelId}`, accessToken, 'PATCH', changes)
+}
+
+// Apaga o canal com todas as mensagens, threads e anexos.
+export function deleteChannel(baseUrl: string, accessToken: string, channelId: string): Promise<void> {
+  return postJsonOrThrow(baseUrl, `/api/channels/${channelId}`, accessToken, 'DELETE')
+}
+
+// Id da categoria sintética "Canais" que agrupa os canais sem categoria (ver
+// groupIntoCategories). Não existe no servidor: não dá pra renomear nem
+// apagar, e criar canal nela significa criar sem categoryId.
+export const UNCATEGORIZED_ID = 'uncategorized'
 
 // Agrupa categorias e canais crus da API em Category[] (formato usado pelo
 // client), preservando a ordem por posição já aplicada pelo servidor. Canais
