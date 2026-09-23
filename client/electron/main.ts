@@ -1,4 +1,4 @@
-import { app, BrowserWindow, net, protocol } from 'electron'
+import { app, BrowserWindow, globalShortcut, ipcMain, net, protocol } from 'electron'
 import { existsSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -56,6 +56,32 @@ function registerAppProtocol() {
   })
 }
 
+// Atalho global de mutar (ver docs/architecture.md, "Decisão: atalho de
+// teclado para mutar"). O renderer registra ao conectar na voz e remove ao
+// sair, para a combinação não ficar presa nos outros programas enquanto
+// ninguém está numa chamada. Um atalho só por vez: registrar outro troca o
+// anterior.
+const SHORTCUT_FORMAT = /^((Ctrl|Alt|Shift|Super)\+)*([A-Z0-9]|num\d|F([1-9]|1\d|2[0-4])|Space)$/
+let muteShortcut: string | undefined
+
+function registerMuteShortcutIpc() {
+  ipcMain.handle('ffcom:set-mute-shortcut', (event, accelerator: unknown) => {
+    if (muteShortcut) {
+      globalShortcut.unregister(muteShortcut)
+      muteShortcut = undefined
+    }
+    if (accelerator === null) return true
+    if (typeof accelerator !== 'string' || !SHORTCUT_FORMAT.test(accelerator)) return false
+    const sender = event.sender
+    // register devolve false quando outro programa já tem a combinação.
+    const ok = globalShortcut.register(accelerator, () => {
+      if (!sender.isDestroyed()) sender.send('ffcom:mute-shortcut')
+    })
+    if (ok) muteShortcut = accelerator
+    return ok
+  })
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
@@ -74,7 +100,12 @@ function createWindow() {
 
 app.whenReady().then(() => {
   registerAppProtocol()
+  registerMuteShortcutIpc()
   createWindow()
+})
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
 })
 
 app.on('window-all-closed', () => {

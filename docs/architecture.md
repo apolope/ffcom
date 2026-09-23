@@ -1082,6 +1082,34 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** o teste mostrar o bipe de desmutar chegando aos outros pelo ar (aí, tocar mais baixo ou só o de mutar com alto-falante), ou quando o painel de preferências de voz existir.
 
+## Decisão: atalho de teclado para mutar — `keydown` no web, `globalShortcut` no Electron só durante a chamada
+
+**Contexto:** mutar exigia clicar no botão do canal de voz. Jogando ou com outra janela na frente, a pessoa precisava voltar ao FFCom para isso.
+
+**Alternativas consideradas:**
+- **Atalho fixo (ex. `Ctrl+Shift+M`, o padrão do Discord):** no Chrome para Windows e Linux essa combinação já abre o menu de perfis, e qualquer combinação fixa pode colidir com outro programa. Descartada; a pessoa grava a própria combinação, e o padrão é não ter atalho.
+- **Electron: `keydown` no renderer:** só funciona com a janela em foco, igual ao web. Descartada para o Electron, cujo motivo de existir aqui é justamente o segundo plano.
+- **Electron: `globalShortcut` registrado desde a abertura do app:** a combinação ficaria presa (o registro no sistema consome a tecla) em todos os outros programas mesmo sem chamada nenhuma. Descartada.
+- **Electron: `globalShortcut` registrado só enquanto conectado à voz:** escolhida.
+
+**Decisão:**
+1. **Formato único** (`lib/shortcut.ts`): o formato de accelerator do Electron (`Ctrl+Alt+Shift+Super+<tecla>`), montado a partir do `event.code` (posição física, então Shift ou AltGr não trocam a tecla). Teclas aceitas: letras, dígitos, teclado numérico, F1-F24 e espaço. Exige Ctrl, Alt ou Win junto, a não ser numa tecla F, porque no Electron uma letra sozinha seria engolida em todo programa durante a chamada.
+2. **Web/PWA** (`hooks/useMuteShortcut.ts`): listener de `keydown` na janela enquanto conectado, ignorando `event.repeat` (segurar a tecla) e alvos de digitação (input, textarea, select, contenteditable; o AltGr do teclado ABNT chega como Ctrl+Alt). A UI avisa que no navegador só funciona com a janela em foco.
+3. **Electron:** `preload.ts` expõe pelo `contextBridge` só `window.ffcomElectron.setMuteShortcut(accelerator | null)` e `onMuteShortcut(callback)`, nunca o `ipcRenderer` inteiro. O main (`ipcMain.handle('ffcom:set-mute-shortcut')`) confere o formato de novo, troca o registro anterior (um atalho por vez) e devolve `false` quando o sistema recusa; a UI mostra "outro programa já usa essa combinação". `will-quit` chama `unregisterAll`. No Electron o hook só usa o caminho global, porque o registro consome a tecla e ouvir os dois arriscaria alternar duas vezes.
+4. **Quando está ativo:** só com `status === 'connected'` e fora do modo de gravar atalho novo; sair do canal ou trocar de tela desfaz o registro. Dispara o mesmo `toggleMic` do botão, então herda o som de "Decisão: som ao mutar e desmutar".
+5. **Gravar o atalho** (`components/MuteShortcutSetting.tsx`): "Definir atalho", apertar a combinação (listener em captura, que esconde a tecla do resto da página), Esc cancela, "Remover" apaga. Guardado em `lib/voicePrefs.ts` (`muteShortcut`), por conta; um valor fora do formato no `localStorage` é descartado na leitura.
+
+**Escopo aceito:**
+- **Conflito só é detectado no Electron**, e só contra quem registrou a combinação antes: no web o navegador não informa se outro atalho já usa a tecla, e no Electron um programa que registre depois não é avisado.
+- **Sem push-to-talk:** `globalShortcut` não entrega o soltar da tecla; fica para o item próprio (ver TODO).
+- **Um atalho só**, sem separar mutar de desmutar e sem ensurdecer (silenciar a saída).
+
+**Razão:** atende o caso principal (mutar sem sair do jogo) no Electron sem prender a combinação fora da chamada, e dá ao web o que o navegador permite, com a limitação dita na própria tela.
+
+**Verificado (2026-09-23):** `tsc -b`, `npm run lint` sem aviso novo, `npm run build` e `npm run build:electron`. No Electron rodando de verdade (via DevTools Protocol): a ponte aparece no renderer sem expor `require`, o main aceita um atalho válido e recusa um fora do formato, e `Ctrl+Alt+F9` enviado pelo sistema com o terminal em foco (Electron em segundo plano) chegou duas vezes ao renderer. `shortcutFromEvent`, `isUsableShortcut` e o formato conferidos com casos avulsos (o client não tem runner de teste). Não verificado: a tela de gravar atalho e o `keydown` no web dentro de uma chamada real, que exigem login e LiveKit.
+
+**Revisitar quando:** o push-to-talk precisar do soltar da tecla em segundo plano (hook de teclado nativo), ou aparecerem mais atalhos (ensurdecer, sair da chamada), quando vale uma lista de atalhos no painel de preferências de voz.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

@@ -1,3 +1,15 @@
-// Preload script — roda com acesso a Node antes do renderer carregar.
-// Nenhuma API exposta ainda; usar contextBridge.exposeInMainWorld aqui
-// quando o renderer precisar chamar algo do processo principal.
+// Preload script — roda antes do renderer carregar e expõe ao renderer só a
+// ponte abaixo (tipos em src/electron.d.ts), nunca o ipcRenderer inteiro.
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+
+contextBridge.exposeInMainWorld('ffcomElectron', {
+  setMuteShortcut: (accelerator: string | null): Promise<boolean> =>
+    ipcRenderer.invoke('ffcom:set-mute-shortcut', accelerator),
+  onMuteShortcut: (callback: () => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent) => callback()
+    ipcRenderer.on('ffcom:mute-shortcut', listener)
+    return () => {
+      ipcRenderer.removeListener('ffcom:mute-shortcut', listener)
+    }
+  },
+})

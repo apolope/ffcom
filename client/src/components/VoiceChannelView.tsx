@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useAuth } from '../auth/AuthProvider'
+import { useMuteShortcut } from '../hooks/useMuteShortcut'
 import { useVoiceChannel } from '../hooks/useVoiceChannel'
-import { getVoicePrefs, setVoicePrefs } from '../lib/voicePrefs'
+import { getVoicePrefs, setVoicePrefs, type VoicePrefs } from '../lib/voicePrefs'
+import { MuteShortcutSetting } from './MuteShortcutSetting'
 import type { Channel } from '../types'
 import './VoiceChannelView.css'
 
@@ -17,11 +19,21 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
   const { accessToken, user } = useAuth()
   const accountSub = user?.profile.sub ?? ''
   const [voicePrefs, setVoicePrefsState] = useState(() => getVoicePrefs(accountSub))
-  const toggleMicSoundPref = () => {
-    const next = { ...voicePrefs, micToggleSound: !voicePrefs.micToggleSound }
-    setVoicePrefsState(next)
-    setVoicePrefs(accountSub, next)
-  }
+  const updateVoicePrefs = useCallback(
+    (change: Partial<VoicePrefs>) => {
+      setVoicePrefsState((prev) => {
+        const next = { ...prev, ...change }
+        setVoicePrefs(accountSub, next)
+        return next
+      })
+    },
+    [accountSub],
+  )
+  const setMuteShortcut = useCallback(
+    (muteShortcut: string | undefined) => updateVoicePrefs({ muteShortcut }),
+    [updateVoicePrefs],
+  )
+  const [recordingShortcut, setRecordingShortcut] = useState(false)
   const {
     status,
     error,
@@ -40,6 +52,11 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
     toggleCamera,
     toggleScreenShare,
   } = useVoiceChannel(serverBaseUrl, channel.id, accessToken!, voicePrefs.micToggleSound)
+  const { registerFailed: shortcutRegisterFailed } = useMuteShortcut(
+    voicePrefs.muteShortcut,
+    status === 'connected' && !recordingShortcut,
+    toggleMic,
+  )
 
   return (
     <div className="voice-channel">
@@ -111,10 +128,30 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
             <button type="button" onClick={leave}>
               Sair do canal de voz
             </button>
+          </div>
+          <div className="voice-prefs">
             <label className="voice-pref">
-              <input type="checkbox" checked={voicePrefs.micToggleSound} onChange={toggleMicSoundPref} />
+              <input
+                type="checkbox"
+                checked={voicePrefs.micToggleSound}
+                onChange={() => updateVoicePrefs({ micToggleSound: !voicePrefs.micToggleSound })}
+              />
               Som ao mutar
             </label>
+            <MuteShortcutSetting
+              shortcut={voicePrefs.muteShortcut}
+              onChange={setMuteShortcut}
+              recording={recordingShortcut}
+              onRecordingChange={setRecordingShortcut}
+            />
+            {shortcutRegisterFailed && (
+              <span className="voice-shortcut-hint">
+                O atalho não pôde ser registrado: outro programa já usa essa combinação. Escolha outra.
+              </span>
+            )}
+            {!window.ffcomElectron && voicePrefs.muteShortcut && (
+              <span className="voice-prefs-note">No navegador o atalho só funciona com esta janela em foco.</span>
+            )}
           </div>
         </>
       )}
