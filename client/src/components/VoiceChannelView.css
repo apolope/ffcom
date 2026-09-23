@@ -184,6 +184,13 @@
   padding: 0 16px 12px;
 }
 
+.voice-media-hint {
+  margin: 0;
+  padding: 0 16px 12px;
+  color: var(--text);
+  font-size: 13px;
+}
+
 .voice-controls button {
   font: inherit;
   padding: 10px 16px;

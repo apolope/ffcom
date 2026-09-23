@@ -3,6 +3,7 @@ import {
   Room,
   RoomEvent,
   Track,
+  type AudioCaptureOptions,
   type LocalParticipant,
   type Participant,
   type RemoteParticipant,
@@ -19,6 +20,7 @@ export interface VoiceParticipant {
   micEnabled: boolean
   cameraEnabled: boolean
   screenSharing: boolean
+  screenShareAudio: boolean
 }
 
 interface UseVoiceChannelResult {
@@ -29,6 +31,8 @@ interface UseVoiceChannelResult {
   cameraEnabled: boolean
   cameraError: string | undefined
   screenSharing: boolean
+  // Compartilhando tela com áudio (a pessoa marcou "Compartilhar áudio").
+  screenShareAudio: boolean
   videoContainerRef: (node: HTMLDivElement | null) => void
   join: () => void
   leave: () => void
@@ -45,6 +49,9 @@ function toParticipant(p: LocalParticipant | RemoteParticipant): VoiceParticipan
     micEnabled: p.isMicrophoneEnabled,
     cameraEnabled: p.isCameraEnabled,
     screenSharing: p.isScreenShareEnabled,
+    // O áudio da tela é uma track separada (fonte ScreenShareAudio), que só
+    // existe se a pessoa marcou "Compartilhar áudio" no seletor.
+    screenShareAudio: !!p.getTrackPublication(Track.Source.ScreenShareAudio),
   }
 }
 
@@ -52,6 +59,19 @@ function toParticipant(p: LocalParticipant | RemoteParticipant): VoiceParticipan
 // integração de voz com LiveKit"). Cada canal tem sua própria sala LiveKit
 // (nome = id do canal); entrar busca um token novo em
 // POST /api/channels/{id}/voice/token a cada tentativa, em vez de cachear.
+// Constraints do áudio da tela, repassadas cruas ao getDisplayMedia pelo
+// livekit-client. restrictOwnAudio (Chrome 141+) tira do áudio do sistema o
+// som tocado por esta própria página, ou seja, as vozes da sala: sem isso,
+// compartilhar a tela inteira com áudio no Windows devolveria a voz de cada
+// um para a sala. Não está no tipo AudioCaptureOptions (daí o cast), e
+// navegador que não conhece a constraint a ignora.
+const SCREEN_SHARE_AUDIO_CONSTRAINTS = {
+  echoCancellation: false,
+  noiseSuppression: false,
+  autoGainControl: false,
+  restrictOwnAudio: true,
+} as AudioCaptureOptions
+
 export function useVoiceChannel(
   baseUrl: string,
   channelId: string,
@@ -279,12 +299,23 @@ export function useVoiceChannel(
   // setScreenShareEnabled(true) abre o seletor nativo do navegador
   // (getDisplayMedia); rejeitar essa promise ao cancelar o seletor não é um
   // erro real do canal de voz, só a desistência do usuário.
+  //
+  // Pede o áudio junto (publicado como track ScreenShareAudio, separada do
+  // microfone; quem assiste já toca toda track de áudio remota). Só vem se a
+  // pessoa marcar "Compartilhar áudio" no seletor: Chrome/Edge capturam o de
+  // uma aba e, no Windows, o do sistema na tela inteira; Firefox e Safari
+  // não capturam. Cancelamento de eco, supressão de ruído e ganho automático
+  // ficam desligados porque são feitos para voz e estragam música e jogo.
+  // Ver docs/architecture.md, "Decisão: áudio da tela compartilhada".
   const toggleScreenShare = useCallback(async () => {
     const room = roomRef.current
     if (!room) return
     const next = !room.localParticipant.isScreenShareEnabled
     try {
-      await room.localParticipant.setScreenShareEnabled(next)
+      await room.localParticipant.setScreenShareEnabled(next, {
+        audio: SCREEN_SHARE_AUDIO_CONSTRAINTS,
+        systemAudio: 'include',
+      })
     } catch {
       return
     }
@@ -292,6 +323,7 @@ export function useVoiceChannel(
   }, [refreshParticipants])
 
   const screenSharing = participants.some((p) => p.isLocal && p.screenSharing)
+  const screenShareAudio = participants.some((p) => p.isLocal && p.screenShareAudio)
   const cameraEnabled = participants.some((p) => p.isLocal && p.cameraEnabled)
 
   return {
@@ -302,6 +334,7 @@ export function useVoiceChannel(
     cameraEnabled,
     cameraError,
     screenSharing,
+    screenShareAudio,
     videoContainerRef,
     join,
     leave,

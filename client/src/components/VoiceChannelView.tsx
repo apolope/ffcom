@@ -21,6 +21,7 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
     cameraEnabled,
     cameraError,
     screenSharing,
+    screenShareAudio,
     videoContainerRef,
     join,
     leave,
@@ -65,11 +66,19 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
                   {p.isLocal ? ' (você)' : ''}
                   {p.cameraEnabled ? ' 📷' : ''}
                   {p.screenSharing ? ' 🖥️' : ''}
+                  {p.screenShareAudio ? ' 🔊' : ''}
                 </span>
               </li>
             ))}
           </ul>
           {cameraError && <p className="message-error voice-media-error">{cameraError}</p>}
+          {screenSharing && !screenShareAudio && (
+            <p className="voice-media-hint">
+              Compartilhando sem áudio. Para enviar o som, pare e compartilhe de novo marcando "Compartilhar
+              áudio" no seletor (Chrome e Edge; em tela inteira, só no Windows). Firefox e Safari não enviam
+              áudio de tela.
+            </p>
+          )}
           <div className="voice-controls">
             <button type="button" onClick={toggleMic}>
               {micEnabled ? 'Silenciar microfone' : 'Ativar microfone'}

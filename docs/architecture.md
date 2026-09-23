@@ -965,6 +965,29 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** entrar layout de falante ativo ou muitos participantes com vídeo (mesmo gatilho de "Decisão: câmera no canal de voz").
 
+## Decisão: áudio da tela compartilhada — `audio` no `setScreenShareEnabled`, sem filtros de voz, `restrictOwnAudio` contra eco
+
+**Contexto:** item de TODO "Compartilhar o áudio junto com a tela". `toggleScreenShare` só pedia vídeo, então vídeo com som (YouTube, jogo) chegava mudo para a sala.
+
+**Alternativas consideradas:**
+- **Capturar o áudio à parte (segundo `getDisplayMedia` ou `getUserMedia` de loopback) e publicar à mão:** duplicaria o que o `setScreenShareEnabled` já faz; o SDK publica o áudio da mesma captura como track `ScreenShareAudio`, separada do microfone. Descartada.
+- **Pedir áudio com as opções padrão:** o navegador liga cancelamento de eco, supressão de ruído e ganho automático, filtros de voz que cortam e bombeiam música e som de jogo. Descartada.
+- **`audio` com esses três filtros desligados, `systemAudio: 'include'` e `restrictOwnAudio: true`:** escolhida.
+
+**Decisão:**
+1. `toggleScreenShare` (`hooks/useVoiceChannel.ts`) passa `SCREEN_SHARE_AUDIO_CONSTRAINTS` como `audio`. O `livekit-client` 2.22 repassa esse objeto cru ao `getDisplayMedia` (`screenCaptureToDisplayMediaStreamOptions`), por isso uma constraint fora do tipo `AudioCaptureOptions` chega ao navegador.
+2. **`restrictOwnAudio: true`** (Chrome 141+): tira do áudio do sistema o som tocado pela própria página, que é a voz dos outros participantes. Sem isso, a tela inteira com áudio do sistema no Windows devolveria a voz de cada um para a sala. Navegador que não conhece a constraint a ignora.
+3. **Quem assiste não muda:** o `TrackSubscribed` já anexa toda track de áudio remota, inclusive `ScreenShareAudio`.
+4. **Aviso na UI:** o áudio só vem se a pessoa marcar "Compartilhar áudio" no seletor. Compartilhando sem track `ScreenShareAudio`, `VoiceChannelView` mostra como refazer com som; a lista de participantes mostra 🔊 para quem compartilha com áudio.
+
+**Escopo aceito, limites do navegador:** Chrome e Edge capturam o áudio de uma aba e, só no Windows, o do sistema na tela inteira; janela avulsa não tem áudio; Firefox e Safari não capturam áudio de tela. **Electron fica de fora:** ali não existe seletor nativo, e sem `session.setDisplayMediaRequestHandler` no processo main o próprio compartilhamento de tela falha hoje (item próprio no TODO).
+
+**Razão:** o SDK já resolve captura e publicação; o trabalho real é não estragar o som com filtros de voz e não criar eco.
+
+**Verificado (2026-09-23):** `tsc -b`, `npm run lint` sem aviso novo e `npm run build`. Não verificado num browser com dois participantes (o seletor de tela exige interação humana).
+
+**Revisitar quando:** entrar volume por participante e por fonte (item de TODO), que vai tratar `ScreenShareAudio` separado do microfone; ou quando o Electron ganhar seletor de tela.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.
