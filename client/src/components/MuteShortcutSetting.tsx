@@ -8,11 +8,24 @@ interface MuteShortcutSettingProps {
   // apertar a combinação antiga não alternar o microfone.
   recording: boolean
   onRecordingChange: (recording: boolean) => void
+  // Texto antes da tecla; padrão "Atalho para mutar".
+  label?: string
+  // Aceita tecla sozinha, sem Ctrl/Alt/Win. Serve ao push-to-talk, que só
+  // funciona com a janela em foco e por isso não prende a tecla nos outros
+  // programas.
+  allowSingleKey?: boolean
 }
 
-// Grava o atalho de mutar: clicar em "Definir atalho" e apertar a
-// combinação. Esc cancela.
-export function MuteShortcutSetting({ shortcut, onChange, recording, onRecordingChange }: MuteShortcutSettingProps) {
+// Grava um atalho de voz (mutar ou push-to-talk): clicar em "Definir atalho"
+// e apertar a combinação. Esc cancela.
+export function MuteShortcutSetting({
+  shortcut,
+  onChange,
+  recording,
+  onRecordingChange,
+  label = 'Atalho para mutar',
+  allowSingleKey = false,
+}: MuteShortcutSettingProps) {
   const [hint, setHint] = useState<string>()
 
   useEffect(() => {
@@ -33,7 +46,7 @@ export function MuteShortcutSetting({ shortcut, onChange, recording, onRecording
         }
         return
       }
-      if (!isUsableShortcut(next)) {
+      if (!allowSingleKey && !isUsableShortcut(next)) {
         setHint('Use Ctrl, Alt ou Win junto com a tecla (ou uma tecla F sozinha).')
         return
       }
@@ -44,20 +57,22 @@ export function MuteShortcutSetting({ shortcut, onChange, recording, onRecording
     // Captura: o listener do atalho e o resto da página não veem a tecla.
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [recording, onChange, onRecordingChange])
+  }, [recording, onChange, onRecordingChange, allowSingleKey])
 
   return (
     <div className="voice-pref voice-shortcut">
       {recording ? (
         <>
-          <span>Aperte a combinação (Esc cancela)</span>
+          <span>{allowSingleKey ? 'Aperte a tecla' : 'Aperte a combinação'} (Esc cancela)</span>
           <button type="button" onClick={() => onRecordingChange(false)}>
             Cancelar
           </button>
         </>
       ) : (
         <>
-          <span>Atalho para mutar: {shortcut ? <kbd>{formatShortcut(shortcut)}</kbd> : 'nenhum'}</span>
+          <span>
+            {label}: {shortcut ? <kbd>{formatShortcut(shortcut)}</kbd> : 'nenhum'}
+          </span>
           <button type="button" onClick={() => onRecordingChange(true)}>
             {shortcut ? 'Trocar' : 'Definir atalho'}
           </button>

@@ -11,10 +11,16 @@ export interface VoicePrefs {
   // Atalho de mutar/desmutar no formato de lib/shortcut.ts; ausente = sem
   // atalho (padrão, para não roubar nenhuma combinação sem a pessoa pedir).
   muteShortcut?: string
+  // Push-to-talk ("apertar para falar") em vez do microfone sempre aberto.
+  pushToTalk: boolean
+  // Tecla do push-to-talk, mesmo formato; ausente = só o botão de segurar
+  // na tela. Pode ser uma tecla sozinha, porque só vale com a janela em foco.
+  pushToTalkKey?: string
 }
 
 const DEFAULTS: VoicePrefs = {
   micToggleSound: true,
+  pushToTalk: false,
 }
 
 export function getVoicePrefs(accountSub: string): VoicePrefs {
@@ -26,6 +32,10 @@ export function getVoicePrefs(accountSub: string): VoicePrefs {
     if (prefs.muteShortcut !== undefined && !isShortcutFormat(prefs.muteShortcut)) {
       delete prefs.muteShortcut
     }
+    if (prefs.pushToTalkKey !== undefined && !isShortcutFormat(prefs.pushToTalkKey)) {
+      delete prefs.pushToTalkKey
+    }
+    prefs.pushToTalk = prefs.pushToTalk === true
     return prefs
   } catch {
     return DEFAULTS

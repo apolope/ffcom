@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  ConnectionState,
   Room,
   RoomEvent,
   Track,
+  createLocalAudioTrack,
   type AudioCaptureOptions,
   type LocalParticipant,
   type Participant,
@@ -44,6 +46,8 @@ interface UseVoiceChannelResult {
   join: () => void
   leave: () => void
   toggleMic: () => void
+  // Push-to-talk: abre (true) ou fecha (false) o microfone, sem aviso sonoro.
+  setTalking: (talking: boolean) => void
   toggleCamera: () => void
   toggleScreenShare: () => void
 }
@@ -93,6 +97,10 @@ export function useVoiceChannel(
   // Volume por pessoa e "silenciar para mim" (lib/participantAudio.ts),
   // chaveado pela identity LiveKit, que é o memberId.
   participantAudio: ParticipantAudioMap = NO_PARTICIPANT_AUDIO,
+  // Modo "apertar para falar": entra com o microfone publicado mas mutado, e
+  // quem abre e fecha é setTalking. Trocar o modo conectado fecha ou abre o
+  // microfone. Ver docs/architecture.md, "Decisão: push-to-talk".
+  pushToTalk = false,
 ): UseVoiceChannelResult {
   const roomRef = useRef<Room | undefined>(undefined)
   const micToggleSoundRef = useRef(micToggleSound)
@@ -100,6 +108,11 @@ export function useVoiceChannel(
     micToggleSoundRef.current = micToggleSound
   }, [micToggleSound])
   const participantAudioRef = useRef(participantAudio)
+  const pushToTalkRef = useRef(pushToTalk)
+  // Estado do microfone pedido por último e a sala com uma troca em
+  // andamento (ver setMicDesired).
+  const micDesiredRef = useRef(false)
+  const micBusyRoomRef = useRef<Room | undefined>(undefined)
   const audioElsRef = useRef<Set<HTMLMediaElement>>(new Set())
   const videoContainerElRef = useRef<HTMLDivElement | null>(null)
   const videoTilesRef = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -323,8 +336,28 @@ export function useVoiceChannel(
       room.on(RoomEvent.AudioPlaybackStatusChanged, () => setAudioPlaybackBlocked(!room.canPlaybackAudio))
 
       await room.connect(url, token)
-      await room.localParticipant.setMicrophoneEnabled(true)
-      setMicEnabled(true)
+      if (pushToTalkRef.current) {
+        // Pede a permissão e publica já mutado, para o primeiro aperto abrir
+        // na hora (sem o seletor de permissão com a tecla apertada) e sem
+        // transmitir nada ao entrar. O setMicrophoneEnabled(true) seguinte
+        // só desmuta a publicação existente.
+        const micTrack = await createLocalAudioTrack(room.options.audioCaptureDefaults)
+        try {
+          await micTrack.mute()
+          await room.localParticipant.publishTrack(micTrack, { source: Track.Source.Microphone })
+        } catch (err) {
+          // Não publicada, a track não sai com o disconnect: sem isso o
+          // microfone ficaria capturado (luz acesa) depois do erro.
+          micTrack.stop()
+          throw err
+        }
+        micDesiredRef.current = false
+        setMicEnabled(false)
+      } else {
+        await room.localParticipant.setMicrophoneEnabled(true)
+        micDesiredRef.current = true
+        setMicEnabled(true)
+      }
       setAudioPlaybackBlocked(!room.canPlaybackAudio)
       setStatus('connected')
       refreshParticipants(room)
@@ -364,6 +397,52 @@ export function useVoiceChannel(
       })
       .catch(() => refreshParticipants(room))
   }, [refreshParticipants])
+
+  // Push-to-talk aperta e solta mais rápido do que setMicrophoneEnabled
+  // resolve; chamadas sobrepostas poderiam terminar fora de ordem e deixar o
+  // microfone aberto depois de soltar. Guarda só o último estado pedido e
+  // aplica em série até a sala bater com ele.
+  const setMicDesired = useCallback(
+    (enabled: boolean) => {
+      const room = roomRef.current
+      if (!room) return
+      micDesiredRef.current = enabled
+      if (micBusyRoomRef.current === room) return
+      micBusyRoomRef.current = room
+      void (async () => {
+        try {
+          // Só conta as voltas em que o LiveKit resolveu sem mudar o estado,
+          // para não ficar em laço; apertar e soltar muitas vezes seguidas
+          // não esbarra no limite.
+          let stuck = 0
+          while (roomRef.current === room) {
+            const want = micDesiredRef.current
+            if (room.localParticipant.isMicrophoneEnabled === want) break
+            await room.localParticipant.setMicrophoneEnabled(want)
+            if (room.localParticipant.isMicrophoneEnabled !== want && ++stuck >= 3) break
+          }
+        } catch {
+          // Dispositivo sumiu ou permissão revogada: o estado real aparece
+          // abaixo.
+        } finally {
+          if (micBusyRoomRef.current === room) micBusyRoomRef.current = undefined
+          if (roomRef.current === room) {
+            setMicEnabled(room.localParticipant.isMicrophoneEnabled)
+            refreshParticipants(room)
+          }
+        }
+      })()
+    },
+    [refreshParticipants],
+  )
+
+  // Trocar de modo conectado: "apertar para falar" começa fechado e "sempre
+  // aberto" abre o microfone.
+  useEffect(() => {
+    pushToTalkRef.current = pushToTalk
+    // Ainda entrando na sala: join lê pushToTalkRef e aplica o modo sozinho.
+    if (roomRef.current?.state === ConnectionState.Connected) setMicDesired(!pushToTalk)
+  }, [pushToTalk, setMicDesired])
 
   // Diferente do seletor de tela (ver toggleScreenShare), recusar a permissão
   // da câmera ou não ter câmera é uma falha que a pessoa precisa ver: vira
@@ -433,6 +512,7 @@ export function useVoiceChannel(
     join,
     leave,
     toggleMic,
+    setTalking: setMicDesired,
     toggleCamera,
     toggleScreenShare,
   }

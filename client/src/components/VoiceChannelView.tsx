@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { useAuth } from '../auth/AuthProvider'
 import { useMuteShortcut } from '../hooks/useMuteShortcut'
+import { usePushToTalk } from '../hooks/usePushToTalk'
 import { useVoiceChannel } from '../hooks/useVoiceChannel'
 import {
   getParticipantAudio,
@@ -8,6 +9,7 @@ import {
   updateParticipantAudio,
   type ParticipantAudio,
 } from '../lib/participantAudio'
+import { formatShortcut } from '../lib/shortcut'
 import { getVoicePrefs, setVoicePrefs, type VoicePrefs } from '../lib/voicePrefs'
 import { MuteShortcutSetting } from './MuteShortcutSetting'
 import { ParticipantVolumeControls } from './ParticipantVolumeControls'
@@ -40,7 +42,15 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
     (muteShortcut: string | undefined) => updateVoicePrefs({ muteShortcut }),
     [updateVoicePrefs],
   )
-  const [recordingShortcut, setRecordingShortcut] = useState(false)
+  const setPushToTalkKey = useCallback(
+    (pushToTalkKey: string | undefined) => updateVoicePrefs({ pushToTalkKey }),
+    [updateVoicePrefs],
+  )
+  // Qual tecla está sendo gravada: enquanto grava, o atalho correspondente
+  // fica desligado para a tecla antiga não disparar.
+  const [recording, setRecording] = useState<'mute' | 'pushToTalk'>()
+  const setRecordingMute = useCallback((on: boolean) => setRecording(on ? 'mute' : undefined), [])
+  const setRecordingPushToTalk = useCallback((on: boolean) => setRecording(on ? 'pushToTalk' : undefined), [])
   const [participantAudio, setParticipantAudio] = useState(() => getParticipantAudio(accountSub))
   const changeParticipantAudio = useCallback(
     (memberId: string, change: Partial<ParticipantAudio>) => {
@@ -65,13 +75,28 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
     join,
     leave,
     toggleMic,
+    setTalking,
     toggleCamera,
     toggleScreenShare,
-  } = useVoiceChannel(serverBaseUrl, channel.id, accessToken!, voicePrefs.micToggleSound, participantAudio)
+  } = useVoiceChannel(
+    serverBaseUrl,
+    channel.id,
+    accessToken!,
+    voicePrefs.micToggleSound,
+    participantAudio,
+    voicePrefs.pushToTalk,
+  )
+  // Em push-to-talk o atalho de mutar fica desligado (o microfone é da tecla
+  // de falar); no Electron isso também libera a combinação global.
   const { registerFailed: shortcutRegisterFailed } = useMuteShortcut(
     voicePrefs.muteShortcut,
-    status === 'connected' && !recordingShortcut,
+    status === 'connected' && !voicePrefs.pushToTalk && recording === undefined,
     toggleMic,
+  )
+  const { buttonProps: pushToTalkButtonProps } = usePushToTalk(
+    voicePrefs.pushToTalkKey,
+    status === 'connected' && voicePrefs.pushToTalk && recording === undefined,
+    setTalking,
   )
 
   return (
@@ -167,9 +192,20 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
             </p>
           )}
           <div className="voice-controls">
-            <button type="button" onClick={toggleMic}>
-              {micEnabled ? 'Silenciar microfone' : 'Ativar microfone'}
-            </button>
+            {voicePrefs.pushToTalk ? (
+              <button
+                type="button"
+                className={micEnabled ? 'voice-ptt-button talking' : 'voice-ptt-button'}
+                aria-pressed={micEnabled}
+                {...pushToTalkButtonProps}
+              >
+                {micEnabled ? 'Falando…' : 'Segure para falar'}
+              </button>
+            ) : (
+              <button type="button" onClick={toggleMic}>
+                {micEnabled ? 'Silenciar microfone' : 'Ativar microfone'}
+              </button>
+            )}
             <button type="button" onClick={toggleCamera}>
               {cameraEnabled ? 'Desligar câmera' : 'Ligar câmera'}
             </button>
@@ -181,27 +217,68 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
             </button>
           </div>
           <div className="voice-prefs">
-            <label className="voice-pref">
-              <input
-                type="checkbox"
-                checked={voicePrefs.micToggleSound}
-                onChange={() => updateVoicePrefs({ micToggleSound: !voicePrefs.micToggleSound })}
-              />
-              Som ao mutar
-            </label>
-            <MuteShortcutSetting
-              shortcut={voicePrefs.muteShortcut}
-              onChange={setMuteShortcut}
-              recording={recordingShortcut}
-              onRecordingChange={setRecordingShortcut}
-            />
-            {shortcutRegisterFailed && (
-              <span className="voice-shortcut-hint">
-                O atalho não pôde ser registrado: outro programa já usa essa combinação. Escolha outra.
-              </span>
-            )}
-            {!window.ffcomElectron && voicePrefs.muteShortcut && (
-              <span className="voice-prefs-note">No navegador o atalho só funciona com esta janela em foco.</span>
+            <div className="voice-pref voice-mode" role="radiogroup" aria-label="Modo do microfone">
+              <label className="voice-pref">
+                <input
+                  type="radio"
+                  name="voice-mode"
+                  checked={!voicePrefs.pushToTalk}
+                  onChange={() => updateVoicePrefs({ pushToTalk: false })}
+                />
+                Microfone aberto
+              </label>
+              <label className="voice-pref">
+                <input
+                  type="radio"
+                  name="voice-mode"
+                  checked={voicePrefs.pushToTalk}
+                  onChange={() => updateVoicePrefs({ pushToTalk: true })}
+                />
+                Apertar para falar
+              </label>
+            </div>
+            {voicePrefs.pushToTalk ? (
+              <>
+                <MuteShortcutSetting
+                  label="Tecla para falar"
+                  allowSingleKey
+                  shortcut={voicePrefs.pushToTalkKey}
+                  onChange={setPushToTalkKey}
+                  recording={recording === 'pushToTalk'}
+                  onRecordingChange={setRecordingPushToTalk}
+                />
+                <span className="voice-prefs-note">
+                  {voicePrefs.pushToTalkKey
+                    ? `Segure ${formatShortcut(voicePrefs.pushToTalkKey)} ou o botão "Segure para falar". `
+                    : 'Sem tecla definida, segure o botão "Segure para falar". '}
+                  Só funciona com esta janela em foco{window.ffcomElectron ? ', também no app desktop' : ''}.
+                </span>
+              </>
+            ) : (
+              <>
+                <label className="voice-pref">
+                  <input
+                    type="checkbox"
+                    checked={voicePrefs.micToggleSound}
+                    onChange={() => updateVoicePrefs({ micToggleSound: !voicePrefs.micToggleSound })}
+                  />
+                  Som ao mutar
+                </label>
+                <MuteShortcutSetting
+                  shortcut={voicePrefs.muteShortcut}
+                  onChange={setMuteShortcut}
+                  recording={recording === 'mute'}
+                  onRecordingChange={setRecordingMute}
+                />
+                {shortcutRegisterFailed && (
+                  <span className="voice-shortcut-hint">
+                    O atalho não pôde ser registrado: outro programa já usa essa combinação. Escolha outra.
+                  </span>
+                )}
+                {!window.ffcomElectron && voicePrefs.muteShortcut && (
+                  <span className="voice-prefs-note">No navegador o atalho só funciona com esta janela em foco.</span>
+                )}
+              </>
             )}
           </div>
         </>

@@ -1141,6 +1141,33 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** o teste com duas pessoas ou o troubleshoot do Android apontarem o `webAudioMix` como culpado (aí, voltar ao `<audio>` com teto de 100%), a saturação em 200% incomodar (aí, um `DynamicsCompressorNode` via `setWebAudioPlugins`), ou a supressão de ruído precisar de nós de Web Audio na reprodução.
 
+## Decisão: push-to-talk — só com a janela em foco, no web e no Electron, sem hook de teclado nativo
+
+**Contexto:** o microfone só podia ficar sempre aberto (com o botão ou o atalho de mutar). Quem joga ou está num ambiente com barulho quer transmitir só enquanto segura uma tecla.
+
+**Alternativas consideradas:**
+- **Push-to-talk global no Electron com hook de teclado nativo (ex. `uiohook-napi`):** é o único jeito de receber o soltar da tecla com o app em segundo plano, porque o `globalShortcut` só entrega o apertar. Mas é uma dependência nativa que precisa ser recompilada por plataforma no `electron-builder`, e o app desktop empacotado ainda nem é distribuído (o `app://ffcom` nem está no CORS dos `.env` reais). Adiada.
+- **Push-to-talk "alternado" com o `globalShortcut` (aperta abre, aperta de novo fecha):** é o atalho de mutar com outro nome. Descartada.
+- **`keydown`/`keyup` na janela, no web e no Electron, mais um botão de segurar na tela:** sem dependência nova, funciona no celular (que não tem teclado) pelo botão, e a limitação fica dita na tela. Escolhida.
+
+**Decisão:**
+1. **Preferência** (`lib/voicePrefs.ts`): `pushToTalk` (padrão desligado) e `pushToTalkKey`, no mesmo formato de `lib/shortcut.ts`. Diferente do atalho de mutar, a tecla pode ser sozinha (sem Ctrl/Alt/Win), porque só vale com a janela em foco e não prende a tecla em outros programas. O gravador é o mesmo `MuteShortcutSetting`, com `allowSingleKey`. Nas preferências de voz há "Microfone aberto" ou "Apertar para falar"; o atalho de mutar e o "Som ao mutar" só aparecem no primeiro modo.
+2. **`hooks/usePushToTalk.ts`:** abre ao apertar e fecha 200 ms depois de soltar (para não cortar a última sílaba; apertar de novo nesse intervalo cancela o fechamento). Três fontes de "segurar": a tecla configurada (`keydown` ignorando `event.repeat` e campos de digitação, `keyup` reconhecido só pela tecla principal, porque os modificadores podem ser soltos antes), o botão "Segure para falar" pelo ponteiro (mouse ou toque, com `setPointerCapture` para arrastar o dedo não soltar e sem menu de contexto no toque longo) e o mesmo botão por Espaço/Enter com ele em foco. O microfone fica aberto enquanto qualquer uma segurar. Perder o foco (`blur`) ou esconder a aba (`visibilitychange`) fecha na hora, sem o atraso, porque o `keyup` não vai chegar.
+3. **`hooks/useVoiceChannel.ts`:** em push-to-talk, entrar na sala cria a track com `createLocalAudioTrack`, muta e publica já mutada. O pedido de permissão acontece ao entrar e não com a tecla apertada, ninguém ouve nada ao entrar, e o `setMicrophoneEnabled(true)` do primeiro aperto só desmuta a publicação existente. Apertar e soltar passa por `setTalking`, que guarda só o último estado pedido e aplica em série até a sala bater com ele (desistindo só depois de 3 trocas que não mudaram o estado), porque chamadas sobrepostas de `setMicrophoneEnabled` podiam terminar fora de ordem e deixar o microfone aberto depois de soltar. Trocar de modo conectado fecha (push-to-talk) ou abre (microfone aberto) o microfone.
+4. **Atalho de mutar desligado em push-to-talk:** no Electron isso também desfaz o registro global, então a combinação volta a ser dos outros programas.
+5. **Sem som ao apertar e soltar**, respondendo ao que ficou em aberto em "Decisão: som ao mutar e desmutar": o bipe tocaria a cada fala, e o de abrir toca justo com o microfone aberto, o que vaza pelo ar com alto-falante. O botão verde "Falando…" e o 🎤/🔇 da lista dão o retorno.
+
+**Escopo aceito:**
+- **Não funciona com o FFCom em segundo plano, nem no app desktop.** A tela diz isso. Para jogar em tela cheia, o atalho de mutar global do Electron continua sendo a opção.
+- **Tecla de uma letra sozinha** não dispara enquanto a pessoa digita no chat (campos de digitação são ignorados), mas fora deles a letra é consumida (`preventDefault`) enquanto o push-to-talk estiver ativo.
+- **O primeiro aperto depende de um `unmute`,** que em geral é imediato, mas o tempo até a voz chegar aos outros não foi medido.
+
+**Razão:** entrega o modo de falar mais pedido sem dependência nativa, funciona igual no web, no PWA do celular (pelo botão) e no Electron em foco, e deixa o caminho para o push-to-talk em segundo plano aberto para quando o app desktop for distribuído.
+
+**Verificado (2026-09-23):** `tsc -b`, `npm run lint` sem aviso novo e `npm run build`. A publicação mutada e o `unmute` no aperto seguinte foram conferidos no código-fonte do `livekit-client` 2.22.3 (`publishTrack` manda `muted: track.isMuted`; `setTrackEnabled` desmuta uma publicação existente). Não verificado numa chamada real (exige login e LiveKit).
+
+**Revisitar quando:** o Electron empacotado for distribuído e alguém pedir push-to-talk em segundo plano (aí, `uiohook-napi` ou similar só no Electron), ou o teste mostrar a primeira sílaba cortada no aperto (aí, medir o `unmute` e considerar manter a track sempre transmitindo silêncio).
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

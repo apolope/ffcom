@@ -349,3 +349,22 @@
   font-size: 0.9em;
   opacity: 0.8;
 }
+
+/* Push-to-talk (hooks/usePushToTalk.ts): o botão fica verde enquanto o
+   microfone está aberto. touch-action e user-select evitam que segurar o
+   dedo no celular role a página ou selecione o texto. */
+.voice-controls .voice-ptt-button {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.voice-controls .voice-ptt-button.talking {
+  background: #23a55a;
+  color: #fff;
+}
+
+.voice-mode {
+  gap: 6px 14px;
+  cursor: default;
+}

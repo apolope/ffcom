@@ -10,7 +10,7 @@ const MODIFIERS = ['Ctrl', 'Alt', 'Shift', 'Super'] as const
 // o globalShortcut do Electron também enxerga. Só letras, dígitos, F1-F24,
 // espaço e teclado numérico: o suficiente para um atalho e todas com nome
 // garantido no formato de accelerator.
-function keyFromCode(code: string): string | undefined {
+export function keyFromCode(code: string): string | undefined {
   let m = /^Key([A-Z])$/.exec(code)
   if (m) return m[1]
   m = /^Digit(\d)$/.exec(code)
@@ -66,6 +66,13 @@ export function isTypingTarget(target: EventTarget | null): boolean {
     target instanceof HTMLSelectElement ||
     (target instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'submit'].includes(target.type))
   )
+}
+
+// Tecla principal de um atalho (a última parte), para reconhecer o keyup:
+// ao soltar, os modificadores podem já ter sido soltos antes.
+export function shortcutMainKey(shortcut: string): string {
+  const parts = shortcut.split('+')
+  return parts[parts.length - 1]
 }
 
 // Rótulo para a UI: no Windows/Linux a tecla Super é a do Windows.
