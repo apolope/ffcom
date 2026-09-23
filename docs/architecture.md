@@ -123,7 +123,7 @@ Outros pontos de referência no mesmo espaço: [Spacebar](https://github.com/spa
 - **NaCl `box` (X25519-XSalsa20-Poly1305) via `tweetnacl`:** escolhida — pura JS, ~7KB, auditada, décadas de uso em produção, funciona idêntico em qualquer ambiente (web, Electron, qualquer Chromium razoável), API mínima (`box`/`box.open`) suficiente para autenticação + confidencialidade de mensagem ponto-a-ponto sem reimplementar nada.
 
 **Decisão:**
-1. **Chave por dispositivo, não por conta:** cada perfil de navegador / instalação do Electron gera seu próprio par de chaves X25519 na primeira vez que a conta loga (`client/src/crypto/e2e.ts`, `nacl.box.keyPair()`), guardado só em `localStorage` (mesmo padrão de risco já aceito para o `oidc-client-ts` em `auth/userManager.ts` — não é uma novidade de superfície de ataque deste código-base) e publicado em `server-central` via `PUT /api/me/e2e-public-key` (`client/src/hooks/useE2EKeys.ts`, instanciado em `App.tsx` assim que há login, não adiado até abrir uma DM).
+1. **Chave por dispositivo, não por conta:** cada perfil de navegador / instalação do Electron gera seu próprio par de chaves X25519 na primeira vez que a conta loga (`client/src/crypto/e2e.ts`, `nacl.box.keyPair()`), guardado só em `localStorage`, separado por conta desde a "Decisão: chave de E2E e cursores de não lida por conta" (mesmo padrão de risco já aceito para o `oidc-client-ts` em `auth/userManager.ts` — não é uma novidade de superfície de ataque deste código-base) e publicado em `server-central` via `PUT /api/me/e2e-public-key` (`client/src/hooks/useE2EKeys.ts`, instanciado em `App.tsx` assim que há login, não adiado até abrir uma DM).
 2. **Diretório de chaves públicas:** `accounts.e2e_public_key` (nova coluna, `server-central/migrations/0004_dm_e2e_encryption.up.sql`), exposta em `GET /api/friends` (`e2ePublicKey`, ver `internal/httpapi/friends.go`) — só entre amigos aceitos, mesma regra de acesso que já vale para DMs.
 3. **`direct_messages.content TEXT` vira `ciphertext BYTEA` + `nonce BYTEA(24)`:** `server-central` armazena e roteia bytes opacos, não consegue mais validar "conteúdo vazio" nem ler nada — só o tamanho bruto do ciphertext (`maxDMCiphertextLength`, `internal/httpapi/dms.go`). Mensagens de teste existentes na migração foram descartadas (`TRUNCATE`, sem usuários reais fora do autor ainda).
 4. **Decifrar sempre com a chave pública ATUAL do outro lado da conversa** (resolvida via `GET /api/friends` no momento, não uma chave "pinada" por mensagem) — simplificação de v1, ver limitação de multi-dispositivo abaixo. Por isso o schema/wire não guarda a chave pública de quem enviou por mensagem, só `ciphertext`+`nonce`.
@@ -826,6 +826,29 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 **Razão:** fecha a lacuna que impedia um self-host novo de funcionar sem `psql`, reaproveitando o que já existia (stores, FKs em cascata, `Grants`, poll de estrutura) em vez de criar mecanismo novo. Manter o bit só no nível do servidor evita decidir agora a semântica de overwrite para uma permissão que, na prática, é sobre a estrutura do servidor inteiro.
 
 **Revisitar quando:** alguém precisar delegar a edição de um canal só (nesse ponto, deixar `ManageChannels` valer também em overwrite, checando o canal no `PATCH`/`DELETE`); ou a demora de até 20s para outros membros verem canal novo/apagado incomodar (nesse ponto, um feed de estrutura por servidor, o mesmo que o indicador de não lida adiou).
+
+## Decisão: chave de E2E e cursores de não lida por conta, logout sem apagar nada
+
+**Contexto:** o botão de sair não existia (`signOut` em `client/src/auth/AuthProvider.tsx` não era chamado por ninguém), e o `localStorage` do client guardava estado de conta como se fosse do navegador: o par de chaves de E2E (`ffcom.e2e.keypair.v1`), a flag "chave já publicada" (`ffcom.e2e.publishedKey.v1`) e os cursores de não lida (`ffcom:lastRead:*`). Quem logasse depois de outra pessoa no mesmo navegador herdava a chave privada dela e, como a flag já batia, nunca publicava a própria chave em `server-central`; DM para essa conta cifrava para a chave errada. Isso bloqueava os testes com duas contas (`teste-ffcom01`/`teste-ffcom02`).
+
+**Alternativas consideradas:**
+- **Limpar tudo no logout:** mais simples, mas a pessoa perde o histórico de DM deste dispositivo a cada logout (a chave privada só existe aqui, ver "Decisão: criptografia ponta-a-ponta em DMs"). Também não resolve o caso de fechar a aba sem sair e outra pessoa logar depois.
+- **Chavear pelo `sub` do OIDC, logout sem apagar nada:** escolhida.
+
+**Decisão:**
+1. Par de chaves em `ffcom.e2e.keypair.v2:<sub>`, flag em `ffcom.e2e.publishedKey.v2:<sub>`, cursores em `ffcom:lastRead:v2:<sub>:<tipo>:<id>` (`client/src/crypto/e2e.ts`, `hooks/useE2EKeys.ts`, `lib/unread.ts`). O `sub` vem de `user.profile.sub` do `oidc-client-ts`, o mesmo valor que `server-central` guarda em `accounts.oidc_subject`.
+2. **Migração do par antigo:** ele só é adotado por uma conta se a chave pública dele for igual à que a conta já publicou. Para isso `GET /api/me` de `server-central` passou a devolver `e2ePublicKey`, **sempre presente** (`null` sem chave), para que "campo ausente" signifique "servidor anterior a esta mudança". Nesse caso o client não decide nada e tenta de novo depois, em vez de gerar um par novo e deixar o antigo ilegível para o dono. Se não bater, o par antigo fica onde está (a conta dona pode adotá-lo depois) e a conta atual ganha um par novo.
+3. Cursores de não lida antigos não são migrados: sem dono conhecido, e um cursor ausente já é tratado como "tudo lido" (`hooks/useUnread.ts`). As chaves `ffcom:lastRead:*` antigas ficam órfãs no `localStorage`, sem efeito.
+4. Enquanto o par não está resolvido (só acontece durante a migração, que espera `GET /api/me`), a DM mostra "Preparando a chave de criptografia…" em vez de montar `DirectMessageView` sem chave.
+5. Botão de sair no rodapé do `ServerRail`, logo abaixo do avatar; chama `userManager.signoutRedirect()` (encerra também a sessão no Authentik, senão o próximo login entraria direto na mesma conta).
+
+**Ordem de deploy:** `central-v*` antes de `client-v*`. Na ordem inversa nada se perde (o client só adia a migração), mas quem tiver o par antigo fica sem DM até o `server-central` novo subir.
+
+**Limitação, para não vender além do que entrega:** isso separa contas, não protege uma da outra. Qualquer código rodando na origem do app lê o `localStorage` inteiro, inclusive o par de outra conta que usou o mesmo navegador. É o mesmo nível de risco já aceito para a sessão OIDC.
+
+**Verificado nesta sessão (2026-09-22):** 6 cenários da migração rodados em Node contra o hook real (React e `fetch` simulados): dono adota o par antigo sem republicar; segunda conta gera e publica o próprio; conta volta com o mesmo par; conta alheia não herda e preserva o par antigo; servidor sem o campo adia; navegador limpo cria e publica. `npm run lint` sem avisos novos, `npm run build`, `go build`/`go test` de `server-central`. Não testado num browser real com Authentik (logout e troca de conta ficam para o teste de DM com duas contas).
+
+**Revisitar quando:** houver "vincular dispositivo" / multi-dispositivo (ver o "Revisitar quando" da decisão de E2E), porque aí o par deixa de ser só local.
 
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 

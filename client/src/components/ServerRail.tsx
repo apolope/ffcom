@@ -12,6 +12,7 @@ interface ServerRailProps {
   onSelectFriends: () => void
   onAddServer: () => void
   onOpenMyAvatar: () => void
+  onSignOut: () => void
 }
 
 export function ServerRail({
@@ -23,6 +24,7 @@ export function ServerRail({
   onSelectFriends,
   onAddServer,
   onOpenMyAvatar,
+  onSignOut,
 }: ServerRailProps) {
   return (
     <nav className="server-rail" aria-label="Servidores">
@@ -66,6 +68,11 @@ export function ServerRail({
           displayName={myProfile?.displayName ?? myProfile?.oidcSubject ?? '?'}
           size={44}
         />
+      </button>
+      <button type="button" className="sign-out-button" title="Sair" aria-label="Sair" onClick={onSignOut}>
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+          <path d="M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5v-2H5V5h5V3zm6.6 4.6-1.4 1.4 2 2H9v2h8.2l-2 2 1.4 1.4L21 12l-4.4-4.4z" />
+        </svg>
       </button>
     </nav>
   )

@@ -38,10 +38,13 @@ import type { Category } from './types'
 import './App.css'
 
 function App() {
-  const { status, accessToken } = useAuth()
+  const { status, user, accessToken, signOut } = useAuth()
+  // `sub` do OIDC: chave de E2E e cursores de não lida em localStorage são
+  // por conta, não por navegador (ver crypto/e2e.ts, lib/unread.ts).
+  const accountSub = user?.profile.sub ?? ''
   const { servers, addServer } = useKnownServers(accessToken ?? '')
   const { friends, createInvite, redeemInvite, socket: presenceSocket } = useFriends(accessToken ?? '')
-  const { keyPair: myE2EKeyPair } = useE2EKeys(accessToken ?? '')
+  const { keyPair: myE2EKeyPair } = useE2EKeys(accessToken ?? '', accountSub)
   const { profile: myProfile, uploadAvatar, removeAvatar } = useMyProfile(accessToken ?? '')
   const [selectedServerId, setSelectedServerId] = useState<string>()
   const [showFriends, setShowFriends] = useState(false)
@@ -114,17 +117,18 @@ function App() {
   // useUnread abaixo decide se o canal selecionado conta como ativo agora.
   useEffect(() => {
     if (!selectedChannelId) return
-    markRead('channel', selectedChannelId)
-    return () => markRead('channel', selectedChannelId)
-  }, [selectedChannelId])
+    markRead(accountSub, 'channel', selectedChannelId)
+    return () => markRead(accountSub, 'channel', selectedChannelId)
+  }, [accountSub, selectedChannelId])
 
   useEffect(() => {
     if (!selectedFriendId) return
-    markRead('dm', selectedFriendId)
-    return () => markRead('dm', selectedFriendId)
-  }, [selectedFriendId])
+    markRead(accountSub, 'dm', selectedFriendId)
+    return () => markRead(accountSub, 'dm', selectedFriendId)
+  }, [accountSub, selectedFriendId])
 
   const unreadChannelIds = useUnread(
+    accountSub,
     'channel',
     useMemo(
       () =>
@@ -137,6 +141,7 @@ function App() {
   )
 
   const unreadFriendIds = useUnread(
+    accountSub,
     'dm',
     useMemo(() => friends.map((f) => ({ id: f.accountId, lastMessageAt: f.lastMessageAt })), [friends]),
     showFriends ? selectedFriendId : undefined,
@@ -164,6 +169,7 @@ function App() {
         onSelectFriends={() => setShowFriends(true)}
         onAddServer={() => setShowAddServer(true)}
         onOpenMyAvatar={() => setShowMyAvatar(true)}
+        onSignOut={signOut}
       />
       {showFriends ? (
         <>
@@ -174,7 +180,11 @@ function App() {
             onSelectFriend={setSelectedFriendId}
             onAddFriend={() => setShowAddFriend(true)}
           />
-          {selectedFriend ? (
+          {selectedFriend && !myE2EKeyPair ? (
+            <div className="empty-state">
+              <p>Preparando a chave de criptografia deste dispositivo…</p>
+            </div>
+          ) : selectedFriend && myE2EKeyPair ? (
             <DirectMessageView
               key={selectedFriend.accountId}
               peer={selectedFriend}

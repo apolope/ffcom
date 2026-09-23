@@ -16,16 +16,22 @@ interface UnreadEntry {
 // id -- rollout desta feature, ou servidor/amigo recém-adicionado) é
 // semeada como já lida em vez de contar como atrasada, para não acender uma
 // bolinha em tudo que já existia antes desta feature existir.
-export function useUnread(kind: UnreadKind, entries: UnreadEntry[], activeId: string | undefined): Set<string> {
+export function useUnread(
+  accountSub: string,
+  kind: UnreadKind,
+  entries: UnreadEntry[],
+  activeId: string | undefined,
+): Set<string> {
   const signature = entries.map((e) => `${e.id}:${e.lastMessageAt ?? ''}`).join('|')
 
   return useMemo(() => {
     const unread = new Set<string>()
+    if (!accountSub) return unread
     for (const entry of entries) {
       if (!entry.lastMessageAt || entry.id === activeId) continue
-      const lastRead = getLastRead(kind, entry.id)
+      const lastRead = getLastRead(accountSub, kind, entry.id)
       if (!lastRead) {
-        markRead(kind, entry.id, entry.lastMessageAt)
+        markRead(accountSub, kind, entry.id, entry.lastMessageAt)
         continue
       }
       if (new Date(entry.lastMessageAt).getTime() > new Date(lastRead).getTime()) {
@@ -35,5 +41,5 @@ export function useUnread(kind: UnreadKind, entries: UnreadEntry[], activeId: st
     return unread
     // `entries` é recriado a cada render (categories.flatMap/friends.map em
     // App.tsx); usa `signature` como dependência estável em vez do array.
-  }, [kind, activeId, signature])
+  }, [accountSub, kind, activeId, signature])
 }

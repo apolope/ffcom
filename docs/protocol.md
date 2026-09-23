@@ -38,7 +38,7 @@ Base URL: `VITE_SERVER_CENTRAL_URL` no client (`http://localhost:8081` em dev).
 | Método | Rota | Auth | Request | Response | Erros |
 |---|---|---|---|---|---|
 | GET | `/healthz` | não | — | `{status, version}` | — |
-| GET | `/api/me` | Bearer | — | `{accountId, oidcSubject, createdAt, displayName?, avatarUrl?}` | — |
+| GET | `/api/me` | Bearer | — | `{accountId, oidcSubject, createdAt, e2ePublicKey, displayName?, avatarUrl?}` — `e2ePublicKey` é base64 ou `null` (nunca omitido) | — |
 | PUT | `/api/me/e2e-public-key` | Bearer | `{publicKey}` (base64, 32 bytes) | `204` | `400` tamanho inválido |
 | GET | `/api/servers` | Bearer | — | `{servers: [{id, address, name, iconUrl?, addedAt}]}` | — |
 | POST | `/api/servers` | Bearer | `{address, name, iconUrl?}` | `201` + `KnownServer` | `400` address/name vazios |

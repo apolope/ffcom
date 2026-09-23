@@ -72,3 +72,21 @@
 .account-button:hover {
   opacity: 0.85;
 }
+
+.sign-out-button {
+  width: 44px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sign-out-button:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-h);
+}

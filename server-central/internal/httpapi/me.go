@@ -43,9 +43,10 @@ func buildMeResponse(ctx context.Context, profiles *store.ProfileStore, account 
 	}
 
 	resp := meResponse{
-		AccountID:   account.ID,
-		OIDCSubject: account.OIDCSubject,
-		CreatedAt:   account.CreatedAt,
+		AccountID:    account.ID,
+		OIDCSubject:  account.OIDCSubject,
+		CreatedAt:    account.CreatedAt,
+		E2EPublicKey: account.E2EPublicKey,
 	}
 	if err == nil {
 		resp.DisplayName = &profile.DisplayName
@@ -58,6 +59,12 @@ type meResponse struct {
 	AccountID   string    `json:"accountId"`
 	OIDCSubject string    `json:"oidcSubject"`
 	CreatedAt   time.Time `json:"createdAt"`
-	DisplayName *string   `json:"displayName,omitempty"`
-	AvatarURL   *string   `json:"avatarUrl,omitempty"`
+	// Sem omitempty de propósito: null (conta sem chave publicada) precisa
+	// ser distinguível de campo ausente (server-central anterior a este
+	// campo) -- o client só adota a chave de E2E antiga, de antes da chave
+	// por conta, quando consegue comparar com esta (ver
+	// client/src/hooks/useE2EKeys.ts).
+	E2EPublicKey []byte  `json:"e2ePublicKey"`
+	DisplayName  *string `json:"displayName,omitempty"`
+	AvatarURL    *string `json:"avatarUrl,omitempty"`
 }

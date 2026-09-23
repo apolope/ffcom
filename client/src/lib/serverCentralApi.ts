@@ -34,6 +34,10 @@ export interface MyProfile {
   accountId: string
   oidcSubject: string
   createdAt: string
+  // Chave pública de E2E publicada pela conta (base64), null se nenhuma.
+  // Ausente só em server-central anterior ao campo -- ver
+  // hooks/useE2EKeys.ts, que depende dessa diferença.
+  e2ePublicKey?: string | null
   displayName?: string
   avatarUrl?: string
 }
