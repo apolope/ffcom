@@ -158,16 +158,21 @@
   position: relative;
 }
 
-.channel-edit-button {
+.channel-row-actions {
   position: absolute;
   right: 4px;
   top: 50%;
   transform: translateY(-50%);
+  display: flex;
+  gap: 2px;
+}
+
+.channel-edit-button {
   opacity: 0;
 }
 
 .channel-row:hover .channel-edit-button,
-.channel-edit-button:focus-visible {
+.channel-row-actions:focus-within .channel-edit-button {
   opacity: 1;
 }
 

@@ -892,6 +892,31 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** o atraso incomodar (nesse ponto, webhook do LiveKit empurrando para um feed de estrutura por servidor, o mesmo que o indicador de não lida adiou), ou quando a lista precisar de ícone de mudo/câmera.
 
+## Decisão: UI de overwrite de canal por role — diálogo próprio, "herdar / permitir / negar" só nos bits do tipo de canal
+
+**Contexto:** a API de overwrite (`GET/PUT/DELETE /api/channels/{id}/overwrites[/{roleId}]`, ver "Sistema de permissões/roles") existia desde o início sem tela; canal privado só dava para fazer via `curl`. Ela exige `ManageRoles`, não `ManageChannels`.
+
+**Alternativas consideradas:**
+- **Seção dentro do `ChannelDialog` (editar canal):** o diálogo só abre para quem tem `ManageChannels`, então alguém com `ManageRoles` sem `ManageChannels` (que é justamente quem a API autoriza) ficaria sem acesso. Descartada.
+- **Aba de canais no `ManageRolesDialog`:** organiza por role em vez de por canal, e "tornar este canal privado" é pensado a partir do canal. Descartada.
+- **Diálogo próprio (`components/ChannelPermissionsDialog.tsx`), aberto por um 🔒 na linha do canal, visível com `ManageRoles` ou dono:** escolhida. Espelha a separação de bits que o servidor já faz.
+
+**Decisão:**
+1. **Tabela role × bit** com um `select` de três estados por célula. @everyone vem primeiro (é quem torna um canal privado), depois as roles pela posição.
+2. **Só os bits que mudam algo no tipo de canal:** texto e fórum mostram "Ver canal" e "Enviar mensagens"/"Criar posts"; voz mostra "Ver canal" e "Entrar na voz". Outros bits já gravados no overwrite (o servidor aceita qualquer um) são preservados ao salvar, não zerados.
+3. **"Permitir" desligado para bit que quem edita não tem**, espelhando `permissions.Grants` para não levar um `403` que dava para prever; Administrador e dono podem tudo.
+4. **Salvar manda só as roles alteradas:** tudo "herdar" vira `DELETE` (se existia overwrite), o resto vira `PUT` com o par allow/deny inteiro. Depois disso, a estrutura recarrega na hora (`refreshStructure`).
+5. **Aviso no próprio diálogo** para quem não é Administrador: negar "Ver canal" a @everyone também esconde o canal de quem está editando, se só @everyone o libera.
+
+**Escopo aceito:**
+- **Salvar não é atômico:** são N chamadas em sequência. Se uma falha no meio, as anteriores ficam gravadas; o erro aparece e reabrir o diálogo mostra o estado real.
+- **Bit preservado pode barrar o salvar:** se a role já tinha `allow` de um bit que quem edita não tem (gravado por um Administrador), o `PUT` daquela role leva `403` de `Grants`. Raro; o erro do servidor aparece no diálogo.
+- **Sem overwrite por categoria** (o Discord sincroniza canal com categoria): não existe no modelo de dados.
+
+**Verificado (2026-09-22):** `tsc -b`, `npm run lint` sem aviso novo, `npm run build`, e o diálogo montado com React num DOM de teste (`happy-dom`, instalado fora do repo): estado inicial lido dos overwrites, ordem das roles, "Permitir" desligado sem o bit, "Salvar" desligado sem mudança e, ao salvar, só as chamadas esperadas (`PUT` preservando o bit fora da UI, `DELETE` da role que voltou a herdar). Não verificado num browser com login OIDC contra o servidor real.
+
+**Revisitar quando:** aparecer pedido de overwrite por membro individual ou por categoria, ou de salvar tudo numa transação só (nesse ponto, um `PUT /api/channels/{id}/overwrites` com a lista inteira).
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ServerRail } from './components/ServerRail'
 import { ChannelSidebar } from './components/ChannelSidebar'
 import { MainPanel } from './components/MainPanel'
@@ -13,6 +13,7 @@ import { DirectMessageView } from './components/DirectMessageView'
 import { NicknameDialog } from './components/NicknameDialog'
 import { AvatarDialog } from './components/AvatarDialog'
 import { CategoryDialog, ChannelDialog } from './components/StructureDialogs'
+import { ChannelPermissionsDialog } from './components/ChannelPermissionsDialog'
 import { useAuth } from './auth/AuthProvider'
 import { useServerStructure } from './hooks/useServerStructure'
 import { useKnownServers } from './hooks/useKnownServers'
@@ -30,6 +31,9 @@ import {
   createServerInvite,
   deleteCategory,
   deleteChannel,
+  deleteChannelOverwrite,
+  fetchChannelOverwrites,
+  setChannelOverwrite,
   updateCategory,
   updateChannel,
 } from './lib/serverChannelApi'
@@ -59,6 +63,7 @@ function App() {
   // Diálogos de estrutura: undefined = fechado; id ausente = criar.
   const [categoryDialog, setCategoryDialog] = useState<{ id?: string }>()
   const [channelDialog, setChannelDialog] = useState<{ id?: string; categoryId?: string }>()
+  const [permissionsChannelId, setPermissionsChannelId] = useState<string>()
 
   const selectedFriend = friends.find((f) => f.accountId === selectedFriendId)
 
@@ -93,6 +98,13 @@ function App() {
 
   const { categories, refresh: refreshStructure } = useServerStructure(server?.baseUrl ?? '', accessToken ?? '')
   const realCategories = useMemo(() => categories.filter((c) => c.id !== UNCATEGORIZED_ID), [categories])
+  const serverBaseUrl = server?.baseUrl
+  // Estável por canal: ChannelPermissionsDialog recarrega quando muda.
+  const loadChannelOverwrites = useCallback(
+    () => fetchChannelOverwrites(serverBaseUrl ?? '', accessToken ?? '', permissionsChannelId ?? ''),
+    [serverBaseUrl, accessToken, permissionsChannelId],
+  )
+  const permissionsChannel = findChannelForDialog(categories, permissionsChannelId)
   const hasVoiceChannel = categories.some((category) => category.channels.some((c) => c.type === 'voice'))
   const voiceParticipants = useVoiceParticipants(server?.baseUrl ?? '', accessToken ?? '', hasVoiceChannel)
 
@@ -220,6 +232,8 @@ function App() {
             onManageRoles={() => setShowManageRoles(true)}
             onEditNickname={() => setShowEditNickname(true)}
             canManageChannels={canManageChannels}
+            canManageRoles={canManageRoles}
+            onEditChannelPermissions={setPermissionsChannelId}
             onCreateCategory={() => setCategoryDialog({})}
             onEditCategory={(id) => setCategoryDialog({ id })}
             onCreateChannel={(categoryId) => setChannelDialog({ categoryId })}
@@ -283,6 +297,22 @@ function App() {
             refreshStructure()
           }}
           onClose={() => setCategoryDialog(undefined)}
+        />
+      )}
+      {permissionsChannel && server && (
+        <ChannelPermissionsDialog
+          key={permissionsChannel.id}
+          channel={permissionsChannel}
+          roles={roles}
+          myPermissions={me?.permissions ?? 0}
+          isOwner={!!me?.isOwner}
+          onLoad={loadChannelOverwrites}
+          onSet={async (roleId, overwrite) => {
+            await setChannelOverwrite(server.baseUrl, accessToken ?? '', permissionsChannel.id, roleId, overwrite)
+          }}
+          onDelete={(roleId) => deleteChannelOverwrite(server.baseUrl, accessToken ?? '', permissionsChannel.id, roleId)}
+          onSaved={refreshStructure}
+          onClose={() => setPermissionsChannelId(undefined)}
         />
       )}
       {channelDialog && server && (

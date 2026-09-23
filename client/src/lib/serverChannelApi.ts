@@ -285,6 +285,46 @@ export function banMember(
   return postJsonOrThrow(baseUrl, `/api/members/${memberId}/ban`, accessToken, 'POST', reason ? { reason } : {})
 }
 
+export interface ChannelOverwrite {
+  roleId: string
+  allow: number
+  deny: number
+}
+
+// Overwrites de canal por role (requer ManageRoles) — ver
+// docs/architecture.md, "Sistema de permissões/roles por servidor e por
+// canal". PUT substitui o par allow/deny inteiro da role naquele canal.
+export async function fetchChannelOverwrites(
+  baseUrl: string,
+  accessToken: string,
+  channelId: string,
+): Promise<ChannelOverwrite[]> {
+  const res = await fetch(`${baseUrl}/api/channels/${channelId}/overwrites`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  const body = await parseJsonOrThrow<{ overwrites: ChannelOverwrite[] }>(res)
+  return body.overwrites
+}
+
+export function setChannelOverwrite(
+  baseUrl: string,
+  accessToken: string,
+  channelId: string,
+  roleId: string,
+  overwrite: { allow: number; deny: number },
+): Promise<ChannelOverwrite> {
+  return postJsonOrThrow(baseUrl, `/api/channels/${channelId}/overwrites/${roleId}`, accessToken, 'PUT', overwrite)
+}
+
+export function deleteChannelOverwrite(
+  baseUrl: string,
+  accessToken: string,
+  channelId: string,
+  roleId: string,
+): Promise<void> {
+  return postJsonOrThrow(baseUrl, `/api/channels/${channelId}/overwrites/${roleId}`, accessToken, 'DELETE')
+}
+
 export interface RemoteBan {
   oidcSubject: string
   bannedByMemberId?: string

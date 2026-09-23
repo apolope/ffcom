@@ -29,6 +29,10 @@ interface ChannelSidebarProps {
   // Administração da estrutura, só com ManageChannels ou dono (ver
   // components/StructureDialogs.tsx). categoryId ausente = sem categoria.
   canManageChannels: boolean
+  // Overwrite de canal por role, só com ManageRoles ou dono (ver
+  // components/ChannelPermissionsDialog.tsx).
+  canManageRoles: boolean
+  onEditChannelPermissions: (channelId: string) => void
   onCreateCategory: () => void
   onEditCategory: (categoryId: string) => void
   onCreateChannel: (categoryId: string | undefined) => void
@@ -49,6 +53,8 @@ export function ChannelSidebar({
   onManageRoles,
   onEditNickname,
   canManageChannels,
+  canManageRoles,
+  onEditChannelPermissions,
   onCreateCategory,
   onEditCategory,
   onCreateChannel,
@@ -137,16 +143,31 @@ export function ChannelSidebar({
                         <span className="unread-dot" aria-label="mensagens não lidas" />
                       )}
                     </button>
-                    {canManageChannels && (
-                      <button
-                        type="button"
-                        className="channel-edit-button"
-                        title="Editar canal"
-                        aria-label={`Editar canal ${channel.name}`}
-                        onClick={() => onEditChannel(channel.id)}
-                      >
-                        ✎
-                      </button>
+                    {(canManageRoles || canManageChannels) && (
+                      <span className="channel-row-actions">
+                        {canManageRoles && (
+                          <button
+                            type="button"
+                            className="channel-edit-button"
+                            title="Permissões do canal"
+                            aria-label={`Permissões do canal ${channel.name}`}
+                            onClick={() => onEditChannelPermissions(channel.id)}
+                          >
+                            🔒
+                          </button>
+                        )}
+                        {canManageChannels && (
+                          <button
+                            type="button"
+                            className="channel-edit-button"
+                            title="Editar canal"
+                            aria-label={`Editar canal ${channel.name}`}
+                            onClick={() => onEditChannel(channel.id)}
+                          >
+                            ✎
+                          </button>
+                        )}
+                      </span>
                     )}
                   </li>
                   {channel.type === 'voice' && voiceParticipants[channel.id] && (
