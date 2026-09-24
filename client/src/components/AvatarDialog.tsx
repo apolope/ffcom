@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { AvatarCropper } from './AvatarCropper'
 import { UserAvatar } from './UserAvatar'
 import type { MyProfile } from '../lib/serverCentralApi'
 import './Dialog.css'
@@ -10,15 +11,20 @@ interface AvatarDialogProps {
   onClose: () => void
 }
 
-const MAX_AVATAR_MB = 2
+// A imagem escolhida passa pelo recorte (AvatarCropper) e sai com no máximo
+// 512 px, bem abaixo do AVATAR_MAX_MB do servidor; este limite só evita abrir
+// arquivos enormes no navegador.
+const MAX_SOURCE_MB = 20
 
 // Upload/remoção do avatar de conta (server-central, ver
-// docs/architecture.md, "Decisão: upload de avatar de conta"). Limite de
-// tamanho aqui é só uma checagem antecipada pra UX -- o servidor reforça o
-// próprio limite (AVATAR_MAX_MB) e não confia neste valor.
+// docs/architecture.md, "Decisão: upload de avatar de conta" e "Decisão:
+// recorte do avatar no client"). O servidor reforça o próprio limite
+// (AVATAR_MAX_MB) e não confia no client.
 export function AvatarDialog({ profile, onUpload, onRemove, onClose }: AvatarDialogProps) {
   const [error, setError] = useState<string>()
   const [busy, setBusy] = useState(false)
+  // Imagem escolhida, esperando o recorte.
+  const [cropFile, setCropFile] = useState<File>()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const displayName = profile?.displayName ?? profile?.oidcSubject ?? ''
 
@@ -27,15 +33,22 @@ export function AvatarDialog({ profile, onUpload, onRemove, onClose }: AvatarDia
     e.target.value = ''
     if (!file) return
 
-    if (file.size > MAX_AVATAR_MB * 1024 * 1024) {
-      setError(`imagem maior que o limite de ${MAX_AVATAR_MB}MB`)
+    if (file.size > MAX_SOURCE_MB * 1024 * 1024) {
+      setError(`imagem maior que o limite de ${MAX_SOURCE_MB}MB`)
       return
     }
 
     setError(undefined)
+    setCropFile(file)
+  }
+
+  async function handleCropped(blob: Blob) {
+    setError(undefined)
     setBusy(true)
     try {
-      await onUpload(file)
+      const extension = blob.type === 'image/webp' ? 'webp' : 'png'
+      await onUpload(new File([blob], `avatar.${extension}`, { type: blob.type }))
+      setCropFile(undefined)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'falha ao enviar avatar')
     } finally {
@@ -53,6 +66,26 @@ export function AvatarDialog({ profile, onUpload, onRemove, onClose }: AvatarDia
     } finally {
       setBusy(false)
     }
+  }
+
+  if (cropFile) {
+    return (
+      <div className="dialog-overlay" onClick={busy ? undefined : () => setCropFile(undefined)}>
+        <div className="dialog-card avatar-dialog-cropping" onClick={(e) => e.stopPropagation()}>
+          <h2>Recortar avatar</h2>
+          <AvatarCropper
+            file={cropFile}
+            busy={busy}
+            onCancel={() => setCropFile(undefined)}
+            onConfirm={(blob) => void handleCropped(blob)}
+          />
+          {error && <p className="dialog-error">{error}</p>}
+          {cropFile.type === 'image/gif' && (
+            <p className="hint">GIF animado vira uma imagem parada no recorte.</p>
+          )}
+        </div>
+      </div>
+    )
   }
 
   return (
