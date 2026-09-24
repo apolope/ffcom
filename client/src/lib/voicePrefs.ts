@@ -6,7 +6,8 @@ import { isShortcutFormat } from './shortcut'
 const PREFIX = 'ffcom:voicePrefs:v1:'
 
 export interface VoicePrefs {
-  // Aviso sonoro ao mutar/desmutar (lib/micToggleSound.ts).
+  // Aviso sonoro ao mutar/desmutar e, no push-to-talk, ao apertar e soltar
+  // (lib/micToggleSound.ts).
   micToggleSound: boolean
   // Atalho de mutar/desmutar no formato de lib/shortcut.ts; ausente = sem
   // atalho (padrão, para não roubar nenhuma combinação sem a pessoa pedir).

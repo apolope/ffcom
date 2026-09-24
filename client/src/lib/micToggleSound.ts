@@ -4,7 +4,8 @@
 // publicada no LiveKit, então ninguém na sala recebe o som pela rede.
 //
 // Dois bipes curtos: descendente ao mutar, ascendente ao desmutar, para dar
-// para distinguir sem olhar a tela.
+// para distinguir sem olhar a tela. O push-to-talk usa uma nota só, mais
+// curta e baixa, porque toca a cada fala.
 
 const HIGH_HZ = 660
 const LOW_HZ = 440
@@ -35,18 +36,18 @@ export function primeMicToggleSound(): void {
   }
 }
 
-function playNote(ctx: AudioContext, frequency: number, start: number): void {
+function playNote(ctx: AudioContext, frequency: number, start: number, seconds = NOTE_SECONDS, peak = PEAK_GAIN): void {
   const osc = ctx.createOscillator()
   const gain = ctx.createGain()
   osc.type = 'sine'
   osc.frequency.value = frequency
   // Ataque e soltura curtos para não estalar.
   gain.gain.setValueAtTime(0.0001, start)
-  gain.gain.exponentialRampToValueAtTime(PEAK_GAIN, start + 0.01)
-  gain.gain.exponentialRampToValueAtTime(0.0001, start + NOTE_SECONDS)
+  gain.gain.exponentialRampToValueAtTime(peak, start + 0.01)
+  gain.gain.exponentialRampToValueAtTime(0.0001, start + seconds)
   osc.connect(gain).connect(ctx.destination)
   osc.start(start)
-  osc.stop(start + NOTE_SECONDS + 0.01)
+  osc.stop(start + seconds + 0.01)
 }
 
 export function playMicToggleSound(micEnabled: boolean): void {
@@ -56,4 +57,14 @@ export function playMicToggleSound(micEnabled: boolean): void {
   const start = ctx.currentTime + 0.01
   playNote(ctx, first, start)
   playNote(ctx, second, start + NOTE_SECONDS + GAP_SECONDS)
+}
+
+// Push-to-talk: aguda ao apertar, grave ao soltar. Chamar ao apertar de
+// dentro do handler da tecla ou do toque, que é o gesto que destrava o
+// AudioContext.
+export function playPushToTalkSound(talking: boolean): void {
+  const ctx = getContext()
+  if (!ctx) return
+  if (ctx.state === 'suspended') ctx.resume().catch(() => {})
+  playNote(ctx, talking ? HIGH_HZ : LOW_HZ, ctx.currentTime + 0.01, 0.05, 0.08)
 }

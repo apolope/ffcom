@@ -251,6 +251,14 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
               Supressão de ruído reforçada
             </label>
             {noiseSuppressionError && <span className="voice-shortcut-hint">{noiseSuppressionError}</span>}
+            <label className="voice-pref">
+              <input
+                type="checkbox"
+                checked={voicePrefs.micToggleSound}
+                onChange={() => updateVoicePrefs({ micToggleSound: !voicePrefs.micToggleSound })}
+              />
+              {voicePrefs.pushToTalk ? 'Som ao apertar e soltar' : 'Som ao mutar'}
+            </label>
             {voicePrefs.pushToTalk ? (
               <>
                 <MuteShortcutSetting
@@ -270,14 +278,6 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
               </>
             ) : (
               <>
-                <label className="voice-pref">
-                  <input
-                    type="checkbox"
-                    checked={voicePrefs.micToggleSound}
-                    onChange={() => updateVoicePrefs({ micToggleSound: !voicePrefs.micToggleSound })}
-                  />
-                  Som ao mutar
-                </label>
                 <MuteShortcutSetting
                   shortcut={voicePrefs.muteShortcut}
                   onChange={setMuteShortcut}

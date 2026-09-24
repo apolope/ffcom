@@ -13,7 +13,7 @@ import {
   type RemoteParticipant,
   type TrackPublication,
 } from 'livekit-client'
-import { playMicToggleSound, primeMicToggleSound } from '../lib/micToggleSound'
+import { playMicToggleSound, playPushToTalkSound, primeMicToggleSound } from '../lib/micToggleSound'
 import { participantAudioOf, type ParticipantAudioMap } from '../lib/participantAudio'
 import { fetchVoiceToken } from '../lib/serverChannelApi'
 
@@ -51,7 +51,8 @@ interface UseVoiceChannelResult {
   join: () => void
   leave: () => void
   toggleMic: () => void
-  // Push-to-talk: abre (true) ou fecha (false) o microfone, sem aviso sonoro.
+  // Push-to-talk: abre (true) ou fecha (false) o microfone, com o bipe do
+  // push-to-talk se o som estiver ligado.
   setTalking: (talking: boolean) => void
   toggleCamera: () => void
   toggleScreenShare: () => void
@@ -121,7 +122,8 @@ export function useVoiceChannel(
   baseUrl: string,
   channelId: string,
   accessToken: string,
-  // Aviso sonoro ao mutar/desmutar (lib/voicePrefs.ts). Lido por ref para
+  // Aviso sonoro ao mutar/desmutar e ao apertar/soltar no push-to-talk
+  // (lib/voicePrefs.ts). Lido por ref para
   // mudar a preferência sem recriar os callbacks.
   micToggleSound = true,
   // Volume por pessoa e "silenciar para mim" (lib/participantAudio.ts),
@@ -553,6 +555,18 @@ export function useVoiceChannel(
     [refreshParticipants],
   )
 
+  // O bipe toca no aperto e no soltar, sem esperar a troca resolver: no
+  // push-to-talk ele é o retorno da tecla, e abrir o microfone já publicado
+  // é só desmutar. Trocar de modo (efeito abaixo) chama setMicDesired direto
+  // e não toca nada.
+  const setTalking = useCallback(
+    (talking: boolean) => {
+      if (micToggleSoundRef.current) playPushToTalkSound(talking)
+      setMicDesired(talking)
+    },
+    [setMicDesired],
+  )
+
   // Trocar de modo conectado: "apertar para falar" começa fechado e "sempre
   // aberto" abre o microfone.
   useEffect(() => {
@@ -638,7 +652,7 @@ export function useVoiceChannel(
     join,
     leave,
     toggleMic,
-    setTalking: setMicDesired,
+    setTalking,
     toggleCamera,
     toggleScreenShare,
   }
