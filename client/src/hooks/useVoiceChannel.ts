@@ -6,6 +6,7 @@ import {
   Track,
   createLocalAudioTrack,
   type AudioCaptureOptions,
+  type LocalAudioTrack,
   type LocalParticipant,
   type Participant,
   type RemoteAudioTrack,
@@ -41,6 +42,10 @@ interface UseVoiceChannelResult {
   // O navegador bloqueou a reprodução do áudio da sala (autoplay, comum no
   // Chrome do Android): nada toca até a pessoa tocar em "Ativar som".
   audioPlaybackBlocked: boolean
+  // A supressão reforçada foi pedida mas não pôde ser ligada (sem
+  // AudioWorklet, WASM não baixou, áudio suspenso): o microfone voltou para a
+  // supressão do navegador.
+  noiseSuppressionError: string | undefined
   startAudio: () => void
   videoContainerRef: (node: HTMLDivElement | null) => void
   join: () => void
@@ -83,6 +88,31 @@ const SCREEN_SHARE_AUDIO_CONSTRAINTS: AudioCaptureOptions = {
   autoGainControl: false,
 }
 
+// Captura com a supressão reforçada (RNNoise) ligada: sem o supressor do
+// navegador nem o voiceIsolation (outro supressor), para não empilhar dois;
+// cancelamento de eco e ganho automático continuam. Ver docs/architecture.md,
+// "Decisão: supressão de ruído no microfone".
+const ENHANCED_CAPTURE_OPTIONS: AudioCaptureOptions = {
+  echoCancellation: true,
+  noiseSuppression: false,
+  autoGainControl: true,
+  voiceIsolation: false,
+}
+
+// Os padrões do livekit-client 2.22 (audioDefaults), explícitos para voltar
+// a eles com restartTrack ao desligar a reforçada no meio da chamada.
+const BROWSER_CAPTURE_OPTIONS: AudioCaptureOptions = {
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+  voiceIsolation: true,
+}
+
+// Onde está a track do microfone: capturada com a supressão do navegador,
+// capturada sem ela e ainda sem o RNNoise (passo intermediário), ou com o
+// RNNoise aplicado.
+type NoiseMode = 'browser' | 'raw' | 'enhanced'
+
 // Sem escolha nenhuma: constante do módulo para o efeito que reaplica os
 // volumes não rodar a cada render.
 const NO_PARTICIPANT_AUDIO: ParticipantAudioMap = {}
@@ -101,6 +131,9 @@ export function useVoiceChannel(
   // quem abre e fecha é setTalking. Trocar o modo conectado fecha ou abre o
   // microfone. Ver docs/architecture.md, "Decisão: push-to-talk".
   pushToTalk = false,
+  // "Supressão de ruído reforçada" (lib/rnnoiseProcessor.ts). Trocar
+  // conectado recaptura o microfone com as novas constraints.
+  enhancedNoiseSuppression = false,
 ): UseVoiceChannelResult {
   const roomRef = useRef<Room | undefined>(undefined)
   const micToggleSoundRef = useRef(micToggleSound)
@@ -113,6 +146,11 @@ export function useVoiceChannel(
   // andamento (ver setMicDesired).
   const micDesiredRef = useRef(false)
   const micBusyRoomRef = useRef<Room | undefined>(undefined)
+  const enhancedNoiseRef = useRef(enhancedNoiseSuppression)
+  // Modo aplicado à track do microfone da sala atual (ausente até o
+  // microfone ser publicado) e a fila das trocas (ver syncNoiseSuppression).
+  const noiseModeRef = useRef<{ room: Room; mode: NoiseMode } | undefined>(undefined)
+  const noiseQueueRef = useRef<Promise<void>>(Promise.resolve())
   const audioElsRef = useRef<Set<HTMLMediaElement>>(new Set())
   const videoContainerElRef = useRef<HTMLDivElement | null>(null)
   const videoTilesRef = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -122,6 +160,7 @@ export function useVoiceChannel(
   const [micEnabled, setMicEnabled] = useState(false)
   const [cameraError, setCameraError] = useState<string>()
   const [audioPlaybackBlocked, setAudioPlaybackBlocked] = useState(false)
+  const [noiseSuppressionError, setNoiseSuppressionError] = useState<string>()
 
   const cleanupAudioEls = useCallback(() => {
     audioElsRef.current.forEach((el) => el.remove())
@@ -259,11 +298,13 @@ export function useVoiceChannel(
       cleanupAudioEls()
       cleanupVideoTiles()
       roomRef.current = undefined
+      noiseModeRef.current = undefined
       setStatus('idle')
       setParticipants([])
       setMicEnabled(false)
       setCameraError(undefined)
       setAudioPlaybackBlocked(false)
+      setNoiseSuppressionError(undefined)
     },
     [cleanupAudioEls, cleanupVideoTiles],
   )
@@ -273,6 +314,58 @@ export function useVoiceChannel(
   useEffect(() => {
     return () => disconnect(roomRef.current)
   }, [channelId, disconnect])
+
+  // Leva a track do microfone ao modo pedido (reforçada ou do navegador).
+  // As trocas vão numa fila, porque recapturar e plugar o processador levam
+  // tempo e a pessoa pode ligar e desligar antes de terminar. Se a reforçada
+  // falhar, volta para a supressão do navegador e mostra o aviso, em vez de
+  // deixar o microfone sem supressão nenhuma.
+  const syncNoiseSuppression = useCallback((room: Room) => {
+    noiseQueueRef.current = noiseQueueRef.current
+      .then(async () => {
+        // Cada troca pedida tenta de novo, então o aviso de uma falha
+        // anterior sai.
+        if (roomRef.current === room) setNoiseSuppressionError(undefined)
+        let failed = false
+        while (roomRef.current === room && noiseModeRef.current?.room === room) {
+          const applied = noiseModeRef.current
+          const want: NoiseMode = enhancedNoiseRef.current && !failed ? 'enhanced' : 'browser'
+          if (applied.mode === want) return
+          const track = room.localParticipant.getTrackPublication(Track.Source.Microphone)?.track as
+            | LocalAudioTrack
+            | undefined
+          if (!track) return
+          try {
+            if (want === 'enhanced') {
+              if (applied.mode === 'browser') {
+                await track.restartTrack(ENHANCED_CAPTURE_OPTIONS)
+                applied.mode = 'raw'
+              }
+              const { createRnnoiseProcessor } = await import('../lib/rnnoiseProcessor')
+              await track.setProcessor(createRnnoiseProcessor())
+              applied.mode = 'enhanced'
+            } else {
+              if (applied.mode === 'enhanced') {
+                await track.stopProcessor()
+                applied.mode = 'raw'
+              }
+              await track.restartTrack(BROWSER_CAPTURE_OPTIONS)
+              applied.mode = 'browser'
+            }
+          } catch (err) {
+            // Falha ao voltar para a do navegador não tem para onde cair; o
+            // microfone segue como ficou.
+            if (want === 'browser') return
+            failed = true
+            console.warn('[ffcom] supressão de ruído reforçada', err)
+            if (roomRef.current === room) {
+              setNoiseSuppressionError('A supressão de ruído reforçada não funcionou aqui; usando a do navegador.')
+            }
+          }
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   const join = useCallback(async () => {
     if (roomRef.current) return
@@ -284,7 +377,16 @@ export function useVoiceChannel(
       // por track em vez do volume do <audio> (limitado a 100%), para o
       // volume por pessoa ir até 200%. Ver docs/architecture.md, "Decisão:
       // volume por pessoa no canal de voz".
-      const room = new Room({ webAudioMix: true })
+      // Com a reforçada ligada, o microfone já nasce capturado sem o
+      // supressor do navegador, e o WASM começa a baixar enquanto conecta.
+      const captureEnhanced = enhancedNoiseRef.current
+      if (captureEnhanced) {
+        void import('../lib/rnnoiseProcessor').then((m) => m.preloadRnnoise()).catch(() => {})
+      }
+      const room = new Room({
+        webAudioMix: true,
+        audioCaptureDefaults: captureEnhanced ? ENHANCED_CAPTURE_OPTIONS : undefined,
+      })
       roomRef.current = room
 
       room.on(RoomEvent.ParticipantConnected, () => refreshParticipants(room))
@@ -358,6 +460,11 @@ export function useVoiceChannel(
         micDesiredRef.current = true
         setMicEnabled(true)
       }
+      // Com o microfone aberto, ele sai sem supressão nenhuma até o RNNoise
+      // entrar (o WASM já vem baixando desde o começo do join); não espera
+      // por isso para mostrar a sala.
+      noiseModeRef.current = { room, mode: captureEnhanced ? 'raw' : 'browser' }
+      syncNoiseSuppression(room)
       setAudioPlaybackBlocked(!room.canPlaybackAudio)
       setStatus('connected')
       refreshParticipants(room)
@@ -366,7 +473,17 @@ export function useVoiceChannel(
       setStatus('error')
       setError(err instanceof Error ? err.message : 'falha ao conectar à voz')
     }
-  }, [baseUrl, channelId, accessToken, refreshParticipants, disconnect, addVideoTile, removeVideoTile, applyRemoteAudio])
+  }, [
+    baseUrl,
+    channelId,
+    accessToken,
+    refreshParticipants,
+    disconnect,
+    addVideoTile,
+    removeVideoTile,
+    applyRemoteAudio,
+    syncNoiseSuppression,
+  ])
 
   const leave = useCallback(() => disconnect(roomRef.current), [disconnect])
 
@@ -444,6 +561,14 @@ export function useVoiceChannel(
     if (roomRef.current?.state === ConnectionState.Connected) setMicDesired(!pushToTalk)
   }, [pushToTalk, setMicDesired])
 
+  // Ligar ou desligar a reforçada conectado. Antes de o microfone ser
+  // publicado, join aplica o modo sozinho ao terminar.
+  useEffect(() => {
+    enhancedNoiseRef.current = enhancedNoiseSuppression
+    const room = roomRef.current
+    if (room && noiseModeRef.current?.room === room) syncNoiseSuppression(room)
+  }, [enhancedNoiseSuppression, syncNoiseSuppression])
+
   // Diferente do seletor de tela (ver toggleScreenShare), recusar a permissão
   // da câmera ou não ter câmera é uma falha que a pessoa precisa ver: vira
   // cameraError, sem derrubar o canal de voz (status continua 'connected').
@@ -507,6 +632,7 @@ export function useVoiceChannel(
     screenSharing,
     screenShareAudio,
     audioPlaybackBlocked,
+    noiseSuppressionError,
     startAudio,
     videoContainerRef,
     join,

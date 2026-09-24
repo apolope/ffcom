@@ -70,6 +70,7 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
     screenSharing,
     screenShareAudio,
     audioPlaybackBlocked,
+    noiseSuppressionError,
     startAudio,
     videoContainerRef,
     join,
@@ -85,6 +86,7 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
     voicePrefs.micToggleSound,
     participantAudio,
     voicePrefs.pushToTalk,
+    voicePrefs.enhancedNoiseSuppression,
   )
   // Em push-to-talk o atalho de mutar fica desligado (o microfone é da tecla
   // de falar); no Electron isso também libera a combinação global.
@@ -237,6 +239,18 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
                 Apertar para falar
               </label>
             </div>
+            <label
+              className="voice-pref"
+              title="Filtra teclado, ventilador e barulho de fundo com o RNNoise, no lugar da supressão do navegador. Usa um pouco mais de processamento."
+            >
+              <input
+                type="checkbox"
+                checked={voicePrefs.enhancedNoiseSuppression}
+                onChange={() => updateVoicePrefs({ enhancedNoiseSuppression: !voicePrefs.enhancedNoiseSuppression })}
+              />
+              Supressão de ruído reforçada
+            </label>
+            {noiseSuppressionError && <span className="voice-shortcut-hint">{noiseSuppressionError}</span>}
             {voicePrefs.pushToTalk ? (
               <>
                 <MuteShortcutSetting

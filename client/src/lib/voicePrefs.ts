@@ -16,11 +16,16 @@ export interface VoicePrefs {
   // Tecla do push-to-talk, mesmo formato; ausente = só o botão de segurar
   // na tela. Pode ser uma tecla sozinha, porque só vale com a janela em foco.
   pushToTalkKey?: string
+  // "Supressão de ruído reforçada" (RNNoise, lib/rnnoiseProcessor.ts) em vez
+  // da supressão do navegador. Desligada por padrão: ver docs/architecture.md,
+  // "Decisão: supressão de ruído no microfone".
+  enhancedNoiseSuppression: boolean
 }
 
 const DEFAULTS: VoicePrefs = {
   micToggleSound: true,
   pushToTalk: false,
+  enhancedNoiseSuppression: false,
 }
 
 export function getVoicePrefs(accountSub: string): VoicePrefs {
@@ -36,6 +41,7 @@ export function getVoicePrefs(accountSub: string): VoicePrefs {
       delete prefs.pushToTalkKey
     }
     prefs.pushToTalk = prefs.pushToTalk === true
+    prefs.enhancedNoiseSuppression = prefs.enhancedNoiseSuppression === true
     return prefs
   } catch {
     return DEFAULTS
