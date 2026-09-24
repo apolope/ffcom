@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, ipcMain, net, protocol } from 'electron'
+import { app, BrowserWindow, globalShortcut, ipcMain, net, powerMonitor, protocol } from 'electron'
 import { existsSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -98,9 +98,19 @@ function createWindow() {
   }
 }
 
+// Tempo sem teclado nem mouse no sistema inteiro, para o "ausente"
+// automático (client/src/hooks/useIdle.ts): no app desktop a pessoa pode
+// estar jogando com o FFCom em segundo plano, e a página sozinha não vê essa
+// atividade. Ver docs/architecture.md, "Decisão: status de presença e
+// avatar nas listas de membros".
+function registerSystemIdleIpc() {
+  ipcMain.handle('ffcom:get-system-idle-seconds', () => powerMonitor.getSystemIdleTime())
+}
+
 app.whenReady().then(() => {
   registerAppProtocol()
   registerMuteShortcutIpc()
+  registerSystemIdleIpc()
   createWindow()
 })
 

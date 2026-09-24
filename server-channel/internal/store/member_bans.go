@@ -61,7 +61,7 @@ func (s *MemberBanStore) Delete(ctx context.Context, oidcSubject string) error {
 // membro") só para dar contexto humano ao oidc_subject na UI.
 func (s *MemberBanStore) List(ctx context.Context) ([]MemberBan, error) {
 	const query = `
-		SELECT b.oidc_subject, b.banned_by_member_id, b.reason, b.created_at, m.nickname
+		SELECT b.oidc_subject, b.banned_by_member_id, b.reason, b.created_at, COALESCE(m.nickname, m.profile_name)
 		FROM member_bans b
 		LEFT JOIN members m ON m.oidc_subject = b.oidc_subject
 		ORDER BY b.created_at DESC

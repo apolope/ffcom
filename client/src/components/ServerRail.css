@@ -105,6 +105,7 @@
 }
 
 .account-button {
+  --presence-ring: var(--bg-deep);
   margin-top: auto;
   width: 44px;
   height: 44px;

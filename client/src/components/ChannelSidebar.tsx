@@ -2,6 +2,7 @@ import { Fragment } from 'react'
 import type { Category, ChannelType, KnownServer, Member } from '../types'
 import { UNCATEGORIZED_ID, type VoiceParticipant } from '../lib/serverChannelApi'
 import './ChannelSidebar.css'
+import { AvatarWithStatus, MemberAvatar } from './AvatarWithStatus'
 
 const CHANNEL_ICON: Record<ChannelType, string> = {
   text: '#',
@@ -63,7 +64,7 @@ export function ChannelSidebar({
   onCreateChannel,
   onEditChannel,
 }: ChannelSidebarProps) {
-  const nicknameById = new Map(members.map((m) => [m.id, m.nickname]))
+  const memberById = new Map(members.map((m) => [m.id, m]))
 
   return (
     <nav className="channel-sidebar" aria-label="Canais">
@@ -180,8 +181,11 @@ export function ChannelSidebar({
                       <ul className="voice-participants" aria-label={`Na sala ${channel.name}`}>
                         {voiceParticipants[channel.id].map((p) => (
                           <li key={p.memberId} className="voice-participant">
-                            <span className="voice-participant-dot" aria-hidden="true" />
-                            {nicknameById.get(p.memberId) ?? (p.name || p.memberId.slice(0, 8))}
+                            <VoiceParticipantAvatar
+                              member={memberById.get(p.memberId)}
+                              fallbackName={p.name || p.memberId.slice(0, 8)}
+                            />
+                            {memberById.get(p.memberId)?.nickname ?? (p.name || p.memberId.slice(0, 8))}
                             {p.memberId === selfMemberId && <span className="voice-participant-self">(você)</span>}
                           </li>
                         ))}
@@ -196,4 +200,11 @@ export function ChannelSidebar({
       </div>
     </nav>
   )
+}
+
+// Quem está na sala de voz: avatar e status do membro, ou só a inicial para
+// alguém que ainda não aparece na lista de membros (entrou há pouco).
+function VoiceParticipantAvatar({ member, fallbackName }: { member: Member | undefined; fallbackName: string }) {
+  if (member) return <MemberAvatar member={member} size={20} />
+  return <AvatarWithStatus displayName={fallbackName} status="offline" size={20} />
 }

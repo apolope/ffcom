@@ -1,4 +1,5 @@
 .member-list {
+  --presence-ring: var(--bg-secondary);
   width: 240px;
   flex: 0 0 240px;
   background: var(--bg-secondary);
@@ -30,12 +31,10 @@
   color: var(--text-h);
 }
 
-.member-status {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #3ba55c;
-  flex: 0 0 8px;
+.member-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .member-badge {

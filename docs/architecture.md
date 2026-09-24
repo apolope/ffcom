@@ -1237,6 +1237,73 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** o FFCom tiver pessoas de fora da instância central (aí, cadastro próprio ou convite do Authentik amarrado ao grupo), ou se virar rotina adicionar gente ao grupo (aí, documentar o passo no guia de convite).
 
+## Decisão: status de presença e avatar nas listas de membros
+
+**Contexto (2026-09-23):** o dono pediu avatar redondo com o nome, no lugar do círculo verde, na lista lateral de membros, na lista de quem está no canal de voz e na lista de membros da administração do servidor, com uma bolinha de status: verde online, vermelha ocupado, amarela ausente, cinza para "aparecer offline" e offline. Faltavam duas peças: o membro de `server-channel` não estava ligado à conta de `server-central` (onde mora o avatar), e só existia presença online/offline, entregue só a amigos. O círculo verde da lista lateral nem era presença: era a cor da role mais alta, ou verde fixo.
+
+**Decisões do dono:**
+1. **Status visível só entre amigos**, mantendo a regra de "Decisão: gateway de presença em server-central". Numa lista de membros, quem não é amigo aparece sempre cinza. Por isso a lista lateral continua única, sem separar online e offline.
+2. **"Ausente" automático depois de 10 minutos sem atividade**, além de poder ser escolhido.
+3. A consulta a cada 30s para o status de membros foi escolhida, mas ficou desnecessária: com status só entre amigos, a lista de membros usa o status que o client já recebe dos amigos em tempo real pelo WebSocket de presença.
+
+**Ligação membro ↔ conta pelo `oidcSubject`:** os dois servidores usam o mesmo Authentik, então o `sub` é a chave comum. `GET /api/members` de `server-channel` passou a devolver `oidcSubject`, revertendo o "não expõe oidcSubject" de antes. O provider `ffcom` não define `sub_mode`, então vale o padrão do Authentik, `hashed_user_id`: um hash opaco, sem e-mail nem nome de usuário. `server-central` ganhou `POST /api/accounts/lookup` (até 500 subjects), que devolve conta, nome e avatar, **sem status**. Continua sem canal direto entre os servidores: quem junta as duas pontas é o client (`hooks/useAccountsBySubject.ts`, com cache por sessão).
+
+**Alternativa descartada (ligação):** um identificador derivado em vez do subject cru. Exigiria segredo compartilhado entre `server-channel` (self-hosted por terceiros) e `server-central`, o que a arquitetura evita.
+
+**Status escolhido e status visível:**
+- **Escolhido:** coluna `accounts.presence_status` (migration `0005`), `online`, `busy`, `away` ou `invisible`, padrão `online`. Persiste entre sessões, como no Discord. `PUT /api/me/status` grava, e `GET /api/me` devolve em `status`.
+- **Visível** (`realtime.Hub.Effective`): `offline` sem conexão aberta ou com `invisible`; `away` quando o escolhido é `online` e **todas** as conexões da conta estão ociosas (basta um dispositivo em uso para continuar online); senão, o escolhido. Ocupado não vira ausente por ociosidade.
+- **Frames:** o client manda `{"type":"presence.idle","idle":bool}` por conexão. O `presence.update` ganhou `status`, e o `online` continua no frame e no snapshot para clients anteriores. O servidor só emite quando o status visível muda, então uma segunda aba, trocar de invisível para offline ou ficar ocioso estando ocupado não geram evento.
+
+**Ociosidade no client (`hooks/useIdle.ts`):** no web/PWA, conta como atividade mexer o mouse, digitar, rolar ou tocar na página; com a aba em segundo plano, dez minutos fora contam como ociosidade. No Electron vale o tempo ocioso do sistema inteiro (`powerMonitor.getSystemIdleTime` via IPC `ffcom:get-system-idle-seconds`), para quem joga com o app em segundo plano continuar online. Estar conectado a um canal de voz sempre conta como atividade (`lib/voiceActivity.ts`), porque dá para conversar muito tempo sem tocar em nada. Checagem a cada 30s.
+
+**UI:**
+- `AvatarWithStatus` (avatar redondo e bolinha no canto, borda na cor do fundo via `--presence-ring`) e `MemberAvatar` (resolve conta e status de um membro pelo `PresenceContext`, que o `App.tsx` monta com amigos, perfil e contas consultadas).
+- Usado na lista lateral de membros, na lista de quem está na sala de voz, na lista de membros da administração, na lista de amigos (que perdeu a bolinha própria) e no seu avatar do `ServerRail`.
+- A cor da role mais alta, que pintava a bolinha, passou para o nome na lista lateral.
+- Clicar no seu avatar abre um menu (`StatusMenu`) com Online, Ocupado, Ausente, Invisível e "Alterar avatar". A troca de status é otimista e volta atrás se o servidor recusar. Para você, invisível aparece cinza e online ocioso aparece amarelo, igual ao que os amigos veem.
+- **Cache de avatar da sessão (`lib/avatarCache.ts`):** com avatar em toda linha, a mesma imagem apareceria em várias listas. A URL do avatar é fixa por conta, então trocar ou remover o próprio avatar invalida a entrada; avatares de outras pessoas trocados durante a sessão só atualizam ao recarregar.
+
+**Escopo aceito:**
+- Outras abas ou dispositivos da mesma conta só veem uma troca de status escolhido ao recarregar (o servidor não manda o próprio status de volta).
+- Quem não é amigo aparece cinza mesmo online, o que numa lista de servidor pode parecer "todo mundo offline". É consequência direta da decisão 1.
+- Os `presence.update` continuam indo só para amigos conectados.
+
+**Verificado (2026-09-23):** `go build`, `go vet` e `go test` nos dois servidores, com teste unitário novo do hub (`internal/realtime/hub_test.go`) cobrindo a regra de status visível. Migration `0005` (up, down e up de novo) e as queries novas (`SetPresenceStatus`, o CHECK recusando status inválido, `GetManyBySubjects` com e sem perfil) contra Postgres 17 real num container descartável, com teste temporário removido depois. Client: `tsc`, `lint` sem aviso novo, `build` web e Electron. **Não verificado:** a UI num browser real logado, o fluxo de ponta a ponta entre dois amigos (troca de status, ausente automático) e o IPC de ociosidade num build Electron.
+
+**Revisitar quando:** o dono quiser que membros de servidor vejam o status uns dos outros (aí a consulta periódica ou a assinatura pelo WebSocket voltam a fazer sentido), ou quando a sincronização entre abas da mesma conta incomodar.
+
+## Decisão: nome exibido do membro — apelido, senão o nome do perfil do Authentik
+
+**Contexto (2026-09-23):** membros sem apelido apareciam como `dc5cf1f0` na lista de membros e na sala de voz, e o título do vídeo mostrava o id inteiro (`dc5cf1f0-b183-...`), porque o token LiveKit usava o apelido e, sem ele, o id do membro. `server-channel` só recebe o `sub` do Authentik e não conhece nenhum nome da pessoa.
+
+**Decisão do dono:** o nome exibido é o apelido escolhido naquele servidor; sem apelido, o nome do perfil do Authentik (claim `name`, ou `preferred_username` quando o perfil não tem nome).
+
+**Como:**
+- **Coluna separada do apelido:** `members.profile_name` (migration `0005` de `server-channel`). O apelido continua sendo só o que a pessoa escolheu, e o nome acompanha o perfil se ele mudar no Authentik.
+- **Quem grava é o client**, com `PUT /api/me/profile-name`, porque o nome só existe no ID token do login. `hooks/useMe.ts` compara o nome do perfil com o que o servidor guarda ao abrir cada servidor, grava se mudou e recarrega a lista de membros. A rota é separada do `PATCH /api/me` porque ali `nickname` ausente limpa o apelido.
+- **Regra única** em `Member.DisplayName()` (apelido, nome do perfil, começo do id), usada no token LiveKit (título do vídeo e lista da sala) e, com a mesma ordem, em `toMember` do client. A lista de banidos também cai no nome do perfil.
+
+**Consequências aceitas:**
+- Quem ainda não abriu o servidor com um client novo continua aparecendo pelo começo do id até abrir.
+- O nome do perfil é mandado pelo próprio client, então alguém poderia gravar outro nome, como já pode com o apelido.
+- O nome completo do Authentik passa a ser visto pelos membros do servidor de quem não escolheu apelido, e essa exposição foi escolha do dono.
+- O token LiveKit leva o nome da hora da entrada: quem troca o apelido durante a chamada continua com o nome antigo no vídeo até entrar de novo.
+
+**Verificado (2026-09-23):** `go build`, `go vet`, `go test` de `server-channel`, com o teste de ponta a ponta com banco (`FFCOM_TEST_DATABASE_URL`) rodando a migration nova em Postgres 17 real, teste unitário de `DisplayName` e teste temporário de `SetProfileName`/`List`/`SetNickname` (removido depois); migration `0005` com down e up de novo. Client: `tsc`, `lint`, `build`. **Não verificado:** num browser logado.
+
+## Decisão: recorte do avatar no client — quadro com a imagem inteira e círculo, saída quadrada de até 512 px
+
+**Contexto (2026-09-23):** o upload de avatar enviava o arquivo como estava, e o avatar redondo cortava o que caísse fora do círculo sem a pessoa escolher. O dono pediu para recortar no envio, vendo a área além do círculo.
+
+**Decisão:** `components/AvatarCropper.tsx`, aberto pelo `AvatarDialog` ao escolher a imagem. Um quadro de 280 px mostra a imagem inteira, com o círculo de 220 px no centro e o lado de fora escurecido, mas visível. Ao lado ficam prévias do resultado em 72 e 32 px, os tamanhos em que o avatar aparece. Arrastar posiciona; o controle deslizante e a roda do mouse dão zoom de 1x a 4x, ancorado no centro do círculo; setas e `+`/`-` fazem o mesmo pelo teclado. O quadrado do recorte nunca fica com área vazia. O resultado sai por canvas como quadrado de até 512 px, em WebP (ou PNG onde o navegador não gera WebP), então o limite da imagem escolhida subiu para 20 MB: o que vai para o servidor fica em poucos KB, bem abaixo do `AVATAR_MAX_MB`.
+
+**Alternativas descartadas:** biblioteca de recorte (dependência para uma tela só, e as mais usadas não mostram a prévia nos tamanhos reais sem código extra); recortar no servidor (exigiria decodificar e reencodar imagem em Go e mandar coordenadas junto, sem ganho para quem envia).
+
+**Consequências aceitas:** GIF animado vira imagem parada (o diálogo avisa). O servidor continua aceitando upload sem recorte de qualquer client que não passe por esta tela.
+
+**Verificado (2026-09-23):** o componente isolado no Chrome via Vite, com imagem de teste paisagem: o lado de fora do círculo aparece escurecido, as prévias acompanham, o arrasto para na borda sem deixar vazio, a roda leva o zoom a 1,61 em 5 passos mantendo o centro, e "Salvar" gerou WebP 512×512 de 8,9 KB com os pixels da região mostrada. `tsc`, `lint`, `build`. **Não verificado:** o envio real ao server-central e o toque no celular.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

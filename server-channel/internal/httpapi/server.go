@@ -62,6 +62,7 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, attachmentFiles *storag
 	mux.Handle("POST /api/join", authenticated(handleJoin(db.Members, db.Invites, db.MemberBans)))
 	mux.Handle("GET /api/me", protected(handleMe(db.Roles)))
 	mux.Handle("PATCH /api/me", protected(handleUpdateMe(db.Members, db.Roles)))
+	mux.Handle("PUT /api/me/profile-name", protected(handleSetProfileName(db.Members, db.Roles)))
 	mux.Handle("GET /api/members", protected(handleListMembers(db.Members, db.Roles)))
 	mux.Handle("POST /api/members/{memberId}/kick", protected(handleKickMember(db.Members, db.Roles)))
 	mux.Handle("POST /api/members/{memberId}/ban", protected(handleBanMember(db.Members, db.Roles, db.MemberBans)))

@@ -1,4 +1,5 @@
 import type { Member, Role } from '../types'
+import { MemberAvatar } from './AvatarWithStatus'
 import './MemberList.css'
 
 interface MemberListProps {
@@ -6,9 +7,9 @@ interface MemberListProps {
   roles: Role[]
 }
 
-// Não há presença por membro de server-channel ainda (ver types.ts), então,
-// ao contrário da lista de amigos, não faz sentido separar online/offline —
-// só uma lista única, ordenada por quem entrou primeiro (dono no topo).
+// Lista única, ordenada por quem entrou primeiro (dono no topo), sem separar
+// online/offline: o status só é visível entre amigos (ver types.ts), então
+// quem não é amigo aparece sempre cinza e separar por status enganaria.
 export function MemberList({ members, roles }: MemberListProps) {
   const roleById = new Map(roles.map((r) => [r.id, r]))
   const sorted = [...members].sort((a, b) => (a.isOwner === b.isOwner ? 0 : a.isOwner ? -1 : 1))
@@ -33,12 +34,12 @@ function MemberRow({ member, roleById }: { member: Member; roleById: Map<string,
 
   return (
     <div className="member">
-      <span
-        className="member-status"
-        aria-hidden="true"
-        style={highestRole?.color ? { background: highestRole.color } : undefined}
-      />
-      {member.nickname}
+      <MemberAvatar member={member} size={32} />
+      {/* A cor da role mais alta, que antes pintava a bolinha, vai para o
+          nome: a bolinha agora é o status. */}
+      <span className="member-name" style={highestRole?.color ? { color: highestRole.color } : undefined}>
+        {member.nickname}
+      </span>
       {member.isOwner && <span className="member-badge">dono</span>}
     </div>
   )

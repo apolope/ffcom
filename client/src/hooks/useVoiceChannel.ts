@@ -16,6 +16,7 @@ import {
 import { playMicToggleSound, playPushToTalkSound, primeMicToggleSound } from '../lib/micToggleSound'
 import { participantAudioOf, type ParticipantAudioMap } from '../lib/participantAudio'
 import { fetchVoiceToken } from '../lib/serverChannelApi'
+import { setVoiceConnected } from '../lib/voiceActivity'
 
 export type VoiceChannelStatus = 'idle' | 'connecting' | 'connected' | 'error'
 
@@ -310,6 +311,14 @@ export function useVoiceChannel(
     },
     [cleanupAudioEls, cleanupVideoTiles],
   )
+
+  // Estar na chamada conta como atividade para o "ausente" automático
+  // (hooks/useIdle.ts).
+  useEffect(() => {
+    if (status !== 'connected') return
+    setVoiceConnected(true)
+    return () => setVoiceConnected(false)
+  }, [status])
 
   // Sair do canal de voz ao trocar de canal ou desmontar o componente —
   // nunca deixar uma sala LiveKit conectada em segundo plano sem UI.

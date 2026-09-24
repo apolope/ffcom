@@ -4,6 +4,7 @@ import { PERMISSIONS } from '../lib/permissions'
 import type { Ban, Member, Role } from '../types'
 import './Dialog.css'
 import './ManageRolesDialog.css'
+import { MemberAvatar } from './AvatarWithStatus'
 
 interface ManageRolesDialogProps {
   members: Member[]
@@ -152,7 +153,8 @@ export function ManageRolesDialog({
               const isSelf = member.id === currentMemberId
               return (
                 <li key={member.id}>
-                  <span>
+                  <span className="member-role-name">
+                    <MemberAvatar member={member} size={24} />
                     {member.nickname}
                     {member.isOwner && ' (dono)'}
                   </span>

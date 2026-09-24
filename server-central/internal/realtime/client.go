@@ -58,8 +58,7 @@ func (c *Client) WritePump() {
 }
 
 // ReadPump lê frames de texto da conexão e chama onMessage para cada um —
-// hoje só frames "dm.create" (ver internal/httpapi/dms.go), já que o
-// gateway de presença em si não aceita nenhum frame vindo do client. Além
+// "presence.idle" e "dm.create" (ver internal/httpapi/presence.go). Além
 // disso, detecta a desconexão do client e responde aos pings do WritePump
 // com pong (mantendo o read deadline vivo). Bloqueia até a conexão fechar.
 // O chamador deve rodar ReadPump na goroutine que fez o Upgrade e garantir

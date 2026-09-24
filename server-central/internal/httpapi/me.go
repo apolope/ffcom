@@ -47,6 +47,7 @@ func buildMeResponse(ctx context.Context, profiles *store.ProfileStore, account 
 		OIDCSubject:  account.OIDCSubject,
 		CreatedAt:    account.CreatedAt,
 		E2EPublicKey: account.E2EPublicKey,
+		Status:       account.PresenceStatus,
 	}
 	if err == nil {
 		resp.DisplayName = &profile.DisplayName
@@ -64,7 +65,9 @@ type meResponse struct {
 	// campo) -- o client só adota a chave de E2E antiga, de antes da chave
 	// por conta, quando consegue comparar com esta (ver
 	// client/src/hooks/useE2EKeys.ts).
-	E2EPublicKey []byte  `json:"e2ePublicKey"`
-	DisplayName  *string `json:"displayName,omitempty"`
-	AvatarURL    *string `json:"avatarUrl,omitempty"`
+	E2EPublicKey []byte `json:"e2ePublicKey"`
+	// Status escolhido (online, busy, away ou invisible), não o visível.
+	Status      string  `json:"status"`
+	DisplayName *string `json:"displayName,omitempty"`
+	AvatarURL   *string `json:"avatarUrl,omitempty"`
 }

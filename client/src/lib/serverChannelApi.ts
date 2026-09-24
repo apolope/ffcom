@@ -63,6 +63,9 @@ export interface Me {
   memberId: string
   oidcSubject: string
   nickname?: string
+  // Nome do perfil do Authentik gravado por este client (ver
+  // hooks/useMe.ts); é o nome exibido quando não há apelido.
+  profileName?: string
   joinedAt: string
   isOwner?: boolean
   // Permissão base efetiva (roles + role default), sem overwrites de canal —
@@ -91,6 +94,21 @@ export async function fetchMe(baseUrl: string, accessToken: string): Promise<Me>
 // PATCH /api/me — define (ou limpa, passando undefined) o apelido exibido
 // neste server-channel. Ver docs/architecture.md, endpoint novo em
 // server-channel/internal/httpapi/me.go.
+// PUT /api/me/profile-name — grava o nome do perfil do Authentik da pessoa,
+// que server-channel não recebe de outro jeito (o token só traz o "sub").
+// Ver docs/architecture.md, "Decisão: nome exibido do membro".
+export async function updateMyProfileName(baseUrl: string, accessToken: string, profileName: string): Promise<Me> {
+  const res = await fetch(`${baseUrl}/api/me/profile-name`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ profileName }),
+  })
+  return parseJsonOrThrow<Me>(res)
+}
+
 export async function updateMyNickname(
   baseUrl: string,
   accessToken: string,
@@ -183,7 +201,10 @@ export async function fetchChannels(
 
 export interface RemoteMember {
   id: string
+  // Ausente em server-channel anterior ao campo.
+  oidcSubject?: string
   nickname?: string
+  profileName?: string
   joinedAt: string
   isOwner?: boolean
   roleIds?: string[]

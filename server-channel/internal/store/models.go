@@ -11,6 +11,10 @@ type Member struct {
 	ID          string
 	OIDCSubject string
 	Nickname    *string
+	// ProfileName é o nome do perfil do Authentik, gravado pelo client
+	// (PUT /api/me/profile-name). Aparece quando não há apelido; ver
+	// DisplayName.
+	ProfileName *string
 	JoinedAt    time.Time
 	// IsOwner é quem entrou primeiro neste server-channel (bootstrap do
 	// self-host, ver internal/httpapi/join.go). Ignora toda checagem de
@@ -143,4 +147,21 @@ type Invite struct {
 	Uses              int
 	ExpiresAt         *time.Time
 	CreatedAt         time.Time
+}
+
+// DisplayName é o nome exibido do membro: o apelido escolhido neste
+// servidor, senão o nome do perfil do Authentik, senão o começo do id (quem
+// ainda não abriu o servidor com um client que grava o nome). Ver
+// docs/architecture.md, "Decisão: nome exibido do membro".
+func (m Member) DisplayName() string {
+	if m.Nickname != nil && *m.Nickname != "" {
+		return *m.Nickname
+	}
+	if m.ProfileName != nil && *m.ProfileName != "" {
+		return *m.ProfileName
+	}
+	if len(m.ID) > 8 {
+		return m.ID[:8]
+	}
+	return m.ID
 }

@@ -37,7 +37,11 @@ interface UseServerMembersResult {
 function toMember(remote: RemoteMember): Member {
   return {
     id: remote.id,
-    nickname: remote.nickname ?? remote.id.slice(0, 8),
+    oidcSubject: remote.oidcSubject,
+    // Nome exibido: apelido, senão o nome do perfil do Authentik, senão o
+    // começo do id (quem ainda não abriu o servidor com um client que grava
+    // o nome). Mesma regra de Member.DisplayName em server-channel.
+    nickname: remote.nickname || remote.profileName || remote.id.slice(0, 8),
     isOwner: remote.isOwner ?? false,
     roleIds: remote.roleIds ?? [],
   }

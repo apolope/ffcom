@@ -12,4 +12,5 @@ contextBridge.exposeInMainWorld('ffcomElectron', {
       ipcRenderer.removeListener('ffcom:mute-shortcut', listener)
     }
   },
+  getSystemIdleSeconds: (): Promise<number> => ipcRenderer.invoke('ffcom:get-system-idle-seconds'),
 })

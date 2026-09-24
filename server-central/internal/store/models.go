@@ -9,6 +9,36 @@ type Account struct {
 	OIDCSubject  string
 	CreatedAt    time.Time
 	E2EPublicKey []byte
+	// Status escolhido pela pessoa (PresenceStatus*), não o que os amigos
+	// veem: esse depende também das conexões abertas (ver realtime.Hub).
+	PresenceStatus string
+}
+
+// Status de presença escolhidos pela pessoa (coluna accounts.presence_status).
+const (
+	PresenceOnline    = "online"
+	PresenceBusy      = "busy"
+	PresenceAway      = "away"
+	PresenceInvisible = "invisible"
+)
+
+// ValidPresenceStatus diz se status é um dos que a pessoa pode escolher.
+func ValidPresenceStatus(status string) bool {
+	switch status {
+	case PresenceOnline, PresenceBusy, PresenceAway, PresenceInvisible:
+		return true
+	}
+	return false
+}
+
+// AccountSummary é o que qualquer conta autenticada pode descobrir de outra a
+// partir do oidc_subject (ver AccountStore.GetManyBySubjects): o vínculo com
+// a conta e o avatar, sem status de presença, que continua só para amigos.
+type AccountSummary struct {
+	AccountID   string
+	OIDCSubject string
+	DisplayName *string
+	AvatarURL   *string
 }
 
 // Profile são os dados editáveis pelo usuário, associados 1:1 a uma Account.

@@ -1,5 +1,5 @@
 import type { Friend } from '../types'
-import { UserAvatar } from './UserAvatar'
+import { AvatarWithStatus } from './AvatarWithStatus'
 import './FriendsView.css'
 
 interface FriendsViewProps {
@@ -101,8 +101,12 @@ function FriendRow({
       }
       onClick={() => onSelect(friend.accountId)}
     >
-      <span className="friend-status" aria-hidden="true" />
-      <UserAvatar avatarUrl={friend.avatarUrl} displayName={friend.displayName} size={24} />
+      <AvatarWithStatus
+        avatarUrl={friend.avatarUrl}
+        displayName={friend.displayName}
+        status={friend.status}
+        size={24}
+      />
       {friend.displayName}
       {unread && <span className="unread-dot" aria-label="mensagens não lidas" />}
     </button>

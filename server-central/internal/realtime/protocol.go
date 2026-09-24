@@ -7,23 +7,59 @@ import (
 )
 
 const (
-	typeDMCreate  = "dm.create"
+	TypeDMCreate     = "dm.create"
+	TypePresenceIdle = "presence.idle"
+
 	typeDMCreated = "dm.created"
 	typeError     = "error"
 )
 
 // presenceUpdateEnvelope é o frame que o gateway de presença emite:
-// "{type: 'presence.update', accountId, online}", enviado só para contas
-// amigas (accepted) da conta cujo status mudou.
+// "{type: 'presence.update', accountId, status, online}", enviado só para
+// contas amigas (accepted) da conta cujo status visível mudou. online
+// (= status diferente de offline) continua no frame para clients anteriores
+// ao status.
 type presenceUpdateEnvelope struct {
 	Type      string `json:"type"`
 	AccountID string `json:"accountId"`
+	Status    string `json:"status"`
 	Online    bool   `json:"online"`
 }
 
-// EncodePresenceUpdate serializa o envelope de mudança de presença de accountID.
-func EncodePresenceUpdate(accountID string, online bool) ([]byte, error) {
-	return json.Marshal(presenceUpdateEnvelope{Type: "presence.update", AccountID: accountID, Online: online})
+// EncodePresenceUpdate serializa o envelope de mudança de presença de
+// accountID, com o status visível (Status*).
+func EncodePresenceUpdate(accountID, status string) ([]byte, error) {
+	return json.Marshal(presenceUpdateEnvelope{
+		Type:      "presence.update",
+		AccountID: accountID,
+		Status:    status,
+		Online:    status != StatusOffline,
+	})
+}
+
+// IncomingPresenceIdle é o frame "presence.idle" que o client manda quando
+// a pessoa fica ociosa (ou volta) naquela conexão; ver Hub.SetIdle.
+type IncomingPresenceIdle struct {
+	Idle bool `json:"idle"`
+}
+
+// FrameType lê só o campo "type" de um frame vindo do client, para o
+// chamador decidir como decodificar o resto.
+func FrameType(raw []byte) (string, error) {
+	var t typeEnvelope
+	if err := json.Unmarshal(raw, &t); err != nil {
+		return "", fmt.Errorf("frame não é JSON válido: %w", err)
+	}
+	return t.Type, nil
+}
+
+// DecodeIncomingPresenceIdle decodifica um frame "presence.idle".
+func DecodeIncomingPresenceIdle(raw []byte) (IncomingPresenceIdle, error) {
+	var m IncomingPresenceIdle
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return IncomingPresenceIdle{}, fmt.Errorf("payload de presence.idle inválido: %w", err)
+	}
+	return m, nil
 }
 
 // IncomingDMCreate é o payload decodificado de um frame "dm.create" enviado
@@ -73,7 +109,7 @@ func DecodeIncomingDM(raw []byte) (IncomingDMCreate, error) {
 	if err := json.Unmarshal(raw, &t); err != nil {
 		return IncomingDMCreate{}, fmt.Errorf("frame não é JSON válido: %w", err)
 	}
-	if t.Type != typeDMCreate {
+	if t.Type != TypeDMCreate {
 		return IncomingDMCreate{}, fmt.Errorf("tipo de frame desconhecido: %q", t.Type)
 	}
 

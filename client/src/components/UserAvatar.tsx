@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { useAuth } from '../auth/AuthProvider'
-import { fetchAvatarBlob } from '../lib/serverCentralApi'
+import { avatarCacheVersion, loadAvatar, subscribeAvatarCache } from '../lib/avatarCache'
 import './UserAvatar.css'
 
 interface UserAvatarProps {
@@ -12,24 +12,21 @@ interface UserAvatarProps {
 // Avatar de conta (server-central), com fallback pra inicial do nome. O
 // endpoint exige Bearer token (ver docs/architecture.md, "Decisão: upload
 // de avatar de conta"), então não dá pra apontar um <img src="..."> direto
-// -- busca como Blob e gera uma object URL local, revogada quando o
-// component desmonta ou avatarUrl muda (mesmo padrão de
-// components/MessageAttachment.tsx em server-channel).
+// -- busca como Blob e gera uma object URL local, guardada no cache da
+// sessão (lib/avatarCache.ts) e compartilhada por todas as listas.
 export function UserAvatar({ avatarUrl, displayName, size = 32 }: UserAvatarProps) {
   const { accessToken } = useAuth()
   const [blobUrl, setBlobUrl] = useState<string>()
+  const cacheVersion = useSyncExternalStore(subscribeAvatarCache, avatarCacheVersion)
 
   useEffect(() => {
     setBlobUrl(undefined)
     if (!avatarUrl || !accessToken) return
 
     let cancelled = false
-    let url: string | undefined
-    fetchAvatarBlob(avatarUrl, accessToken)
-      .then((blob) => {
-        if (cancelled) return
-        url = URL.createObjectURL(blob)
-        setBlobUrl(url)
+    loadAvatar(avatarUrl, accessToken)
+      .then((url) => {
+        if (!cancelled) setBlobUrl(url)
       })
       .catch(() => {
         /* falha ao carregar -- cai pro fallback de inicial */
@@ -37,9 +34,8 @@ export function UserAvatar({ avatarUrl, displayName, size = 32 }: UserAvatarProp
 
     return () => {
       cancelled = true
-      if (url) URL.revokeObjectURL(url)
     }
-  }, [avatarUrl, accessToken])
+  }, [avatarUrl, accessToken, cacheVersion])
 
   const style = { width: size, height: size, fontSize: Math.round(size * 0.45) }
 

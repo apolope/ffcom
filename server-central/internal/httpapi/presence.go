@@ -37,8 +37,8 @@ func newPresenceUpgrader(allowedOrigins map[string]bool) websocket.Upgrader {
 	}
 }
 
-// GET /api/presence — snapshot inicial de quem, entre os amigos aceitos da
-// conta autenticada, está online agora. O client usa isso para popular a
+// GET /api/presence — snapshot inicial do status visível (online, busy, away
+// ou offline) de cada amigo aceito da conta autenticada. O client usa isso para popular a
 // lista de amigos ao abrir; depois disso, GET /api/presence/ws entrega as
 // mudanças em tempo real.
 func handlePresenceSnapshot(hub *realtime.Hub, friendships *store.FriendshipStore) http.Handler {
@@ -57,7 +57,8 @@ func handlePresenceSnapshot(hub *realtime.Hub, friendships *store.FriendshipStor
 
 		out := make([]presenceView, len(friendIDs))
 		for i, friendID := range friendIDs {
-			out[i] = presenceView{AccountID: friendID, Online: hub.IsOnline(friendID)}
+			status := hub.Effective(friendID)
+			out[i] = presenceView{AccountID: friendID, Status: status, Online: status != realtime.StatusOffline}
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -66,13 +67,14 @@ func handlePresenceSnapshot(hub *realtime.Hub, friendships *store.FriendshipStor
 }
 
 // GET /api/presence/ws — o client mantém esta conexão aberta enquanto
-// online. Ao conectar (primeira conexão da conta) e ao desconectar (última
-// conexão da conta), o servidor emite "presence.update" para cada amigo
-// aceito que estiver online agora, via realtime.Hub.SendTo. Além de
-// presença, esta mesma conexão carrega as DMs em tempo real (ver
-// docs/architecture.md, "Decisão: DMs entregues no WebSocket de
-// presença"): o único frame aceito vindo do client é "dm.create",
-// processado em handleIncomingDM (internal/httpapi/dms.go).
+// online. Sempre que o status visível da conta muda (primeira conexão,
+// última desconexão, ociosidade, troca de status), o servidor emite
+// "presence.update" para cada amigo aceito conectado, via
+// realtime.Hub.SendTo. Frames aceitos do client: "presence.idle" (a pessoa
+// ficou ociosa ou voltou nesta conexão, ver docs/architecture.md, "Decisão:
+// status de presença e avatar nas listas de membros") e "dm.create" (DMs em
+// tempo real na mesma conexão, ver "Decisão: DMs entregues no WebSocket de
+// presença"), processado em handleIncomingDM (internal/httpapi/dms.go).
 func handlePresenceWS(hub *realtime.Hub, friendships *store.FriendshipStore, directMessages *store.DirectMessageStore, upgrader websocket.Upgrader) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
@@ -88,35 +90,57 @@ func handlePresenceWS(hub *realtime.Hub, friendships *store.FriendshipStore, dir
 		}
 
 		client := realtime.NewClient(conn)
-		wasOffline := hub.Register(account.ID, client)
-		if wasOffline {
-			broadcastPresence(hub, friendships, account.ID, true)
-		}
+		// account vem do auth.Middleware no handshake, já com o status
+		// escolhido lido do banco.
+		broadcastIfChanged(hub, friendships, account.ID)(hub.Register(account.ID, client, account.PresenceStatus))
 
 		go client.WritePump()
 		client.ReadPump(func(raw []byte) {
+			frameType, err := realtime.FrameType(raw)
+			if err != nil {
+				client.SendError(err.Error())
+				return
+			}
+			if frameType == realtime.TypePresenceIdle {
+				idle, err := realtime.DecodeIncomingPresenceIdle(raw)
+				if err != nil {
+					client.SendError(err.Error())
+					return
+				}
+				broadcastIfChanged(hub, friendships, account.ID)(hub.SetIdle(account.ID, client, idle.Idle))
+				return
+			}
 			handleIncomingDM(r.Context(), hub, friendships, directMessages, account.ID, client, raw)
 		})
 
-		wentOffline := hub.Unregister(account.ID, client)
-		if wentOffline {
-			broadcastPresence(hub, friendships, account.ID, false)
-		}
+		broadcastIfChanged(hub, friendships, account.ID)(hub.Unregister(account.ID, client))
 	})
 }
 
+// broadcastIfChanged devolve uma função que recebe o (antes, depois) de uma
+// operação do Hub e só avisa os amigos quando o status visível mudou, para
+// uma segunda aba, uma troca de "invisible" para offline ou uma ociosidade
+// com a pessoa ocupada não gerarem evento nenhum.
+func broadcastIfChanged(hub *realtime.Hub, friendships *store.FriendshipStore, accountID string) func(before, after string) {
+	return func(before, after string) {
+		if before != after {
+			broadcastPresence(hub, friendships, accountID, after)
+		}
+	}
+}
+
 // broadcastPresence notifica cada amigo aceito de accountID (que estiver
-// online) sobre a mudança de status de accountID. Usa um contexto novo, em
-// vez do r.Context() do handshake, porque a chamada de desconexão acontece
-// depois que a conexão HTTP original já terminou.
-func broadcastPresence(hub *realtime.Hub, friendships *store.FriendshipStore, accountID string, online bool) {
+// conectado) sobre o novo status visível de accountID. Usa um contexto novo,
+// em vez do r.Context() do handshake, porque a chamada de desconexão
+// acontece depois que a conexão HTTP original já terminou.
+func broadcastPresence(hub *realtime.Hub, friendships *store.FriendshipStore, accountID, status string) {
 	friendIDs, err := friendships.AcceptedFriendIDs(context.Background(), accountID)
 	if err != nil {
 		log.Printf("server-central: erro ao buscar amigos para broadcast de presença: %v", err)
 		return
 	}
 
-	payload, err := realtime.EncodePresenceUpdate(accountID, online)
+	payload, err := realtime.EncodePresenceUpdate(accountID, status)
 	if err != nil {
 		log.Printf("server-central: erro ao codificar presence.update: %v", err)
 		return
@@ -129,7 +153,45 @@ func broadcastPresence(hub *realtime.Hub, friendships *store.FriendshipStore, ac
 
 type presenceView struct {
 	AccountID string `json:"accountId"`
-	Online    bool   `json:"online"`
+	Status    string `json:"status"`
+	// Mantido para clients anteriores ao status.
+	Online bool `json:"online"`
+}
+
+// PUT /api/me/status — grava o status escolhido (online, busy, away ou
+// invisible) e avisa os amigos se o status visível mudou. A escolha
+// persiste entre sessões; o status visível continua dependendo de haver
+// conexão aberta (ver realtime.Hub.Effective).
+func handleSetPresenceStatus(hub *realtime.Hub, accounts *store.AccountStore, friendships *store.FriendshipStore) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		account, ok := auth.AccountFromContext(r.Context())
+		if !ok {
+			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			return
+		}
+
+		var body setPresenceStatusRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "corpo da requisição inválido", http.StatusBadRequest)
+			return
+		}
+		if !store.ValidPresenceStatus(body.Status) {
+			http.Error(w, "status precisa ser online, busy, away ou invisible", http.StatusBadRequest)
+			return
+		}
+
+		if err := accounts.SetPresenceStatus(r.Context(), account.ID, body.Status); err != nil {
+			http.Error(w, "erro ao salvar status", http.StatusInternalServerError)
+			return
+		}
+		broadcastIfChanged(hub, friendships, account.ID)(hub.SetChosen(account.ID, body.Status))
+
+		w.WriteHeader(http.StatusNoContent)
+	})
+}
+
+type setPresenceStatusRequest struct {
+	Status string `json:"status"`
 }
 
 type presenceSnapshotResponse struct {

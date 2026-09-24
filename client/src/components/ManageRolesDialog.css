@@ -27,6 +27,7 @@
 
 .role-list,
 .member-role-list {
+  --presence-ring: var(--bg);
   list-style: none;
   margin: 0;
   padding: 0;
@@ -98,4 +99,10 @@
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+}
+
+.member-role-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }

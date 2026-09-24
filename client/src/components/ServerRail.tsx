@@ -1,7 +1,10 @@
-import type { KnownServer } from '../types'
+import { useCallback, useState } from 'react'
+import type { ChosenStatus, KnownServer, PresenceStatus } from '../types'
 import type { MyProfile } from '../lib/serverCentralApi'
+import { AvatarWithStatus } from './AvatarWithStatus'
+import { STATUS_LABELS } from './PresenceContext'
+import { StatusMenu } from './StatusMenu'
 import { UpdateButton } from './UpdateButton'
-import { UserAvatar } from './UserAvatar'
 import './ServerRail.css'
 
 interface ServerRailProps {
@@ -17,6 +20,9 @@ interface ServerRailProps {
   updateReady: boolean
   onUpdate: () => void
   myProfile: MyProfile | undefined
+  // Como a pessoa aparece para os amigos agora (escolha + ociosidade).
+  myStatus: PresenceStatus
+  onSetStatus: (status: ChosenStatus) => void
   onSelectServer: (serverId: string) => void
   onSelectFriends: () => void
   onAddServer: () => void
@@ -33,12 +39,19 @@ export function ServerRail({
   updateReady,
   onUpdate,
   myProfile,
+  myStatus,
+  onSetStatus,
   onSelectServer,
   onSelectFriends,
   onAddServer,
   onOpenMyAvatar,
   onSignOut,
 }: ServerRailProps) {
+  // Âncora do menu de status (undefined = fechado).
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement>()
+  const closeMenu = useCallback(() => setMenuAnchor(undefined), [])
+  const chosen = myProfile?.status ?? 'online'
+
   return (
     <nav className="server-rail" aria-label="Servidores">
       <button
@@ -78,13 +91,33 @@ export function ServerRail({
         +
       </button>
       {updateReady && <UpdateButton onUpdate={onUpdate} />}
-      <button type="button" className="account-button" title="Seu avatar" onClick={onOpenMyAvatar}>
-        <UserAvatar
+      <button
+        type="button"
+        className="account-button"
+        title={`Seu status: ${STATUS_LABELS[chosen]}`}
+        aria-haspopup="menu"
+        aria-expanded={!!menuAnchor}
+        onClick={(event) => {
+          const button = event.currentTarget
+          setMenuAnchor((open) => (open ? undefined : button))
+        }}
+      >
+        <AvatarWithStatus
           avatarUrl={myProfile?.avatarUrl}
           displayName={myProfile?.displayName ?? myProfile?.oidcSubject ?? '?'}
+          status={myStatus}
           size={44}
         />
       </button>
+      {menuAnchor && (
+        <StatusMenu
+          anchor={menuAnchor}
+          chosen={chosen}
+          onChoose={onSetStatus}
+          onEditAvatar={onOpenMyAvatar}
+          onClose={closeMenu}
+        />
+      )}
       <button type="button" className="sign-out-button" title="Sair" aria-label="Sair" onClick={onSignOut}>
         <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
           <path d="M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5v-2H5V5h5V3zm6.6 4.6-1.4 1.4 2 2H9v2h8.2l-2 2 1.4 1.4L21 12l-4.4-4.4z" />

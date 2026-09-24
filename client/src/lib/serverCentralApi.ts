@@ -1,3 +1,5 @@
+import type { ChosenStatus, PresenceStatus } from '../types'
+
 // Cliente HTTP para a API de server-central: diretório de server-channel
 // conhecidos pela conta autenticada. Ver docs/architecture.md, "Decisão:
 // descoberta de server-channel" — sem descoberta automática, só convite ou
@@ -33,6 +35,8 @@ async function parseJsonOrThrow<T>(res: Response): Promise<T> {
 export interface MyProfile {
   accountId: string
   oidcSubject: string
+  // Status escolhido. Ausente em server-central anterior ao campo.
+  status?: ChosenStatus
   createdAt: string
   // Chave pública de E2E publicada pela conta (base64), null se nenhuma.
   // Ausente só em server-central anterior ao campo -- ver
@@ -143,7 +147,15 @@ export interface RemoteFriend {
 
 export interface FriendPresence {
   accountId: string
+  // Ausente em server-central anterior ao status: aí só vale online.
+  status?: PresenceStatus
   online: boolean
+}
+
+// Status como os outros veem, a partir de um frame ou snapshot de presença,
+// com o online antigo como reserva.
+export function presenceStatusOf(p: { status?: PresenceStatus; online: boolean }): PresenceStatus {
+  return p.status ?? (p.online ? 'online' : 'offline')
 }
 
 export interface FriendInvite {
@@ -250,8 +262,14 @@ export function sendDirectMessageFrame(socket: WebSocket, recipientId: string, c
   socket.send(JSON.stringify({ type: 'dm.create', recipientId, ciphertext, nonce }))
 }
 
+// Avisa server-central que a pessoa ficou ociosa (ou voltou) nesta conexão;
+// ver hooks/useIdle.ts.
+export function sendPresenceIdleFrame(socket: WebSocket, idle: boolean): void {
+  if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'presence.idle', idle }))
+}
+
 type PresenceSocketFrame =
-  | { type: 'presence.update'; accountId: string; online: boolean }
+  | { type: 'presence.update'; accountId: string; status?: PresenceStatus; online: boolean }
   | { type: 'dm.created'; message: RemoteDirectMessage }
   | { type: 'error'; error: string }
 
@@ -269,4 +287,39 @@ export function decodePresenceSocketFrame(raw: string): PresenceSocketFrame | nu
   } catch {
     return null
   }
+}
+
+// PUT /api/me/status — grava o status escolhido (ver docs/architecture.md,
+// "Decisão: status de presença e avatar nas listas de membros").
+export async function setMyStatus(accessToken: string, status: ChosenStatus): Promise<void> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/me/status`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(text || `server-central: ${res.status} ${res.statusText}`)
+  }
+}
+
+// Conta de server-central por trás de um membro de server-channel, achada
+// pelo oidcSubject (a chave que os dois servidores têm em comum).
+export interface AccountSummary {
+  oidcSubject: string
+  accountId: string
+  displayName?: string
+  avatarUrl?: string
+}
+
+// POST /api/accounts/lookup — subjects sem conta em server-central (nunca
+// logaram lá) simplesmente não voltam.
+export async function lookupAccounts(accessToken: string, subjects: string[]): Promise<AccountSummary[]> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/accounts/lookup`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ subjects }),
+  })
+  const body = await parseJsonOrThrow<{ accounts: AccountSummary[] }>(res)
+  return body.accounts
 }

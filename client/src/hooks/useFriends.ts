@@ -5,10 +5,11 @@ import {
   fetchFriends,
   fetchPresenceSnapshot,
   openPresenceSocket,
+  presenceStatusOf,
   redeemFriendInvite,
   type RemoteFriend,
 } from '../lib/serverCentralApi'
-import type { Friend } from '../types'
+import type { Friend, PresenceStatus } from '../types'
 
 export type FriendsStatus = 'loading' | 'ready' | 'error'
 
@@ -25,24 +26,25 @@ interface UseFriendsResult {
   socket: WebSocket | null
 }
 
-function toFriend(remote: RemoteFriend, online: boolean): Friend {
+function toFriend(remote: RemoteFriend, status: PresenceStatus): Friend {
   return {
     accountId: remote.accountId,
     displayName: remote.displayName ?? remote.accountId,
     avatarUrl: remote.avatarUrl,
-    online,
+    online: status !== 'offline',
+    status,
     e2ePublicKey: remote.e2ePublicKey,
     lastMessageAt: remote.lastMessageAt,
   }
 }
 
-// Carrega a lista de amigos (server-central) e mantém o status online/offline
-// atualizado: um snapshot inicial via GET /api/presence, depois eventos ao
+// Carrega a lista de amigos (server-central) e mantém o status de presença
+// (online, ocupado, ausente ou offline) atualizado: um snapshot inicial via GET /api/presence, depois eventos ao
 // vivo via GET /api/presence/ws (ver docs/architecture.md, "Decisão: gateway
 // de presença em server-central").
 export function useFriends(accessToken: string): UseFriendsResult {
   const [remoteFriends, setRemoteFriends] = useState<RemoteFriend[]>([])
-  const [onlineIds, setOnlineIds] = useState<Set<string>>(new Set())
+  const [statusById, setStatusById] = useState<Map<string, PresenceStatus>>(new Map())
   const [status, setStatus] = useState<FriendsStatus>('loading')
   const [error, setError] = useState<string>()
   const [socket, setSocket] = useState<WebSocket | null>(null)
@@ -58,7 +60,7 @@ export function useFriends(accessToken: string): UseFriendsResult {
     return Promise.all([fetchFriends(accessToken), fetchPresenceSnapshot(accessToken)])
       .then(([friends, presence]) => {
         setRemoteFriends(friends)
-        setOnlineIds(new Set(presence.filter((p) => p.online).map((p) => p.accountId)))
+        setStatusById(new Map(presence.map((p) => [p.accountId, presenceStatusOf(p)])))
         setStatus('ready')
       })
       .catch((err) => {
@@ -80,15 +82,7 @@ export function useFriends(accessToken: string): UseFriendsResult {
       const frame = decodePresenceSocketFrame(String(event.data))
       if (!frame) return
       if (frame.type === 'presence.update') {
-        setOnlineIds((prev) => {
-          const next = new Set(prev)
-          if (frame.online) {
-            next.add(frame.accountId)
-          } else {
-            next.delete(frame.accountId)
-          }
-          return next
-        })
+        setStatusById((prev) => new Map(prev).set(frame.accountId, presenceStatusOf(frame)))
       } else if (frame.type === 'dm.created') {
         // Atualiza lastMessageAt do amigo em memória em vez de esperar o
         // próximo load() — o mesmo evento já chega aqui independente de qual
@@ -125,7 +119,7 @@ export function useFriends(accessToken: string): UseFriendsResult {
     [accessToken, load],
   )
 
-  const friends = remoteFriends.map((f) => toFriend(f, onlineIds.has(f.accountId)))
+  const friends = remoteFriends.map((f) => toFriend(f, statusById.get(f.accountId) ?? 'offline'))
 
   return { friends, status, error, createInvite, redeemInvite, socket }
 }

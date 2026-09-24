@@ -28,12 +28,22 @@ export interface Category {
   channels: Channel[]
 }
 
-// Membro de um server-channel (ver hooks/useServerMembers.ts). Não há
-// presença/online por membro de server-channel ainda (diferente da lista de
-// amigos, que vem de server-central com presença via WebSocket) — só voz
-// tem um conceito de "quem está no canal agora", ver VoiceChannelView.
+// Status de presença como os outros veem (ver docs/architecture.md, "Decisão:
+// status de presença e avatar nas listas de membros"). "invisible" nunca
+// chega aqui: para os outros, quem escolheu invisível está offline.
+export type PresenceStatus = 'online' | 'busy' | 'away' | 'offline'
+
+// Status que a pessoa escolhe para si (PUT /api/me/status em server-central).
+export type ChosenStatus = 'online' | 'busy' | 'away' | 'invisible'
+
+// Membro de um server-channel (ver hooks/useServerMembers.ts). O status de
+// presença não vem daqui: server-channel não conhece presença. O client liga
+// o membro à conta de server-central pelo oidcSubject (avatar) e pega o
+// status na lista de amigos, porque status só é visível entre amigos.
 export interface Member {
   id: string
+  // Ausente em server-channel anterior ao campo.
+  oidcSubject?: string
   nickname: string
   isOwner: boolean
   roleIds: string[]
@@ -66,7 +76,10 @@ export interface Friend {
   accountId: string
   displayName: string
   avatarUrl?: string
+  // online = status diferente de 'offline'; mantido porque a lista de amigos
+  // separa os grupos por ele.
   online: boolean
+  status: PresenceStatus
   // Chave pública de E2E do amigo (base64), se já publicada -- ver
   // crypto/e2e.ts e docs/architecture.md, "Decisão: criptografia
   // ponta-a-ponta em DMs". Ausente = ainda não dá pra enviar DM cifrada.

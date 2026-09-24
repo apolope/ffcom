@@ -55,10 +55,10 @@ func handleVoiceToken(channels *store.ChannelStore, roles *store.RoleStore, over
 			return
 		}
 
-		displayName := member.ID
-		if member.Nickname != nil {
-			displayName = *member.Nickname
-		}
+		// Nome da sala LiveKit (título do vídeo, lista de quem está na sala):
+		// apelido, senão o nome do perfil do Authentik. Ver
+		// docs/architecture.md, "Decisão: nome exibido do membro".
+		displayName := member.DisplayName()
 
 		token, err := livekit.NewAccessToken(apiKey, apiSecret, member.ID, displayName, channel.ID)
 		if err != nil {

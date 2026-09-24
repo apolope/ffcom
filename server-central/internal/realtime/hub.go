@@ -8,75 +8,146 @@ package realtime
 
 import "sync"
 
+// Status que os amigos veem (ver Hub.Effective). "invisible" nunca sai daqui:
+// para os outros, é "offline".
+const (
+	StatusOnline  = "online"
+	StatusBusy    = "busy"
+	StatusAway    = "away"
+	StatusOffline = "offline"
+
+	chosenInvisible = "invisible"
+)
+
+// account é o estado em memória de uma conta com pelo menos uma conexão: o
+// status que ela escolheu e, por conexão, se aquela conexão está ociosa
+// (ausente automático, informado pelo client com "presence.idle").
+type account struct {
+	chosen  string
+	clients map[*Client]bool
+}
+
 // Hub agrupa os clients conectados, particionados por account_id.
 type Hub struct {
-	mu      sync.Mutex
-	clients map[string]map[*Client]struct{}
+	mu       sync.Mutex
+	accounts map[string]*account
 }
 
 // NewHub cria um Hub vazio.
 func NewHub() *Hub {
-	return &Hub{clients: make(map[string]map[*Client]struct{})}
+	return &Hub{accounts: make(map[string]*account)}
 }
 
-// Register associa client à conta accountID. wasOffline indica se essa
-// conta não tinha nenhum client conectado antes deste registro — sinal
-// para o chamador emitir presence.update online=true para os amigos.
-func (h *Hub) Register(accountID string, client *Client) (wasOffline bool) {
+// effective calcula o status que os amigos veem. Chamar com h.mu travado.
+func (h *Hub) effective(accountID string) string {
+	a, ok := h.accounts[accountID]
+	if !ok || len(a.clients) == 0 || a.chosen == chosenInvisible {
+		return StatusOffline
+	}
+	if a.chosen != StatusOnline {
+		return a.chosen
+	}
+	// Online com todas as conexões ociosas vira ausente: basta um dispositivo
+	// em uso para a pessoa continuar online.
+	for _, idle := range a.clients {
+		if !idle {
+			return StatusOnline
+		}
+	}
+	return StatusAway
+}
+
+// Effective devolve o status de accountID como os amigos o veem.
+func (h *Hub) Effective(accountID string) string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.effective(accountID)
+}
+
+// Register associa client à conta accountID, com o status escolhido lido do
+// banco na conexão. Devolve o status visível antes e depois: se mudou, o
+// chamador emite presence.update para os amigos.
+func (h *Hub) Register(accountID string, client *Client, chosen string) (before, after string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	clients, ok := h.clients[accountID]
+	before = h.effective(accountID)
+	a, ok := h.accounts[accountID]
 	if !ok {
-		clients = make(map[*Client]struct{})
-		h.clients[accountID] = clients
+		a = &account{clients: make(map[*Client]bool)}
+		h.accounts[accountID] = a
 	}
-	wasOffline = len(clients) == 0
-	clients[client] = struct{}{}
-	return wasOffline
+	a.chosen = chosen
+	a.clients[client] = false
+	return before, h.effective(accountID)
 }
 
-// Unregister remove client da conta accountID. wentOffline indica se essa
-// era a última conexão da conta — sinal para o chamador emitir
-// presence.update online=false para os amigos.
-func (h *Hub) Unregister(accountID string, client *Client) (wentOffline bool) {
+// Unregister remove client da conta accountID. Devolve o status visível
+// antes e depois (a última conexão caindo vira offline; uma conexão ativa
+// caindo pode deixar a conta ausente).
+func (h *Hub) Unregister(accountID string, client *Client) (before, after string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	clients, ok := h.clients[accountID]
+	before = h.effective(accountID)
+	a, ok := h.accounts[accountID]
 	if !ok {
-		return false
+		return before, before
 	}
-	delete(clients, client)
-	if len(clients) == 0 {
-		delete(h.clients, accountID)
-		return true
+	delete(a.clients, client)
+	if len(a.clients) == 0 {
+		delete(h.accounts, accountID)
 	}
-	return false
+	return before, h.effective(accountID)
 }
 
-// IsOnline diz se accountID tem pelo menos um client conectado agora.
-func (h *Hub) IsOnline(accountID string) bool {
+// SetIdle marca uma conexão como ociosa ou em uso. Devolve o status visível
+// antes e depois.
+func (h *Hub) SetIdle(accountID string, client *Client, idle bool) (before, after string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	return len(h.clients[accountID]) > 0
+	before = h.effective(accountID)
+	if a, ok := h.accounts[accountID]; ok {
+		if _, registered := a.clients[client]; registered {
+			a.clients[client] = idle
+		}
+	}
+	return before, h.effective(accountID)
+}
+
+// SetChosen troca o status escolhido de uma conta conectada (no-op se ela
+// não tiver conexão: o banco já guarda a escolha para a próxima). Devolve o
+// status visível antes e depois.
+func (h *Hub) SetChosen(accountID, chosen string) (before, after string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	before = h.effective(accountID)
+	if a, ok := h.accounts[accountID]; ok {
+		a.chosen = chosen
+	}
+	return before, h.effective(accountID)
 }
 
 // SendTo entrega payload a todos os clients conectados de accountID (no-op
-// se a conta não estiver online). Um client cuja fila de envio estiver
+// se a conta não estiver conectada). Um client cuja fila de envio estiver
 // cheia é considerado travado e desconectado, em vez de bloquear o envio
 // para os demais.
 func (h *Hub) SendTo(accountID string, payload []byte) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	for client := range h.clients[accountID] {
+	a, ok := h.accounts[accountID]
+	if !ok {
+		return
+	}
+	for client := range a.clients {
 		select {
 		case client.send <- payload:
 		default:
 			close(client.send)
-			delete(h.clients[accountID], client)
+			delete(a.clients, client)
 		}
 	}
 }

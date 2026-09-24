@@ -7,6 +7,9 @@ interface FfcomElectronBridge {
   // Chamado a cada aperto do atalho global; devolve a função que remove o
   // listener.
   onMuteShortcut(callback: () => void): () => void
+  // Segundos sem teclado nem mouse no sistema inteiro (powerMonitor), para
+  // o "ausente" automático (hooks/useIdle.ts).
+  getSystemIdleSeconds(): Promise<number>
 }
 
 interface Window {

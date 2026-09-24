@@ -30,7 +30,7 @@ func (s *MemberStore) GetOrCreateByOIDCSubject(ctx context.Context, oidcSubject 
 		INSERT INTO members (oidc_subject)
 		VALUES ($1)
 		ON CONFLICT (oidc_subject) DO UPDATE SET oidc_subject = EXCLUDED.oidc_subject, removed_at = NULL
-		RETURNING id, oidc_subject, nickname, joined_at, is_owner, removed_at
+		RETURNING id, oidc_subject, nickname, profile_name, joined_at, is_owner, removed_at
 	`
 	return s.scanOne(ctx, query, oidcSubject)
 }
@@ -45,7 +45,7 @@ func (s *MemberStore) CreateFounder(ctx context.Context, oidcSubject string) (Me
 	const query = `
 		INSERT INTO members (oidc_subject, is_owner)
 		VALUES ($1, true)
-		RETURNING id, oidc_subject, nickname, joined_at, is_owner, removed_at
+		RETURNING id, oidc_subject, nickname, profile_name, joined_at, is_owner, removed_at
 	`
 	return s.scanOne(ctx, query, oidcSubject)
 }
@@ -59,7 +59,7 @@ func (s *MemberStore) CreateFounder(ctx context.Context, oidcSubject string) (Me
 // casos (precisa de convite novo para voltar).
 func (s *MemberStore) GetByOIDCSubject(ctx context.Context, oidcSubject string) (Member, error) {
 	const query = `
-		SELECT id, oidc_subject, nickname, joined_at, is_owner, removed_at
+		SELECT id, oidc_subject, nickname, profile_name, joined_at, is_owner, removed_at
 		FROM members WHERE oidc_subject = $1 AND removed_at IS NULL
 	`
 	return s.scanOne(ctx, query, oidcSubject)
@@ -80,8 +80,19 @@ func (s *MemberStore) Count(ctx context.Context) (int, error) {
 // preenchido) — usado por handleKickMember/handleBanMember para resolver o
 // oidc_subject do alvo antes de agir, sem o filtro de GetByOIDCSubject.
 func (s *MemberStore) GetByID(ctx context.Context, id string) (Member, error) {
-	const query = `SELECT id, oidc_subject, nickname, joined_at, is_owner, removed_at FROM members WHERE id = $1`
+	const query = `SELECT id, oidc_subject, nickname, profile_name, joined_at, is_owner, removed_at FROM members WHERE id = $1`
 	return s.scanOne(ctx, query, id)
+}
+
+// SetProfileName grava (ou limpa, com nil) o nome do perfil do Authentik do
+// membro, mandado pelo próprio client; ver Member.DisplayName.
+func (s *MemberStore) SetProfileName(ctx context.Context, id string, profileName *string) (Member, error) {
+	const query = `
+		UPDATE members SET profile_name = $2
+		WHERE id = $1
+		RETURNING id, oidc_subject, nickname, profile_name, joined_at, is_owner, removed_at
+	`
+	return s.scanOne(ctx, query, id, profileName)
 }
 
 // SetNickname define ou limpa (nickname == nil) o apelido do membro neste servidor.
@@ -89,7 +100,7 @@ func (s *MemberStore) SetNickname(ctx context.Context, id string, nickname *stri
 	const query = `
 		UPDATE members SET nickname = $2
 		WHERE id = $1
-		RETURNING id, oidc_subject, nickname, joined_at, is_owner, removed_at
+		RETURNING id, oidc_subject, nickname, profile_name, joined_at, is_owner, removed_at
 	`
 	return s.scanOne(ctx, query, id, nickname)
 }
@@ -103,7 +114,7 @@ func (s *MemberStore) Kick(ctx context.Context, id string) (Member, error) {
 	const query = `
 		UPDATE members SET removed_at = now()
 		WHERE id = $1 AND removed_at IS NULL
-		RETURNING id, oidc_subject, nickname, joined_at, is_owner, removed_at
+		RETURNING id, oidc_subject, nickname, profile_name, joined_at, is_owner, removed_at
 	`
 	member, err := s.scanOne(ctx, query, id)
 	if err != nil {
@@ -122,7 +133,7 @@ func (s *MemberStore) Kick(ctx context.Context, id string) (Member, error) {
 // docs/architecture.md, "Decisão: kick/ban de membro").
 func (s *MemberStore) List(ctx context.Context) ([]Member, error) {
 	const query = `
-		SELECT id, oidc_subject, nickname, joined_at, is_owner, removed_at
+		SELECT id, oidc_subject, nickname, profile_name, joined_at, is_owner, removed_at
 		FROM members WHERE removed_at IS NULL ORDER BY joined_at ASC
 	`
 	rows, err := s.pool.Query(ctx, query)
@@ -134,7 +145,7 @@ func (s *MemberStore) List(ctx context.Context) ([]Member, error) {
 	var out []Member
 	for rows.Next() {
 		var m Member
-		if err := rows.Scan(&m.ID, &m.OIDCSubject, &m.Nickname, &m.JoinedAt, &m.IsOwner, &m.RemovedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.OIDCSubject, &m.Nickname, &m.ProfileName, &m.JoinedAt, &m.IsOwner, &m.RemovedAt); err != nil {
 			return nil, fmt.Errorf("members: scan: %w", err)
 		}
 		out = append(out, m)
@@ -147,7 +158,7 @@ func (s *MemberStore) List(ctx context.Context) ([]Member, error) {
 
 func (s *MemberStore) scanOne(ctx context.Context, query string, args ...any) (Member, error) {
 	var m Member
-	err := s.pool.QueryRow(ctx, query, args...).Scan(&m.ID, &m.OIDCSubject, &m.Nickname, &m.JoinedAt, &m.IsOwner, &m.RemovedAt)
+	err := s.pool.QueryRow(ctx, query, args...).Scan(&m.ID, &m.OIDCSubject, &m.Nickname, &m.ProfileName, &m.JoinedAt, &m.IsOwner, &m.RemovedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Member{}, ErrNotFound
 	}
