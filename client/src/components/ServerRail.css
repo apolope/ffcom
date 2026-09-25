@@ -7,7 +7,124 @@
   align-items: center;
   padding: 12px 0;
   gap: 8px;
+  min-height: 0;
+}
+
+/* Faixa do meio (servidores): a única que rola. Ocupa a largura toda do
+   rail para a pílula de não lido (left: -12px do ícone) não ser cortada pelo
+   overflow. .rail-scroll-area é o contêiner posicionado das setas
+   (.rail-scroll-hint), que ficam por cima da lista sem rolar junto.
+
+   Divisórias: linhas pontilhadas no acento (a mesma cor das setas),
+   desenhadas por cima (::before e ::after), só do lado em que a lista
+   continua escondida (more-up / more-down, de useScrollEdges).
+   No topo a casinha emenda na lista e no fim a lista emenda no "+", com o
+   mesmo espaço de 8px de entre dois servidores. Por isso as linhas não
+   ocupam espaço, e a margem negativa devolve os 4px de respiro interno da
+   lista, que existe para o indicador de arrasto (box-shadow de 3px) do
+   primeiro e do último ícone não ser cortado pelo overflow. */
+.rail-scroll-area {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  margin: -4px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rail-scroll-area::before,
+.rail-scroll-area::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  left: 12px;
+  right: 12px;
+  height: 0;
+  border-top: 2px dotted var(--accent);
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+}
+
+.rail-scroll-area::before {
+  top: 0;
+}
+
+.rail-scroll-area::after {
+  bottom: 0;
+}
+
+.rail-scroll-area.more-up::before,
+.rail-scroll-area.more-down::after {
+  opacity: 1;
+}
+
+.rail-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+/* Setas de "tem mais servidores" (ServerRail.tsx, useScrollEdges): pílula
+   pequena centralizada, por cima dos ícones. Só é renderizada enquanto há
+   para onde rolar naquela direção. No acento, e não em cinza, para não se
+   confundir com os ícones de servidor. */
+.rail-scroll-hint {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: var(--shadow-popover);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.rail-scroll-hint.up {
+  top: 6px;
+}
+
+.rail-scroll-hint.up svg {
+  transform: rotate(180deg);
+}
+
+.rail-scroll-hint.down {
+  bottom: 6px;
+}
+
+.rail-scroll-hint:hover {
+  background: var(--accent-hover);
+}
+
+/* Amigos (filho direto do rail) não encolhe quando a lista de servidores
+   ocupa o espaço que sobra: sem isto, o flex achatava o botão de 48px. */
+.server-rail > .server-icon {
+  flex-shrink: 0;
+}
+
+.rail-footer {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
 }
 
 .server-rail ul {
@@ -56,13 +173,33 @@
 
 .server-icon:hover {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border-radius: 30%;
+}
+
+/* Servidor aberto com o mouse em cima: roxo mais forte, para destacar do
+   estado ativo parado. */
+.server-icon.active:hover {
+  background: var(--accent-hover);
+}
+
+/* Arrastar ícone (ServerRail.tsx): o arrastado fica apagado e uma linha na
+   cor de destaque marca onde ele cai. */
+.server-rail li.dragging {
+  opacity: 0.4;
+}
+
+.server-rail li.drop-before {
+  box-shadow: 0 -3px 0 var(--accent);
+}
+
+.server-rail li.drop-after {
+  box-shadow: 0 3px 0 var(--accent);
 }
 
 .server-icon.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border-radius: 30%;
 }
 
@@ -71,18 +208,20 @@
   color: var(--accent);
 }
 
-.server-rail > .server-icon {
-  margin-bottom: 4px;
+/* O hover pinta o fundo na cor de destaque; sem isto o "+" (também na cor
+   de destaque) sumia. */
+.server-icon.add-server:hover {
+  color: var(--on-accent);
 }
 
+
 .update-button {
-  margin-top: auto;
   width: 48px;
   height: 48px;
   border-radius: 50%;
   border: none;
   background: var(--bg-tertiary);
-  color: #23a55a;
+  color: var(--success);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -93,20 +232,13 @@
 }
 
 .update-button:hover {
-  background: #23a55a;
-  color: #fff;
+  background: var(--success);
+  color: var(--on-accent);
   border-radius: 30%;
-}
-
-/* Com o botão de atualizar na tela, ele empurra o bloco da conta para baixo
-   (margin-top: auto); sem ele, a conta faz isso sozinha. */
-.update-button + .account-button {
-  margin-top: 0;
 }
 
 .account-button {
   --presence-ring: var(--bg-deep);
-  margin-top: auto;
   width: 44px;
   height: 44px;
   border-radius: 50%;

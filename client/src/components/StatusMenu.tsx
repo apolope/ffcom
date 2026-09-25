@@ -1,11 +1,13 @@
 import { useEffect, useRef } from 'react'
+import { useMenuDismiss } from '../hooks/useMenuDismiss'
 import type { ChosenStatus } from '../types'
 import { STATUS_LABELS } from './PresenceContext'
+import './RailMenu.css'
 import './StatusMenu.css'
 
 const OPTIONS: { status: ChosenStatus; hint?: string }[] = [
   { status: 'online' },
-  { status: 'busy' },
+  { status: 'busy', hint: 'Notificações ficam desativadas' },
   { status: 'away' },
   { status: 'invisible', hint: 'Aparece offline para os amigos' },
 ]
@@ -17,42 +19,30 @@ interface StatusMenuProps {
   chosen: ChosenStatus
   onChoose: (status: ChosenStatus) => void
   onEditAvatar: () => void
+  // Apelido é por server-channel: só vem com um servidor aberto.
+  onEditNickname?: () => void
   onClose: () => void
 }
 
-// Menu do próprio avatar no ServerRail: escolher o status e abrir o diálogo
-// de avatar. Posição fixa ao lado do botão, porque o rail rola
+// Menu do próprio avatar no ServerRail: escolher o status e abrir os
+// diálogos de apelido (do servidor aberto) e de avatar. Posição fixa ao lado do botão, porque o rail rola
 // (overflow-y) e cortaria um menu posicionado dentro dele. Fecha com Esc ou
 // clique fora. Ver docs/architecture.md, "Decisão: status de presença e
 // avatar nas listas de membros".
-export function StatusMenu({ anchor, chosen, onChoose, onEditAvatar, onClose }: StatusMenuProps) {
+export function StatusMenu({ anchor, chosen, onChoose, onEditAvatar, onEditNickname, onClose }: StatusMenuProps) {
   const ref = useRef<HTMLDivElement>(null)
 
+  useMenuDismiss(ref, anchor, onClose)
   useEffect(() => {
     ref.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus()
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    const onPointer = (event: PointerEvent) => {
-      const target = event.target as Node
-      if (!ref.current?.contains(target) && !anchor.contains(target)) onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    // Captura: o clique que abriu o menu já passou, e o próximo fora dele
-    // fecha antes de chegar a outro botão.
-    window.addEventListener('pointerdown', onPointer, true)
-    return () => {
-      window.removeEventListener('keydown', onKey)
-      window.removeEventListener('pointerdown', onPointer, true)
-    }
-  }, [anchor, onClose])
+  }, [])
 
   const rect = anchor.getBoundingClientRect()
 
   return (
     <div
       ref={ref}
-      className="status-menu"
+      className="rail-menu"
       role="menu"
       aria-label="Seu status"
       style={{ left: rect.right + 8, bottom: Math.max(8, window.innerHeight - rect.bottom) }}
@@ -63,7 +53,7 @@ export function StatusMenu({ anchor, chosen, onChoose, onEditAvatar, onClose }: 
           type="button"
           role="menuitemradio"
           aria-checked={status === chosen}
-          className="status-menu-item"
+          className="rail-menu-item"
           onClick={() => {
             onChoose(status)
             onClose()
@@ -77,10 +67,23 @@ export function StatusMenu({ anchor, chosen, onChoose, onEditAvatar, onClose }: 
         </button>
       ))}
       <hr />
+      {onEditNickname && (
+        <button
+          type="button"
+          role="menuitem"
+          className="rail-menu-item"
+          onClick={() => {
+            onEditNickname()
+            onClose()
+          }}
+        >
+          Alterar apelido
+        </button>
+      )}
       <button
         type="button"
         role="menuitem"
-        className="status-menu-item"
+        className="rail-menu-item"
         onClick={() => {
           onEditAvatar()
           onClose()

@@ -77,6 +77,7 @@ type KnownServer struct {
 	Address   string
 	Name      string
 	IconURL   *string
+	Position  int
 	AddedAt   time.Time
 }
 

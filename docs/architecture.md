@@ -674,6 +674,22 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** os mesmos gatilhos já registrados na decisão de `server-central` (múltiplas réplicas de `server-channel` tornariam um bucket em memória por processo insuficiente); ou se um self-hoster relatar falso positivo em uso legítimo (ajustar via env, sem mudança de código).
 
+## Decisão: rate limit por usuário em vez de por IP
+
+**Contexto:** testando duas contas no mesmo PC contra o mesmo `server-channel`, o client passou a receber `429` em `GET /api/channels/{id}/messages` e `GET /api/me`. Com a chave por IP, as duas contas (e qualquer pessoa atrás do mesmo NAT: escritório, casa, CGNAT de operadora) dividiam um único balde de 20 fichas, e duas instâncias recarregando juntas já esgotavam o burst. Em produção isso castigaria um grupo inteiro na mesma rede por causa do uso normal de cada um.
+
+**Alternativas consideradas:** (1) subir o limite por IP, que só adia o problema e afrouxa a proteção contra quem abusa sozinho; (2) aplicar o limiter depois de `VerifyToken`/`auth.Middleware`, rota a rota, o que deixaria requisição sem token fora de qualquer limite; (3) identificar a requisição no próprio middleware de rate limit (adotada).
+
+**Decisão:** nos dois servidores, `withRateLimit` chama `auth.IdentifyRequest`, que verifica o token (Bearer ou subprotocolo do WebSocket) e, se válido, devolve o `sub` e anexa ao contexto. A chave vira `sub:<sub>`; sem token ou com token inválido, `ip:<ip>` como antes. `VerifyToken` (server-channel) e `auth.Middleware` (server-central) reaproveitam o `sub` do contexto em vez de verificar o token de novo, então a requisição autenticada continua com uma verificação só; token inválido é verificado duas vezes, mas esse caminho já está no balde do IP. O limiter de frames do WebSocket já era por membro, e não mudou.
+
+**Burst padrão de 20 para 60:** medido no navegador (2026-09-25), abrir o app em dev dispara 16 requisições ao `server-channel` selecionado em 100 ms (o `StrictMode` do React roda cada efeito duas vezes; em produção são 8 a 10). Com 20 fichas, recarregar duas vezes seguidas ou ter uma segunda instância da mesma conta já dava 429. O RPM continua 120, então o teto sustentado por usuário é o mesmo; o que muda é a folga da rajada de abertura. Como a chave agora é o usuário, um burst maior não abre espaço para um IP inteiro. O orçamento de cada tela e poll do client está em `docs/rate-limits.md`.
+
+**Razão:** o `sub` é a identidade que o resto do sistema já usa para autorização, e atribui o gasto a quem gerou. Flood anônimo continua limitado por IP, sem conseguir afetar usuários autenticados daquele IP porque os baldes são separados. Um usuário não consegue fugir do limite trocando de `sub` sem ter tokens válidos de outras contas do Authentik.
+
+**Verificado (2026-09-25):** `go vet` e `go test` em `internal/httpapi` dos dois módulos, com testes novos para usuários distintos no mesmo IP e para o fallback por IP sem token.
+
+**Revisitar quando:** os gatilhos de múltiplas réplicas das duas decisões de rate limit acima; ou se aparecer abuso distribuído com muitas contas válidas, caso em que um teto adicional por IP, bem mais alto que o por usuário, passa a fazer sentido.
+
 ## Decisão: kick/ban de membro — remoção lógica (`removed_at`), banimento por `oidc_subject`
 
 **Contexto:** implementar o item de TODO "Kick/ban de membro" — até aqui não havia nenhuma forma de remover um membro problemático de um `server-channel`, só o sistema de bits de permissão sem bit dedicado a isso.
@@ -934,7 +950,7 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 5. **Falha é silenciosa:** servidor fora do ar ou membro removido só fica sem pílula; o rail não tem onde mostrar erro.
 
 **Escopo aceito:**
-- **Atraso de até ~60s** para acender a pílula de um servidor fechado. O intervalo é maior que os 20s do servidor aberto porque são N requisições, e cada `server-channel` limita por IP (120/min por padrão, ver "Decisão: rate limiting em server-channel"): 1/min fica longe disso mesmo com o poll de estrutura e o de participantes de voz do servidor aberto.
+- **Atraso de até ~60s** para acender a pílula de um servidor fechado. O intervalo é maior que os 20s do servidor aberto porque são N requisições, e cada `server-channel` limita por usuário (120/min por padrão, era por IP quando isto foi escrito, ver "Decisão: rate limiting em server-channel"): 1/min fica longe disso mesmo com o poll de estrutura e o de participantes de voz do servidor aberto.
 - **Poll roda também com a aba em segundo plano.** Revisitar se a lista de servidores por conta crescer a ponto de pesar.
 
 **Razão:** reaproveita o endpoint e os cursores que já existem, sem mudança de backend, e isola o custo novo num hook com intervalo próprio.
@@ -1303,6 +1319,44 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 **Consequências aceitas:** GIF animado vira imagem parada (o diálogo avisa). O servidor continua aceitando upload sem recorte de qualquer client que não passe por esta tela.
 
 **Verificado (2026-09-23):** o componente isolado no Chrome via Vite, com imagem de teste paisagem: o lado de fora do círculo aparece escurecido, as prévias acompanham, o arrasto para na borda sem deixar vazio, a roda leva o zoom a 1,61 em 5 passos mantendo o centro, e "Salvar" gerou WebP 512×512 de 8,9 KB com os pixels da região mostrada. `tsc`, `lint`, `build`. **Não verificado:** o envio real ao server-central e o toque no celular.
+
+## Decisão: permissões granulares de categoria e canal, e ordenar categorias arrastando
+
+**Contexto (2026-09-25):** o dono pediu para dar a um perfil (role) só parte da administração da estrutura, com opções separadas para criar, ordenar e excluir canais e o mesmo para categorias. Pediu também para reordenar categorias arrastando, com a ordem valendo para todos, e um catálogo das permissões num `.md` para consulta. Até aqui tudo isso estava sob `ManageChannels`, e a ordem só mudava pelo `position` do `PATCH`, que a UI não expunha (ver "Decisão: gerenciar categorias e canais", "Escopo aceito").
+
+**Alternativas consideradas:**
+- **Trocar `ManageChannels` pelos bits novos:** exigiria migration para converter as roles existentes e deixaria sem casa o "renomear", que não foi pedido como opção própria. Descartada.
+- **Fatias de `ManageChannels`, que continua valendo tudo:** escolhida. Roles já salvas não mudam de comportamento, e o mesmo desenho já foi usado em `CreateInvites` × `ManageInvites`.
+- **Reordenar com um `PATCH` de `position` por categoria:** N requisições por arraste e ordem inconsistente se uma falhar no meio. Descartada em favor de uma rota que grava a ordem inteira numa transação.
+
+**Decisão:**
+1. **Seis bits novos no fim do bloco:** `CreateChannels=1024`, `ReorderChannels=2048`, `DeleteChannels=4096`, `CreateCategories=8192`, `ReorderCategories=16384`, `DeleteCategories=32768`. Cada ação de estrutura aceita `ManageChannels` ou a fatia dela (`requireStructure`/`allowStructure`, `internal/httpapi/channels_admin.go`). "Ordenar" de canal cobre também mover de categoria. Renomear continua só com `ManageChannels`: o `PATCH` com `name` exige esse bit, e o client passou a mandar só os campos que mudaram. Qualquer bit de estrutura (`permissions.StructureBits`) mostra as categorias vazias em `GET /api/categories`.
+2. **`PUT /api/categories/order` com `{ids}`:** grava posições 0..n-1 numa transação, travando as linhas com `SELECT ... FOR UPDATE`. Se `ids` não for exatamente o conjunto atual (alguém criou ou apagou categoria no meio tempo), responde `409` em vez de gravar uma ordem baseada numa lista velha. Categoria nova continua indo para o fim (`max(position) + 1`).
+3. **Client:** na `ChannelSidebar`, os canais ficam recuados sob a categoria, o "+" de novo canal fica sempre visível na ponta direita do cabeçalho, e o "+ Categoria" do topo virou um card "Criar nova categoria" depois da última categoria. O cabeçalho da categoria é arrastável (HTML5 drag and drop) para quem pode ordenar, com uma linha de destaque mostrando onde ela vai cair. A ordem nova aparece na hora (`useServerStructure.reorderLocally`), e o `refresh()` depois traz a do servidor, que é a antiga em caso de falha ou `409`. A categoria sintética "Canais" (sem categoria) não se move e fica no topo. Os diálogos desabilitam o que a pessoa não pode mudar, e "Apagar" só aparece com o bit de excluir. `StructurePermissions`, em `lib/permissions.ts`, concentra o cálculo.
+4. **Catálogo em `docs/permissions.md`**, com todos os bits, o nível de checagem (base ou canal) e o passo a passo para acrescentar um bit novo.
+
+**Escopo aceito:**
+- **Os outros membros veem a ordem nova em até 20s**, no próximo poll de estrutura, igual a qualquer outra mudança de estrutura.
+
+**Complemento (2026-09-25, mesmo dia): arrastar canal, job de gravação e central de mensagens.**
+- **Arrastar canal**, dentro da categoria ou para outra (inclusive para "Canais", que é tirar da categoria), para quem tem `ReorderChannels`. `PUT /api/channels/order` com `{groups: [{categoryId, ids}]}` grava numa transação a ordem das categorias afetadas. Canal da categoria que não veio na lista vai para o fim dela, na ordem em que estava: quem arrasta pode não enxergar um canal privado, e exigir a lista completa (como nas categorias) daria `409` sempre para essa pessoa.
+- **Job de gravação** em `useServerStructure`: a ordem arrastada fica aplicada por cima da vinda do servidor (o poll não desfaz o arraste) até ser gravada. Em caso de falha, tenta de novo com espera de 2s, dobrando até 30s, sem limite de tentativas. Cada tentativa relê a estrutura e ajusta a ordem a ela (item apagado sai, categoria nova vai para o fim), para um `409` não se repetir para sempre. Só a primeira falha de uma sequência mostra mensagem ("Falha ao salvar a ordem das categorias e canais…"). O job morre com a troca de servidor ou com o reload, e a tela volta à ordem do servidor. Na gravação bem-sucedida, a estrutura é relida antes de largar a ordem pendente, para a tela não piscar de volta à ordem do último poll.
+- **Central de mensagens** (`hooks/useNotificationCenter.ts` + `components/NotificationStack.tsx`), pensada para outros avisos futuros: mensagens curtas no canto inferior direito, empilhadas por ordem de chegada (a nova entra embaixo e empurra as mais antigas para cima), cada uma sumindo em 5s ou no ×. Componentes abaixo do `App` emitem com `useNotify()`. Com o status escolhido "Ocupado", as mensagens são descartadas, não guardadas, porque um aviso de 5s perde o sentido minutos depois. O menu de status avisa isso no subtexto do "Ocupado".
+
+**Verificado (2026-09-25, complemento):** `go vet` e `go test` com banco (Postgres 17 descartável), incluindo `PUT /api/channels/order` (canal inexistente dá `409`, canal não listado vai para depois). No Chrome logado no ambiente local: arrastar canal (simulado com `DragEvent`) mostra a linha de destino e troca a ordem na hora; com os `PUT` forçados a falhar, apareceu uma única mensagem, as tentativas vieram em 0s, 2s e 6s, e depois que o servidor voltou o job gravou sozinho (conferido no Postgres); o arraste de volta gravou sem mensagem. **Não verificado:** o silêncio das mensagens com o status "Ocupado" ativo, e o arraste feito com o mouse de verdade.
+
+**Verificado (2026-09-25):** `go vet` e `go test` de `server-channel`; `TestManageChannelsEndToEnd` e o novo `TestGranularStructurePermissions` (fatias liberam só a ação delas, renomear pede `ManageChannels`, reordenação com lista incompleta dá `409`, reordenação completa grava 0..n-1) contra Postgres 17 descartável. Client: `tsc` e `lint`. **Não verificado:** arrastar no browser logado.
+
+## Decisão: ordem dos servidores no rail, por conta, e job de gravação compartilhado
+
+**Contexto (2026-09-25):** o dono pediu para arrastar os ícones de servidor no rail, com a ordem salva no servidor. O rail listava pelo mais recente primeiro (`ORDER BY added_at DESC`), sem ordem própria.
+
+**Decisão:**
+1. **Ordem por conta em `server-central`:** migration `0006_known_server_position` põe `position` em `known_servers`, preenchida com a ordem que o client já mostrava (mais recente primeiro). `GET /api/servers` ordena por ela. Servidor novo entra no topo (`MIN(position) - 1`), mantendo o comportamento anterior, e readicionar um que já está na lista não mexe na posição. `PUT /api/servers/order` com `{ids}` grava a lista inteira numa transação, e responde `409` se ela não for exatamente a da conta (servidor adicionado ou removido em outra aba ou dispositivo). É a ordem de quem arrasta, então não há permissão envolvida: cada conta só mexe no próprio rail.
+2. **Client:** os ícones do `ServerRail` arrastam com HTML5 drag and drop, com a mesma linha de destaque da sidebar. `useKnownServers.saveOrder` aplica a ordem na hora e grava com o mesmo job de tentar até conseguir das categorias. O job foi extraído para `lib/retryingSaver.ts` e é usado pelos dois. Cada tentativa relê a lista e ajusta a ordem a ela, com servidor novo no topo e removido fora. A primeira falha mostra "Falha ao salvar a ordem dos servidores…".
+3. **Visual (mesmo pedido):** o servidor aberto fica num roxo mais escuro no hover (`color-mix` da cor de destaque), e o card "Criar nova categoria" ficou da altura do texto, só com o "+", mostrando o texto no hover ou no foco pelo teclado.
+
+**Verificado (2026-09-25):** `go vet`/`go test` de `server-central` (não há teste com banco nesse módulo); a migration rodou no Postgres local ao subir o container. No Chrome logado no ambiente local, com um segundo servidor temporário inserido no banco e depois removido, o arraste (simulado com `DragEvent`) trocou a ordem na tela e gravou no banco. Hover do card e do servidor ativo conferidos na tela. **Não verificado:** falha ao gravar a ordem do rail (o caminho de falha é o mesmo helper já testado com as categorias) e o arraste com o mouse de verdade.
 
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 

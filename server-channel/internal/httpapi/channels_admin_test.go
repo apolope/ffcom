@@ -235,3 +235,132 @@ func TestManageChannelsEndToEnd(t *testing.T) {
 		t.Errorf("canal deveria ter ficado sem categoria, está em %s", *voice.CategoryID)
 	}
 }
+
+// Bits granulares (CreateCategories, ReorderChannels etc.) liberam só a ação
+// deles; renomear continua exigindo ManageChannels. Também cobre
+// PUT /api/categories/order.
+func TestGranularStructurePermissions(t *testing.T) {
+	db := openTestStore(t)
+	ctx := context.Background()
+
+	member, err := db.Members.GetOrCreateByOIDCSubject(ctx, "organizer-"+t.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	bits := permissions.CreateCategories | permissions.ReorderCategories | permissions.CreateChannels | permissions.ReorderChannels
+	role, err := db.Roles.Create(ctx, "organizador-"+t.Name(), nil, bits, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Roles.Delete(context.Background(), role.ID) })
+	if err := db.Roles.AssignToMember(ctx, member.ID, role.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	do := func(h http.Handler, method, id string, body any) *httptest.ResponseRecorder {
+		t.Helper()
+		var buf bytes.Buffer
+		if body != nil {
+			json.NewEncoder(&buf).Encode(body)
+		}
+		req := httptest.NewRequest(method, "/", &buf)
+		if id != "" {
+			req.SetPathValue("id", id)
+		}
+		req = req.WithContext(auth.WithMember(req.Context(), member))
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+
+	var cats []categoryView
+	for _, name := range []string{"A", "B"} {
+		rec := do(handleCreateCategory(db.Categories, db.Roles), "POST", "", map[string]any{"name": name})
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("criar categoria com CreateCategories: %d %s", rec.Code, rec.Body)
+		}
+		var c categoryView
+		json.NewDecoder(rec.Body).Decode(&c)
+		t.Cleanup(func() { db.Categories.Delete(context.Background(), c.ID) })
+		cats = append(cats, c)
+	}
+
+	if rec := do(handleUpdateCategory(db.Categories, db.Roles), "PATCH", cats[0].ID, map[string]any{"name": "X"}); rec.Code != http.StatusForbidden {
+		t.Errorf("renomear categoria sem ManageChannels: status %d, esperado 403", rec.Code)
+	}
+	if rec := do(handleDeleteCategory(db.Categories, db.Roles), "DELETE", cats[0].ID, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("apagar categoria sem DeleteCategories: status %d, esperado 403", rec.Code)
+	}
+
+	rec := do(handleCreateChannel(db.Categories, db.Channels, db.Roles), "POST", "", map[string]any{"categoryId": cats[0].ID, "name": "c", "type": "text"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("criar canal com CreateChannels: %d %s", rec.Code, rec.Body)
+	}
+	var ch channelView
+	json.NewDecoder(rec.Body).Decode(&ch)
+	t.Cleanup(func() { db.Channels.Delete(context.Background(), ch.ID) })
+	updateChannel := handleUpdateChannel(db.Categories, db.Channels, db.Roles)
+	if rec := do(updateChannel, "PATCH", ch.ID, map[string]any{"categoryId": cats[1].ID}); rec.Code != http.StatusOK {
+		t.Errorf("mover canal com ReorderChannels: status %d", rec.Code)
+	}
+	if rec := do(updateChannel, "PATCH", ch.ID, map[string]any{"name": "d"}); rec.Code != http.StatusForbidden {
+		t.Errorf("renomear canal sem ManageChannels: status %d, esperado 403", rec.Code)
+	}
+	if rec := do(handleDeleteChannel(db.Channels, db.Attachments, nil, db.Roles), "DELETE", ch.ID, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("apagar canal sem DeleteChannels: status %d, esperado 403", rec.Code)
+	}
+
+	// Reordenar canais: mover para B no topo, antes de um canal que o grupo
+	// não lista (fica depois). Canal inexistente dá 409.
+	rec = do(handleCreateChannel(db.Categories, db.Channels, db.Roles), "POST", "", map[string]any{"categoryId": cats[1].ID, "name": "e", "type": "text"})
+	var other channelView
+	json.NewDecoder(rec.Body).Decode(&other)
+	t.Cleanup(func() { db.Channels.Delete(context.Background(), other.ID) })
+	reorderChannels := handleReorderChannels(db.Channels, db.Roles)
+	if rec := do(reorderChannels, "PUT", "", map[string]any{"groups": []map[string]any{{"categoryId": cats[1].ID, "ids": []string{missingID}}}}); rec.Code != http.StatusConflict {
+		t.Errorf("reordenar canal inexistente: status %d, esperado 409", rec.Code)
+	}
+	if rec := do(reorderChannels, "PUT", "", map[string]any{"groups": []map[string]any{
+		{"categoryId": nil, "ids": []string{}},
+		{"categoryId": cats[1].ID, "ids": []string{ch.ID}},
+	}}); rec.Code != http.StatusNoContent {
+		t.Fatalf("reordenar canais: %d %s", rec.Code, rec.Body)
+	}
+	for id, want := range map[string]int{ch.ID: 0, other.ID: 1} {
+		got, err := db.Channels.GetByID(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.CategoryID == nil || *got.CategoryID != cats[1].ID || got.Position != want {
+			t.Errorf("canal %s: categoria %v posição %d, esperado %s posição %d", id, got.CategoryID, got.Position, cats[1].ID, want)
+		}
+	}
+
+	// Reordenar: a lista precisa ser o conjunto atual inteiro. Inverte a
+	// ordem de tudo que existe no banco (outros testes podem ter deixado
+	// categorias).
+	reorder := handleReorderCategories(db.Categories, db.Roles)
+	all, err := db.Categories.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := make([]string, len(all))
+	for i, c := range all {
+		ids[len(all)-1-i] = c.ID
+	}
+	if rec := do(reorder, "PUT", "", map[string]any{"ids": ids[1:]}); rec.Code != http.StatusConflict {
+		t.Errorf("reordenar com lista incompleta: status %d, esperado 409", rec.Code)
+	}
+	if rec := do(reorder, "PUT", "", map[string]any{"ids": ids}); rec.Code != http.StatusNoContent {
+		t.Fatalf("reordenar: %d %s", rec.Code, rec.Body)
+	}
+	after, err := db.Categories.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, c := range after {
+		if c.ID != ids[i] || c.Position != i {
+			t.Fatalf("posição %d: %s (%d), esperado %s", i, c.ID, c.Position, ids[i])
+		}
+	}
+}

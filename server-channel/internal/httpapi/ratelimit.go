@@ -16,7 +16,8 @@ import (
 //
 // server-channel usa dois limiters com chaves diferentes (ver
 // docs/architecture.md, "Decisão: rate limiting em server-channel"): um por
-// IP sobre toda a API REST (mesmo padrão de server-central), e um por membro
+// usuário (IP só sem token válido) sobre toda a API REST (mesmo padrão de
+// server-central), e um por membro
 // sobre frames recebidos numa conexão WebSocket já aberta — um limite só de
 // conexão/IP não protege contra spam de mensagens dentro de uma conexão que
 // já passou pelo handshake.
@@ -91,21 +92,34 @@ func (l *rateLimiter) allow(key string) bool {
 	return true
 }
 
-// withRateLimit aplica o limiter (por IP) a todas as rotas REST, exceto
-// /healthz (usado pelo HEALTHCHECK do Docker e por monitoramento externo —
-// não deve competir por orçamento de requisições com tráfego de cliente
-// real). O upgrade de WebSocket em GET /api/channels/{id}/ws também passa
-// por aqui (é só mais uma requisição HTTP do ponto de vista deste
-// middleware); o limite de mensagens dentro da conexão já aberta é outro
-// limiter, aplicado em handleChannelWS.
-func withRateLimit(limiter *rateLimiter, next http.Handler) http.Handler {
+// requestIdentifier descobre de quem é a requisição (auth.IdentifyRequest
+// na montagem real; os testes passam um falso). Devolve a requisição com o
+// "sub" já no contexto, para a autenticação não verificar o token de novo.
+type requestIdentifier func(r *http.Request) (*http.Request, string, bool)
+
+// withRateLimit aplica o limiter a todas as rotas, exceto /healthz (usado
+// pelo HEALTHCHECK do Docker e por monitoramento externo, não deve competir
+// por orçamento de requisições com tráfego de cliente real).
+//
+// A chave é o usuário ("sub" do token verificado), não o IP: várias pessoas
+// atrás do mesmo NAT (escritório, casa, CGNAT de operadora) saem com o mesmo
+// IP e dividiriam um orçamento só. Requisição sem token ou com token inválido
+// não tem dono conhecido e cai no bucket do IP, o que continua segurando
+// flood anônimo. Ver docs/rate-limits.md.
+func withRateLimit(limiter *rateLimiter, identify requestIdentifier, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/healthz" {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		if !limiter.allow(clientIP(r)) {
+		key := "ip:" + clientIP(r)
+		if identified, subject, ok := identify(r); ok {
+			r = identified
+			key = "sub:" + subject
+		}
+
+		if !limiter.allow(key) {
 			w.Header().Set("Retry-After", "1")
 			http.Error(w, "muitas requisições, tente novamente em instantes", http.StatusTooManyRequests)
 			return

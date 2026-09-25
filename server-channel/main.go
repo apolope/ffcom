@@ -82,7 +82,7 @@ func main() {
 		version,
 		envBool("REQUIRE_TLS", false),
 		envInt("RATE_LIMIT_RPM", 120),
-		envInt("RATE_LIMIT_BURST", 20),
+		envInt("RATE_LIMIT_BURST", 60),
 		envInt("RATE_LIMIT_WS_RPM", 60),
 		envInt("RATE_LIMIT_WS_BURST", 10),
 	)

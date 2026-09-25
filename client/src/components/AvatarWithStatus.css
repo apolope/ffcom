@@ -14,17 +14,17 @@
 }
 
 .presence-online {
-  background: #3ba55c;
+  background: var(--status-online);
 }
 
 .presence-busy {
-  background: #ed4245;
+  background: var(--status-busy);
 }
 
 .presence-away {
-  background: #faa61a;
+  background: var(--status-away);
 }
 
 .presence-offline {
-  background: #80848e;
+  background: var(--status-offline);
 }

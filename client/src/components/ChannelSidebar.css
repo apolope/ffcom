@@ -31,41 +31,57 @@
   flex: 1 1 auto;
 }
 
-/* Linha própria abaixo do nome, com a largura da barra: com flex 0 0 auto o
-   bloco ficava com a largura de todos os botões numa linha só, o wrap
-   interno nunca agia e o último botão era cortado pela barra de 240px. */
-.server-name-actions {
-  display: flex;
-  flex-wrap: wrap;
-  flex: 1 1 100%;
-  min-width: 0;
-  gap: 6px;
-}
-
-.invite-button {
-  font: inherit;
-  font-size: 11px;
-  font-weight: 500;
-  padding: 4px 6px;
-  white-space: nowrap;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-}
-
-.invite-button:hover {
-  color: var(--text-h);
-  border-color: var(--text-h);
-}
-
 .category-list {
   padding: 12px 8px;
 }
 
 .category {
   margin-bottom: 16px;
+}
+
+/* Arrastar categoria (ChannelSidebar.tsx): a que está sendo arrastada fica
+   apagada e uma linha na cor de destaque mostra onde ela vai cair. */
+.category.dragging {
+  opacity: 0.4;
+}
+
+.category.drop-before {
+  box-shadow: 0 -2px 0 var(--accent);
+}
+
+.category.drop-after {
+  box-shadow: 0 2px 0 var(--accent);
+}
+
+/* Canal solto no cabeçalho ou no vão da categoria: vai para o fim dela. */
+.category.drop-into {
+  outline: 1px dashed var(--accent-border);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.channel-row.dragging {
+  opacity: 0.4;
+}
+
+.channel-row.drop-before {
+  box-shadow: 0 -2px 0 var(--accent);
+}
+
+.channel-row.drop-after {
+  box-shadow: 0 2px 0 var(--accent);
+}
+
+.category-name.draggable {
+  cursor: grab;
+}
+
+.category-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .category-name {
@@ -86,6 +102,83 @@
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+/* Canais recuados em relação ao nome da categoria, para ficar claro a qual
+   ela pertencem. */
+.category ul.category-channels {
+  padding-left: 12px;
+}
+
+/* "+" de novo canal: sempre visível na ponta direita do cabeçalho (o ✎ de
+   editar continua só no hover). */
+.category-add-channel {
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1;
+  padding: 0 4px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.category-add-channel:hover {
+  color: var(--text-h);
+  background: var(--bg-tertiary);
+}
+
+/* Card no fim da lista, no recuo das categorias: a nova entra depois da
+   última (server-channel cria com position = max + 1). Discreto: da altura
+   do texto e só com o "+"; o texto aparece no hover (ou no foco pelo
+   teclado). */
+.create-category-card {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.create-category-label {
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  transition:
+    max-width 0.15s ease,
+    opacity 0.15s ease,
+    margin-left 0.15s ease;
+}
+
+.create-category-card:hover,
+.create-category-card:focus-visible {
+  color: var(--text-h);
+  border-color: var(--text);
+}
+
+.create-category-card:hover .create-category-label,
+.create-category-card:focus-visible .create-category-label {
+  max-width: 180px;
+  margin-left: 6px;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .create-category-label {
+    transition: none;
+  }
 }
 
 .channel-item {
@@ -201,7 +294,7 @@
   margin: 0 0 4px 32px;
 }
 
-.voice-participant {
+.sidebar-voice-participant {
   display: flex;
   align-items: center;
   gap: 6px;

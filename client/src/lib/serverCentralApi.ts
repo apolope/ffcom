@@ -119,6 +119,22 @@ export async function addKnownServer(
   return parseJsonOrThrow<RemoteKnownServer>(res)
 }
 
+// Grava a ordem do rail (arrastar os ícones). ids precisa ser a lista
+// completa da conta; se mudou em outra aba ou dispositivo, 409.
+export async function reorderKnownServers(accessToken: string, ids: string[]): Promise<void> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/servers/order`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ ids }),
+  })
+  if (!res.ok) {
+    throw new Error(`server-central: ${res.status} ${res.statusText}`)
+  }
+}
+
 export async function removeKnownServer(accessToken: string, id: string): Promise<void> {
   const res = await fetch(`${SERVER_CENTRAL_URL}/api/servers/${id}`, {
     method: 'DELETE',

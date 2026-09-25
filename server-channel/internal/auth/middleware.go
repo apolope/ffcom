@@ -25,6 +25,14 @@ const (
 func VerifyToken(verifier *Verifier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// O rate limit (internal/httpapi/ratelimit.go) já verificou o
+			// token para descobrir de quem é a requisição; não verifica de
+			// novo.
+			if _, ok := SubjectFromContext(r.Context()); ok {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			rawToken, ok := bearerToken(r)
 			if !ok {
 				http.Error(w, "token ausente ou mal formatado", http.StatusUnauthorized)
@@ -41,6 +49,25 @@ func VerifyToken(verifier *Verifier) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// IdentifyRequest verifica o token da requisição, se houver, e devolve o
+// "sub" junto com a requisição já com o "sub" no contexto (VerifyToken, mais
+// adiante na cadeia, reaproveita em vez de verificar de novo). Sem token ou
+// com token inválido devolve ok=false e a requisição intacta: quem decide
+// o 401 continua sendo VerifyToken. Usado pelo rate limit, que conta por
+// usuário e só cai para IP quando não sabe quem é (ver docs/rate-limits.md).
+func IdentifyRequest(verifier *Verifier, r *http.Request) (*http.Request, string, bool) {
+	rawToken, ok := bearerToken(r)
+	if !ok {
+		return r, "", false
+	}
+	claims, err := verifier.Verify(r.Context(), rawToken)
+	if err != nil {
+		return r, "", false
+	}
+	ctx := context.WithValue(r.Context(), subjectContextKey, claims.Subject)
+	return r.WithContext(ctx), claims.Subject, true
 }
 
 // RequireMember exige que o "sub" autenticado (anexado por VerifyToken, que

@@ -1,0 +1,55 @@
+# Segunda instância de server-channel, SÓ para desenvolvimento local: dá um
+# segundo servidor no rail para testar troca de servidor, ordenação dos
+# ícones etc. Não é um jeito de hospedar (para isso, docker-compose.yml).
+#
+# Sobe só Postgres + app, na porta 8083, e reaproveita o LiveKit do
+# docker-compose.yml principal (que precisa estar no ar para voz). Lê as
+# mesmas variáveis do .env deste diretório. Subir tudo de uma vez:
+# scripts/dev-local.ps1 na raiz do repositório.
+#
+#   docker compose -f docker-compose.dev-second.yml up -d --build
+
+name: ffcom-channel-2
+
+volumes:
+  postgres_data:
+  attachments_data:
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ffcom}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      POSTGRES_DB: ffcom_channel
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ffcom} -d ffcom_channel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-ffcom}:${POSTGRES_PASSWORD}@postgres:5432/ffcom_channel?sslmode=disable
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:?defina OIDC_ISSUER_URL no .env}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      LIVEKIT_PUBLIC_URL: ${LIVEKIT_PUBLIC_URL:?defina LIVEKIT_PUBLIC_URL no .env}
+      # O LiveKit é o do compose principal, alcançado pela porta publicada
+      # no host. As salas não colidem: o nome é o id (UUID) do canal.
+      LIVEKIT_API_URL: http://host.docker.internal:7880
+      ATTACHMENTS_DIR: /data/attachments
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8083:8080"
+    volumes:
+      - attachments_data:/data/attachments

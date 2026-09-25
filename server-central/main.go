@@ -59,7 +59,7 @@ func main() {
 	}
 
 	rateLimitRPM := envInt("RATE_LIMIT_RPM", 120)
-	rateLimitBurst := envInt("RATE_LIMIT_BURST", 20)
+	rateLimitBurst := envInt("RATE_LIMIT_BURST", 60)
 	requireTLS := envBool("REQUIRE_TLS", false)
 	router := httpapi.NewRouter(verifier, db, avatarFiles, avatarMaxBytes, parseAllowedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS")), version, rateLimitRPM, rateLimitBurst, requireTLS)
 

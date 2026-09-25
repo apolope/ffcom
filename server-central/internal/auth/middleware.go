@@ -10,7 +10,10 @@ import (
 
 type contextKey int
 
-const accountContextKey contextKey = iota
+const (
+	accountContextKey contextKey = iota
+	subjectContextKey
+)
 
 // Middleware exige um Bearer token válido em cada requisição e garante (via
 // AccountStore.GetOrCreateBySubject, que já faz upsert por "sub") que a
@@ -20,19 +23,26 @@ const accountContextKey contextKey = iota
 func Middleware(verifier *Verifier, accounts *store.AccountStore) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			rawToken, ok := bearerToken(r)
+			// O rate limit (internal/httpapi/ratelimit.go) já verificou o
+			// token para descobrir de quem é a requisição; não verifica de
+			// novo.
+			subject, ok := r.Context().Value(subjectContextKey).(string)
 			if !ok {
-				http.Error(w, "token ausente ou mal formatado", http.StatusUnauthorized)
-				return
+				rawToken, hasToken := bearerToken(r)
+				if !hasToken {
+					http.Error(w, "token ausente ou mal formatado", http.StatusUnauthorized)
+					return
+				}
+
+				claims, err := verifier.Verify(r.Context(), rawToken)
+				if err != nil {
+					http.Error(w, "token inválido", http.StatusUnauthorized)
+					return
+				}
+				subject = claims.Subject
 			}
 
-			claims, err := verifier.Verify(r.Context(), rawToken)
-			if err != nil {
-				http.Error(w, "token inválido", http.StatusUnauthorized)
-				return
-			}
-
-			account, err := accounts.GetOrCreateBySubject(r.Context(), claims.Subject)
+			account, err := accounts.GetOrCreateBySubject(r.Context(), subject)
 			if err != nil {
 				http.Error(w, "erro ao resolver conta", http.StatusInternalServerError)
 				return
@@ -42,6 +52,25 @@ func Middleware(verifier *Verifier, accounts *store.AccountStore) func(http.Hand
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// IdentifyRequest verifica o token da requisição, se houver, e devolve o
+// "sub" junto com a requisição já com o "sub" no contexto (Middleware, mais
+// adiante na cadeia, reaproveita em vez de verificar de novo). Sem token ou
+// com token inválido devolve ok=false e a requisição intacta: quem decide
+// o 401 continua sendo Middleware. Usado pelo rate limit, que conta por
+// usuário e só cai para IP quando não sabe quem é (ver docs/rate-limits.md).
+func IdentifyRequest(verifier *Verifier, r *http.Request) (*http.Request, string, bool) {
+	rawToken, ok := bearerToken(r)
+	if !ok {
+		return r, "", false
+	}
+	claims, err := verifier.Verify(r.Context(), rawToken)
+	if err != nil {
+		return r, "", false
+	}
+	ctx := context.WithValue(r.Context(), subjectContextKey, claims.Subject)
+	return r.WithContext(ctx), claims.Subject, true
 }
 
 // wsAuthSubprotocol é o subprotocolo usado para carregar o access token no

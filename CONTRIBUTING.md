@@ -35,6 +35,37 @@ postgres` do componente — só ajuste `DATABASE_URL`/`SERVER_PORT` (o
 `docker-compose.yml` de cada um mostra os valores exatos que o container usa)
 e as demais variáveis do `.env.example` local.
 
+### Ambiente local
+
+`./scripts/dev-local.ps1` (PowerShell, na raiz) sobe tudo de uma vez:
+server-central (`:8082`), o server-channel "Teste" (`:8080`, com LiveKit e
+coturn), um segundo server-channel "Estúdio" (`:8083`,
+`server-channel/docker-compose.dev-second.yml`, que só existe para
+desenvolvimento) e o Vite (`:5173`). `-Build` recompila as imagens e
+`-NoClient` não sobe o Vite. Os `.env` de `server-central` e
+`server-channel` precisam existir.
+
+Além de subir, o script:
+
+- aplica a estrutura de exemplo (`server-channel/dev/seed-*.sql`: algumas
+  categorias com canais de texto, voz e fórum), sem duplicar nem desfazer a
+  ordem que você arrastou;
+- põe toda conta que já logou localmente como membro dos dois servidores e
+  com os dois no rail, sem convite. Conta que loga pela primeira vez só
+  existe depois desse login, então rode o script de novo depois. O servidor
+  sem dono ganha como dono a conta mais antiga.
+
+Os dados ficam nos volumes do Docker e sobrevivem entre execuções.
+
+Para testar a interface com volume (scroll, nomes longos, listas grandes),
+`./scripts/stress-seed.ps1` põe nos dois server-channel 300 membros com
+roles, 15 categorias de 10 canais, um `stress-chat` com 1500 mensagens e um
+`stress-forum` com 80 threads, e no server-central 150 amigos e 25 servidores
+extras no rail (endereços `.invalid`, que não respondem) para cada conta real.
+Os volumes são parâmetros (`-Members 1000`, `-ChatMessages 5000`, ver o topo
+do script). Cada execução recria os dados de stress do zero, e `-Remove` apaga
+só eles, sem tocar no resto.
+
 ## Convenções de código
 
 Não repetidas aqui porque já estão registradas, decisão a decisão, em
@@ -51,6 +82,10 @@ Não repetidas aqui porque já estão registradas, decisão a decisão, em
 - **Client:** sem lib de estado/roteamento além do que já está em uso (nem
   `react-router`); `oidc-client-ts` puro para auth, sem wrapper adicional —
   ver "Decisão: login OIDC no client".
+- **Visual do client:** cor só por token de `client/src/index.css`, nunca
+  valor escrito no CSS do componente; token novo entra também em
+  `docs/design-system.md`, que lista a paleta, o scrollbar e os pares de
+  contraste ainda pendentes.
 - **Config:** tudo via variável de ambiente (`.env`), nunca arquivo montado
   nem valor hardcoded — ver "Decisão: injeção de config no Docker Compose de
   server-channel". `.env` nunca é commitado; só o `.env.example`.

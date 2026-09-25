@@ -31,7 +31,24 @@ const (
 	// continua bastando para criar — ver docs/architecture.md, "Decisão:
 	// CreateInvites separado de ManageInvites".
 	CreateInvites
+	// Permissões granulares da estrutura, fatias de ManageChannels (que
+	// continua valendo tudo, inclusive renomear, para não mudar o que roles
+	// já salvas podem fazer). "Reorder" cobre também mover canal de
+	// categoria. Ver docs/permissions.md e docs/architecture.md, "Decisão:
+	// permissões granulares de categoria e canal".
+	CreateChannels
+	ReorderChannels
+	DeleteChannels
+	CreateCategories
+	ReorderCategories
+	DeleteCategories
 )
+
+// StructureBits são todos os bits que dão alguma administração da
+// estrutura (categorias e canais). Quem tem qualquer um deles vê também as
+// categorias vazias em GET /api/categories.
+const StructureBits = ManageChannels | CreateChannels | ReorderChannels | DeleteChannels |
+	CreateCategories | ReorderCategories | DeleteCategories
 
 // Owner é o valor de retorno de quem é dono do servidor (member.IsOwner):
 // todos os bits em 1 (representação em complemento de dois de -1), o que

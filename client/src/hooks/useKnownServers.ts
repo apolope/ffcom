@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   addKnownServer,
   fetchKnownServers,
   removeKnownServer,
+  reorderKnownServers,
   type RemoteKnownServer,
 } from '../lib/serverCentralApi'
 import { joinServer } from '../lib/serverChannelApi'
+import { createRetryingSaver, type RetryingSaver } from '../lib/retryingSaver'
 import type { KnownServer } from '../types'
 
 export type KnownServersStatus = 'loading' | 'ready' | 'error'
@@ -16,6 +18,8 @@ interface UseKnownServersResult {
   error: string | undefined
   addServer: (address: string, name: string, inviteCode?: string) => Promise<void>
   removeServer: (id: string) => Promise<void>
+  // Aplica na tela e grava (tentando até conseguir) a ordem nova do rail.
+  saveOrder: (ids: string[]) => void
 }
 
 function deriveInitials(name: string): string {
@@ -37,8 +41,10 @@ function toKnownServer(remote: RemoteKnownServer): KnownServer {
 // Carrega e gerencia o diretório de server-channel conhecidos pela conta
 // autenticada (server-central). Ver TODO.md ("API para o client listar/
 // adicionar/remover servidores conhecidos").
-export function useKnownServers(accessToken: string): UseKnownServersResult {
-  const [servers, setServers] = useState<KnownServer[]>([])
+//
+// onSaveError: primeira falha ao gravar a ordem do rail (ver saveOrder).
+export function useKnownServers(accessToken: string, onSaveError?: () => void): UseKnownServersResult {
+  const [loaded, setLoaded] = useState<KnownServer[]>([])
   const [status, setStatus] = useState<KnownServersStatus>('loading')
   const [error, setError] = useState<string>()
 
@@ -52,7 +58,7 @@ export function useKnownServers(accessToken: string): UseKnownServersResult {
     setError(undefined)
     return fetchKnownServers(accessToken)
       .then((remote) => {
-        setServers(remote.map(toKnownServer))
+        setLoaded(remote.map(toKnownServer))
         setStatus('ready')
       })
       .catch((err) => {
@@ -86,5 +92,50 @@ export function useKnownServers(accessToken: string): UseKnownServersResult {
     [accessToken, load],
   )
 
-  return { servers, status, error, addServer, removeServer }
+  // Ordem arrastada ainda não gravada: fica por cima da lista do servidor
+  // até o job (lib/retryingSaver.ts) conseguir gravar. Servidor que não
+  // estava na ordem arrastada (adicionado em outra aba) vai para o topo,
+  // onde o server-central põe servidor novo.
+  const [pendingOrder, setPendingOrder] = useState<string[]>()
+  const onSaveErrorRef = useRef(onSaveError)
+  useEffect(() => {
+    onSaveErrorRef.current = onSaveError
+  }, [onSaveError])
+  const saverRef = useRef<RetryingSaver<string[]>>(undefined)
+
+  // Um job por sessão; ids pendentes de uma sessão anterior não casam com
+  // os da nova e são ignorados pela ordenação abaixo.
+  useEffect(() => {
+    if (!accessToken) return
+    const saver = createRetryingSaver({
+      label: 'a ordem dos servidores',
+      save: async (ids: string[]) => {
+        const current = (await fetchKnownServers(accessToken)).map((s) => s.id)
+        const ordered = ids.filter((id) => current.includes(id))
+        const added = current.filter((id) => !ordered.includes(id))
+        await reorderKnownServers(accessToken, [...added, ...ordered])
+        return (await fetchKnownServers(accessToken)).map(toKnownServer)
+      },
+      onSaved: (_ids, saved) => {
+        setLoaded(saved)
+        setPendingOrder(undefined)
+      },
+      onFirstFailure: () => onSaveErrorRef.current?.(),
+    })
+    saverRef.current = saver
+    return () => saver.cancel()
+  }, [accessToken])
+
+  const saveOrder = useCallback((ids: string[]) => {
+    setPendingOrder(ids)
+    saverRef.current?.schedule(ids)
+  }, [])
+
+  const servers = useMemo(() => {
+    if (!pendingOrder) return loaded
+    const rank = new Map(pendingOrder.map((id, index) => [id, index]))
+    return [...loaded].sort((a, b) => (rank.get(a.id) ?? -1) - (rank.get(b.id) ?? -1))
+  }, [loaded, pendingOrder])
+
+  return { servers, status, error, addServer, removeServer, saveOrder }
 }

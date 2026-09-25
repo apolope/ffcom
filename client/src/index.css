@@ -7,13 +7,31 @@
   --accent: #aa3bff;
   --accent-bg: rgba(170, 59, 255, 0.1);
   --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
   --bg-secondary: #f4f3ec;
   --bg-tertiary: #e5e4e7;
   --bg-deep: #ebeaf0;
+
+  /* Cores semânticas e de status (docs/design-system.md, "Cores"). As que
+     não mudam entre os temas ficam só aqui. */
+  --accent-hover: color-mix(in srgb, var(--accent) 70%, #3b0a73);
+  --on-accent: #fff;
+  --danger: #da373c;
+  --success: #23a55a;
+  --warning: #f0b232;
+  --status-online: #3ba55c;
+  --status-busy: #ed4245;
+  --status-away: #faa61a;
+  --status-offline: #80848e;
+  --overlay: rgb(0 0 0 / 60%);
+  --media-bg: #000;
+  --on-media: #fff;
+  --shadow-popover: 0 8px 24px rgb(0 0 0 / 35%);
+  --scrollbar-thumb: color-mix(in srgb, var(--accent) 55%, transparent);
+  --scrollbar-thumb-hover: var(--accent);
+  --scrollbar-track: color-mix(in srgb, var(--text) 20%, transparent);
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
@@ -44,14 +62,90 @@
     --accent: #c084fc;
     --accent-bg: rgba(192, 132, 252, 0.15);
     --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
     --shadow:
       rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
 
     --bg-secondary: #1c1d24;
     --bg-tertiary: #26272f;
     --bg-deep: #101014;
+
+    --danger: #ed4245;
+    /* Branco sobre o roxo claro do tema escuro dava contraste 2,6:1; o fundo
+       mais escuro da paleta passa de 4,5:1 sobre acento, perigo e sucesso
+       (docs/design-system.md, "Acento"). */
+    --on-accent: var(--bg-deep);
   }
+}
+
+/* Scrollbar fino (docs/design-system.md, "Scrollbar"): trilho transparente e
+   polegar arredondado no acento atenuado, no padrão de Discord, Slack e
+   VS Code. Chromium e Electron usam os pseudo-elementos ::-webkit-scrollbar;
+   o Firefox, que não tem eles, usa as propriedades padrão. As duas não são
+   combinadas no Chromium porque scrollbar-color desliga os pseudo-elementos
+   e traz de volta as setas do Windows. */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+}
+
+/* Scrollbar que engrossa ao rolar (lib/scrollbarActivity.ts): parado, só o
+   polegar fino de 2px (fallback de --sb-size), para indicar que a área rola;
+   rolando, --sb-size anima até 6px e o trilho cinza aparece junto (--sb-track,
+   de 0 a 1), e ao parar os dois voltam. A largura reservada fica fixa em
+   10px e a borda transparente com background-clip só recorta a parte
+   desenhada, então o conteúdo não se mexe. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb,
+::-webkit-scrollbar-track {
+  border: 0 solid transparent;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:vertical,
+::-webkit-scrollbar-track:vertical {
+  border-left-width: calc((10px - var(--sb-size, 2px)) / 2);
+  border-right-width: calc((10px - var(--sb-size, 2px)) / 2);
+}
+
+::-webkit-scrollbar-thumb:horizontal,
+::-webkit-scrollbar-track:horizontal {
+  border-top-width: calc((10px - var(--sb-size, 2px)) / 2);
+  border-bottom-width: calc((10px - var(--sb-size, 2px)) / 2);
+}
+
+::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--scrollbar-track) calc(var(--sb-track, 0) * 100%), transparent)
+    padding-box;
+}
+
+::-webkit-scrollbar-thumb {
+  min-height: 40px;
+  min-width: 40px;
+  background: var(--scrollbar-thumb) padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+/* Lista que rola sem mostrar barra nenhuma (rail de servidores): a roda do
+   mouse e o toque continuam funcionando. */
+.scroll-hidden {
+  scrollbar-width: none;
+}
+
+.scroll-hidden::-webkit-scrollbar {
+  display: none;
 }
 
 #root {

@@ -37,10 +37,10 @@
   text-overflow: ellipsis;
 }
 
-.member-badge {
-  margin-left: auto;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  color: var(--text);
+.member-owner-star {
+  flex: 0 0 auto;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--warning);
+  cursor: default;
 }

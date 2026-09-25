@@ -2,9 +2,11 @@ import { useState } from 'react'
 import type { ChannelType } from '../types'
 import './Dialog.css'
 
-// Diálogos de administração da estrutura do servidor (categorias e canais),
-// só abertos para quem tem ManageChannels ou é dono. Ver
-// docs/architecture.md, "Decisão: gerenciar categorias e canais".
+// Diálogos de administração da estrutura do servidor (categorias e canais).
+// Cada campo só fica editável com a permissão da ação (renomear só com
+// ManageChannels; mover e apagar também com os bits granulares, ver
+// docs/permissions.md). Ver docs/architecture.md, "Decisão: gerenciar
+// categorias e canais".
 
 const CHANNEL_TYPE_LABEL: Record<ChannelType, string> = {
   text: 'Texto',
@@ -18,12 +20,15 @@ const MAX_NAME_LENGTH = 100
 interface CategoryDialogProps {
   // Ausente = criar categoria nova.
   category?: { id: string; name: string }
+  // Editar o nome de uma categoria existente exige ManageChannels.
+  canRename: boolean
   onSave: (name: string) => Promise<void>
   onDelete?: () => Promise<void>
   onClose: () => void
 }
 
-export function CategoryDialog({ category, onSave, onDelete, onClose }: CategoryDialogProps) {
+export function CategoryDialog({ category, canRename, onSave, onDelete, onClose }: CategoryDialogProps) {
+  const nameEditable = !category || canRename
   const [name, setName] = useState(category?.name ?? '')
   const { error, busy, run } = useAsyncAction(onClose)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -39,6 +44,7 @@ export function CategoryDialog({ category, onSave, onDelete, onClose }: Category
             value={name}
             maxLength={MAX_NAME_LENGTH}
             onChange={(e) => setName(e.target.value)}
+            disabled={!nameEditable}
             autoFocus
           />
         </label>
@@ -55,16 +61,18 @@ export function CategoryDialog({ category, onSave, onDelete, onClose }: Category
         {error && <p className="dialog-error">{error}</p>}
         <div className="dialog-actions">
           <button type="button" onClick={onClose} disabled={busy}>
-            Cancelar
+            {nameEditable ? 'Cancelar' : 'Fechar'}
           </button>
-          <button
-            type="submit"
-            className="dialog-submit"
-            onClick={() => run(() => onSave(name.trim()))}
-            disabled={busy || !name.trim()}
-          >
-            {busy ? 'Salvando…' : category ? 'Salvar' : 'Criar'}
-          </button>
+          {nameEditable && (
+            <button
+              type="submit"
+              className="dialog-submit"
+              onClick={() => run(() => onSave(name.trim()))}
+              disabled={busy || !name.trim()}
+            >
+              {busy ? 'Salvando…' : category ? 'Salvar' : 'Criar'}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -83,12 +91,28 @@ interface ChannelDialogProps {
   channel?: { id: string; name: string; type: ChannelType; categoryId?: string }
   initialCategoryId?: string
   categories: { id: string; name: string }[]
+  // Na edição: renomear exige ManageChannels, mover de categoria
+  // ReorderChannels (ou ManageChannels). Na criação tudo é editável.
+  canRename: boolean
+  canMove: boolean
   onSave: (values: ChannelDialogValues) => Promise<void>
   onDelete?: () => Promise<void>
   onClose: () => void
 }
 
-export function ChannelDialog({ channel, initialCategoryId, categories, onSave, onDelete, onClose }: ChannelDialogProps) {
+export function ChannelDialog({
+  channel,
+  initialCategoryId,
+  categories,
+  canRename,
+  canMove,
+  onSave,
+  onDelete,
+  onClose,
+}: ChannelDialogProps) {
+  const nameEditable = !channel || canRename
+  const categoryEditable = !channel || canMove
+  const canSave = nameEditable || categoryEditable
   const [name, setName] = useState(channel?.name ?? '')
   const [type, setType] = useState<ChannelType>(channel?.type ?? 'text')
   const [categoryId, setCategoryId] = useState(channel ? (channel.categoryId ?? '') : (initialCategoryId ?? ''))
@@ -106,6 +130,7 @@ export function ChannelDialog({ channel, initialCategoryId, categories, onSave, 
             value={name}
             maxLength={MAX_NAME_LENGTH}
             onChange={(e) => setName(e.target.value)}
+            disabled={!nameEditable}
             autoFocus
           />
         </label>
@@ -123,7 +148,7 @@ export function ChannelDialog({ channel, initialCategoryId, categories, onSave, 
         </label>
         <label>
           Categoria
-          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} disabled={!categoryEditable}>
             <option value="">(sem categoria)</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
@@ -145,16 +170,18 @@ export function ChannelDialog({ channel, initialCategoryId, categories, onSave, 
         {error && <p className="dialog-error">{error}</p>}
         <div className="dialog-actions">
           <button type="button" onClick={onClose} disabled={busy}>
-            Cancelar
+            {canSave ? 'Cancelar' : 'Fechar'}
           </button>
-          <button
-            type="submit"
-            className="dialog-submit"
-            onClick={() => run(() => onSave({ name: name.trim(), type, categoryId: categoryId || undefined }))}
-            disabled={busy || !name.trim()}
-          >
-            {busy ? 'Salvando…' : channel ? 'Salvar' : 'Criar'}
-          </button>
+          {canSave && (
+            <button
+              type="submit"
+              className="dialog-submit"
+              onClick={() => run(() => onSave({ name: name.trim(), type, categoryId: categoryId || undefined }))}
+              disabled={busy || !name.trim()}
+            >
+              {busy ? 'Salvando…' : channel ? 'Salvar' : 'Criar'}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -196,7 +223,7 @@ function DeleteButton({
 }
 
 // Roda uma ação assíncrona do diálogo, fecha no sucesso e mostra o erro do
-// servidor (ex. 403 sem ManageChannels) sem fechar na falha.
+// servidor (ex. 403 sem a permissão) sem fechar na falha.
 function useAsyncAction(onDone: () => void) {
   const [error, setError] = useState<string>()
   const [busy, setBusy] = useState(false)

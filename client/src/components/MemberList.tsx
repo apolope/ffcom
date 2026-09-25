@@ -40,7 +40,11 @@ function MemberRow({ member, roleById }: { member: Member; roleById: Map<string,
       <span className="member-name" style={highestRole?.color ? { color: highestRole.color } : undefined}>
         {member.nickname}
       </span>
-      {member.isOwner && <span className="member-badge">dono</span>}
+      {member.isOwner && (
+        <span className="member-owner-star" title="Dono" role="img" aria-label="Dono">
+          ★
+        </span>
+      )}
     </div>
   )
 }

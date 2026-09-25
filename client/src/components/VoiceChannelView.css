@@ -21,7 +21,7 @@
   border: none;
   border-radius: 4px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   cursor: pointer;
 }
 
@@ -54,7 +54,7 @@
   position: relative;
   flex: 1 1 320px;
   max-width: 480px;
-  background: #000;
+  background: var(--media-bg);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -82,8 +82,8 @@
   height: 32px;
   border: none;
   border-radius: 4px;
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
+  background: var(--overlay);
+  color: var(--on-media);
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
@@ -144,8 +144,8 @@
   bottom: 8px;
   padding: 2px 8px;
   border-radius: 4px;
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
+  background: var(--overlay);
+  color: var(--on-media);
   font-size: 12px;
 }
 
@@ -277,7 +277,7 @@
   border: none;
   border-radius: 4px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   cursor: pointer;
 }
 
@@ -341,7 +341,7 @@
 
 .voice-shortcut-hint {
   flex-basis: 100%;
-  color: var(--danger, #ed4245);
+  color: var(--danger);
 }
 
 .voice-prefs-note {
@@ -360,8 +360,8 @@
 }
 
 .voice-controls .voice-ptt-button.talking {
-  background: #23a55a;
-  color: #fff;
+  background: var(--success);
+  color: var(--on-accent);
 }
 
 .voice-mode {

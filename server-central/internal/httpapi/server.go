@@ -41,6 +41,7 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, avatarFiles *storage.Av
 	mux.Handle("GET /api/avatars/{id}", protected(handleGetAvatar(avatarFiles)))
 	mux.Handle("GET /api/servers", protected(handleListServers(db.KnownServers)))
 	mux.Handle("POST /api/servers", protected(handleAddServer(db.KnownServers)))
+	mux.Handle("PUT /api/servers/order", protected(handleReorderServers(db.KnownServers)))
 	mux.Handle("DELETE /api/servers/{id}", protected(handleRemoveServer(db.KnownServers)))
 	mux.Handle("GET /api/presence", protected(handlePresenceSnapshot(hub, db.Friendships)))
 	mux.Handle("GET /api/presence/ws", protected(handlePresenceWS(hub, db.Friendships, db.DirectMessages, upgrader)))
@@ -50,5 +51,6 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, avatarFiles *storage.Av
 	mux.Handle("GET /api/dms/{accountId}/messages", protected(handleListDMs(db.Friendships, db.DirectMessages)))
 
 	limiter := newRateLimiter(rateLimitRPM, rateLimitBurst)
-	return withRequireTLS(requireTLS, withCORS(allowed, withRateLimit(limiter, mux)))
+	identify := func(r *http.Request) (*http.Request, string, bool) { return auth.IdentifyRequest(verifier, r) }
+	return withRequireTLS(requireTLS, withCORS(allowed, withRateLimit(limiter, identify, mux)))
 }

@@ -40,8 +40,9 @@ Base URL: `VITE_SERVER_CENTRAL_URL` no client (`http://localhost:8081` em dev).
 | GET | `/healthz` | não | — | `{status, version}` | — |
 | GET | `/api/me` | Bearer | — | `{accountId, oidcSubject, createdAt, e2ePublicKey, displayName?, avatarUrl?}` — `e2ePublicKey` é base64 ou `null` (nunca omitido) | — |
 | PUT | `/api/me/e2e-public-key` | Bearer | `{publicKey}` (base64, 32 bytes) | `204` | `400` tamanho inválido |
-| GET | `/api/servers` | Bearer | — | `{servers: [{id, address, name, iconUrl?, addedAt}]}` | — |
-| POST | `/api/servers` | Bearer | `{address, name, iconUrl?}` | `201` + `KnownServer` | `400` address/name vazios |
+| GET | `/api/servers` | Bearer | — | `{servers: [{id, address, name, iconUrl?, position, addedAt}]}`, na ordem do rail (`position`) | — |
+| POST | `/api/servers` | Bearer | `{address, name, iconUrl?}` | `201` + `KnownServer`; servidor novo entra no topo do rail, readicionar mantém a posição | `400` address/name vazios |
+| PUT | `/api/servers/order` | Bearer | `{ids: [string]}` — todos os servidores da conta, na ordem nova | `204` | `409` se `ids` não for exatamente a lista da conta |
 | DELETE | `/api/servers/{id}` | Bearer | — | `204` | `404` |
 | GET | `/api/presence` | Bearer | — | `{friends: [{accountId, online}]}` — snapshot dos amigos aceitos | — |
 | GET | `/api/presence/ws` | Bearer (subprotocolo) | upgrade WS | ver abaixo | — |
@@ -64,7 +65,7 @@ Uma conexão por sessão do client, mantida aberta enquanto online; serve **pres
 
 ### Rate limiting
 
-Token bucket em memória por IP, aplicado a toda a API exceto `/healthz` (`RATE_LIMIT_RPM`, padrão 120; `RATE_LIMIT_BURST`, padrão 20; chave = `X-Forwarded-For` ou `RemoteAddr`). Excesso responde `429 Too Many Requests` com header `Retry-After`. Ver `docs/architecture.md`, "Decisão: rate limiting em server-central".
+Token bucket em memória por usuário, aplicado a toda a API exceto `/healthz` (`RATE_LIMIT_RPM`, padrão 120; `RATE_LIMIT_BURST`, padrão 60; chave = `sub` do token verificado, ou IP via `X-Forwarded-For`/`RemoteAddr` quando não há token válido). Excesso responde `429 Too Many Requests` com header `Retry-After`. Ver `docs/architecture.md`, "Decisão: rate limiting em server-central".
 
 ## `server-channel`
 
@@ -83,14 +84,16 @@ Base URL: `KnownServer.baseUrl`, uma por servidor cadastrado no client (endereç
 | POST | `/api/members/{memberId}/ban` | Bearer + membro + `BanMembers` | `{reason?}` | `204` | `400` alvo é você mesmo, `403` alvo é o dono, `404` membro |
 | GET | `/api/bans` | Bearer + membro + `BanMembers` | — | `{bans: [{oidcSubject, bannedByMemberId?, reason?, createdAt, lastNickname?}]}` | — |
 | DELETE | `/api/bans/{oidcSubject}` | Bearer + membro + `BanMembers` | — | `204` | `404` não banido |
-| GET | `/api/categories` | Bearer + membro | — | `{categories: [{id, name, position, createdAt}]}` — só com canal visível; quem tem `ManageChannels` (ou é dono) vê todas, inclusive vazias | — |
-| POST | `/api/categories` | Bearer + membro + `ManageChannels` | `{name, position?}` (sem `position` = fim da lista) | `201` `Category` | `400` nome vazio ou > 100 chars |
-| PATCH | `/api/categories/{id}` | Bearer + membro + `ManageChannels` | `{name?, position?}` (ausente = mantém) | `Category` | `400`, `404` |
-| DELETE | `/api/categories/{id}` | Bearer + membro + `ManageChannels` | — | `204`; os canais da categoria ficam sem categoria | `404` |
+| GET | `/api/categories` | Bearer + membro | — | `{categories: [{id, name, position, createdAt}]}` — só com canal visível; quem tem qualquer bit de estrutura (`ManageChannels` ou as fatias, ver `docs/permissions.md`) ou é dono vê todas, inclusive vazias | — |
+| POST | `/api/categories` | Bearer + membro + `ManageChannels` ou `CreateCategories` | `{name, position?}` (sem `position` = fim da lista) | `201` `Category` | `400` nome vazio ou > 100 chars |
+| PUT | `/api/categories/order` | Bearer + membro + `ManageChannels` ou `ReorderCategories` | `{ids: [string]}` — todas as categorias, na ordem nova | `204`; grava posições 0..n-1 numa transação | `409` se `ids` não for exatamente o conjunto atual (alguém criou/apagou no meio tempo) |
+| PATCH | `/api/categories/{id}` | Bearer + membro; `name` exige `ManageChannels`, só `position` aceita também `ReorderCategories` | `{name?, position?}` (ausente = mantém) | `Category` | `400`, `403`, `404` |
+| DELETE | `/api/categories/{id}` | Bearer + membro + `ManageChannels` ou `DeleteCategories` | — | `204`; os canais da categoria ficam sem categoria | `404` |
 | GET | `/api/channels` | Bearer + membro | — | `{channels: [{id, categoryId?, name, type, position, createdAt, lastMessageAt?}]}` — só visíveis; `lastMessageAt` alimenta o indicador de não lida do client, ver `docs/architecture.md`, "Decisão: indicador de não lida" | — |
-| POST | `/api/channels` | Bearer + membro + `ManageChannels` | `{name, type: "text"\|"voice"\|"forum", categoryId?, position?}` (sem `position` = fim da categoria) | `201` `Channel` | `400` nome vazio/> 100 chars, tipo inválido, `categoryId` inexistente |
-| PATCH | `/api/channels/{id}` | Bearer + membro + `ManageChannels` | `{name?, categoryId?: string \| null, position?}` (ausente = mantém, `categoryId: null` = sem categoria) | `Channel` | `400` inclusive ao mandar `type` (não muda depois de criado), `404` |
-| DELETE | `/api/channels/{id}` | Bearer + membro + `ManageChannels` | — | `204`; apaga mensagens, threads, anexos (inclusive os arquivos em disco) e overwrites do canal | `404` |
+| POST | `/api/channels` | Bearer + membro + `ManageChannels` ou `CreateChannels` | `{name, type: "text"\|"voice"\|"forum", categoryId?, position?}` (sem `position` = fim da categoria) | `201` `Channel` | `400` nome vazio/> 100 chars, tipo inválido, `categoryId` inexistente |
+| PUT | `/api/channels/order` | Bearer + membro + `ManageChannels` ou `ReorderChannels` | `{groups: [{categoryId: string \| null, ids: [string]}]}` — ordem nova de cada categoria afetada (mover entre categorias manda origem e destino) | `204`; canais listados vão para a categoria do grupo, na ordem; os da categoria que não vieram (ex. invisíveis a quem arrastou) vão para o fim, na ordem em que estavam | `400` sem grupos, `409` canal/categoria inexistente ou repetido |
+| PATCH | `/api/channels/{id}` | Bearer + membro; `name` exige `ManageChannels`, só `categoryId`/`position` aceita também `ReorderChannels` | `{name?, categoryId?: string \| null, position?}` (ausente = mantém, `categoryId: null` = sem categoria) | `Channel` | `400` inclusive ao mandar `type` (não muda depois de criado), `404` |
+| DELETE | `/api/channels/{id}` | Bearer + membro + `ManageChannels` ou `DeleteChannels` | — | `204`; apaga mensagens, threads, anexos (inclusive os arquivos em disco) e overwrites do canal | `404` |
 | GET | `/api/channels/{id}/messages?before=&limit=` | Bearer + membro + `ViewChannels` | — | `{messages: [Message]}` | `400` canal não é texto, `403`, `404` |
 | POST | `/api/channels/{id}/messages` | Bearer + membro + `SendMessages` | `multipart/form-data`: `content?`, `file?` (pelo menos um) | `201` `Message` | `400` sem conteúdo nem anexo, `413` anexo maior que `ATTACHMENT_MAX_MB`, `403`, `404` |
 | GET | `/api/attachments/{id}` | Bearer + membro + `ViewChannels` (do canal da mensagem do anexo) | — | bytes do arquivo (`Content-Type`/`Content-Disposition` do anexo) | `403`, `404` |
@@ -114,7 +117,7 @@ Base URL: `KnownServer.baseUrl`, uma por servidor cadastrado no client (endereç
 
 `Message`: `{id, channelId, threadId?, authorMemberId, content, createdAt, editedAt?, attachments?: [Attachment]}` — `attachments` só em mensagem de canal de texto (canal forum fora do escopo, ver docs/architecture.md, "Decisão: upload de anexo em mensagem"). `Attachment`: `{id, filename, contentType, sizeBytes, url}` — `url` é relativo (`/api/attachments/{id}`) e exige o mesmo Bearer token de qualquer outra rota, não dá pra usar direto num `<img src>` ou link de download. `Thread`: `{id, channelId, title, authorMemberId, createdAt}`. `Role`: `{id, name, color?, permissions, position, isDefault, createdAt}`. `Invite`: `{id, code, createdByMemberId, maxUses?, uses, expiresAt?, createdAt}`. `Overwrite`: `{roleId, allow, deny}`.
 
-**Bits de permissão** (`internal/permissions`, `int64`): `ViewChannels=1, SendMessages=2, Voice=4, ManageInvites=8, ManageRoles=16, Administrator=32, KickMembers=64, BanMembers=128, ManageChannels=256, CreateInvites=512`. `Owner=-1` (dono do bootstrap, ignora tudo). `Grants(base, target)` impede que `ManageRoles` sozinho conceda um bit que quem chama não possui — ver `docs/architecture.md`, "Decisão: ManageRoles não concede permissões além das próprias". Kick/ban não passam por `Grants` (não concedem bit nenhum a ninguém) e não têm checagem de hierarquia entre roles — só o bit e "não pode ser o dono/você mesmo", ver `docs/architecture.md`, "Decisão: kick/ban de membro".
+**Bits de permissão** (`internal/permissions`, `int64`): `ViewChannels=1, SendMessages=2, Voice=4, ManageInvites=8, ManageRoles=16, Administrator=32, KickMembers=64, BanMembers=128, ManageChannels=256, CreateInvites=512, CreateChannels=1024, ReorderChannels=2048, DeleteChannels=4096, CreateCategories=8192, ReorderCategories=16384, DeleteCategories=32768`. Catálogo completo, com o que cada bit libera, em `docs/permissions.md`. `Owner=-1` (dono do bootstrap, ignora tudo). `Grants(base, target)` impede que `ManageRoles` sozinho conceda um bit que quem chama não possui — ver `docs/architecture.md`, "Decisão: ManageRoles não concede permissões além das próprias". Kick/ban não passam por `Grants` (não concedem bit nenhum a ninguém) e não têm checagem de hierarquia entre roles — só o bit e "não pode ser o dono/você mesmo", ver `docs/architecture.md`, "Decisão: kick/ban de membro".
 
 ### WebSocket — `GET /api/channels/{id}/ws`
 
@@ -133,7 +136,7 @@ Em ambos os casos: `error` para conteúdo vazio, acima do limite (mensagem: 4000
 ### Rate limiting
 
 Dois token buckets em memória, chaves diferentes (ver `docs/architecture.md`, "Decisão: rate limiting em server-channel"):
-- **REST** (toda a API exceto `/healthz`, incluindo o handshake de `GET /api/channels/{id}/ws`): por IP, `RATE_LIMIT_RPM` (padrão 120) / `RATE_LIMIT_BURST` (padrão 20). Excesso responde `429 Too Many Requests` com header `Retry-After`.
+- **REST** (toda a API exceto `/healthz`, incluindo o handshake de `GET /api/channels/{id}/ws`): por usuário (`sub` do token verificado; IP quando não há token válido), `RATE_LIMIT_RPM` (padrão 120) / `RATE_LIMIT_BURST` (padrão 60). Orçamento por tela em `docs/rate-limits.md`. Excesso responde `429 Too Many Requests` com header `Retry-After`.
 - **Frames de WebSocket** (dentro de uma conexão de canal já aberta): por membro, `RATE_LIMIT_WS_RPM` (padrão 60) / `RATE_LIMIT_WS_BURST` (padrão 10). Excesso responde com um frame `error` (conexão permanece aberta, frame é descartado).
 
 ## Não confirmado / fora do escopo deste documento

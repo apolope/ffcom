@@ -73,6 +73,60 @@ func (s *CategoryStore) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+// ErrOrderMismatch: a lista de ids passada a Reorder não é exatamente o
+// conjunto atual de categorias (alguém criou ou apagou uma no meio tempo).
+var ErrOrderMismatch = errors.New("categories: ids não batem com as categorias atuais")
+
+// Reorder grava a ordem inteira das categorias (posições 0..n-1 na ordem de
+// ids) numa transação. O SELECT ... FOR UPDATE trava as linhas para que
+// duas reordenações simultâneas não se intercalem.
+func (s *CategoryStore) Reorder(ctx context.Context, ids []string) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("categories: reorder: begin: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	rows, err := tx.Query(ctx, `SELECT id FROM categories FOR UPDATE`)
+	if err != nil {
+		return fmt.Errorf("categories: reorder: travar: %w", err)
+	}
+	current := make(map[string]bool)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return fmt.Errorf("categories: reorder: scan: %w", err)
+		}
+		current[id] = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("categories: reorder: iterar linhas: %w", err)
+	}
+
+	if len(ids) != len(current) {
+		return ErrOrderMismatch
+	}
+	seen := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if !current[id] || seen[id] {
+			return ErrOrderMismatch
+		}
+		seen[id] = true
+	}
+
+	for position, id := range ids {
+		if _, err := tx.Exec(ctx, `UPDATE categories SET position = $2 WHERE id = $1`, id, position); err != nil {
+			return fmt.Errorf("categories: reorder: update: %w", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("categories: reorder: commit: %w", err)
+	}
+	return nil
+}
+
 // List lista todas as categorias do servidor, ordenadas por posição.
 func (s *CategoryStore) List(ctx context.Context) ([]Category, error) {
 	const query = `SELECT id, name, position, created_at FROM categories ORDER BY position ASC`

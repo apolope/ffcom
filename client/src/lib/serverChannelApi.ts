@@ -369,8 +369,9 @@ export function unbanMember(baseUrl: string, accessToken: string, oidcSubject: s
   return postJsonOrThrow(baseUrl, `/api/bans/${encodeURIComponent(oidcSubject)}`, accessToken, 'DELETE')
 }
 
-// Criar/renomear/mover/apagar categoria e canal (requer ManageChannels) --
-// ver docs/architecture.md, "Decisão: gerenciar categorias e canais".
+// Criar/renomear/mover/apagar categoria e canal (ManageChannels ou o bit
+// granular de cada ação, ver docs/permissions.md) -- ver
+// docs/architecture.md, "Decisão: gerenciar categorias e canais".
 export function createCategory(baseUrl: string, accessToken: string, name: string): Promise<RemoteCategory> {
   return postJsonOrThrow(baseUrl, '/api/categories', accessToken, 'POST', { name })
 }
@@ -382,6 +383,25 @@ export function updateCategory(
   changes: { name?: string; position?: number },
 ): Promise<RemoteCategory> {
   return postJsonOrThrow(baseUrl, `/api/categories/${categoryId}`, accessToken, 'PATCH', changes)
+}
+
+// Grava a ordem inteira das categorias (arrastar e soltar). ids precisa ser
+// o conjunto atual completo; se mudou no meio tempo, o servidor responde 409.
+export function reorderCategories(baseUrl: string, accessToken: string, ids: string[]): Promise<void> {
+  return postJsonOrThrow(baseUrl, '/api/categories/order', accessToken, 'PUT', { ids })
+}
+
+// Ordem nova dos canais de uma categoria (null = sem categoria).
+export interface ChannelOrderGroup {
+  categoryId: string | null
+  ids: string[]
+}
+
+// Grava a ordem dos canais das categorias listadas; mover entre categorias
+// manda a de origem e a de destino. Canal da categoria que não veio na
+// lista vai para o fim dela. Canal ou categoria apagada no meio tempo: 409.
+export function reorderChannels(baseUrl: string, accessToken: string, groups: ChannelOrderGroup[]): Promise<void> {
+  return postJsonOrThrow(baseUrl, '/api/channels/order', accessToken, 'PUT', { groups })
 }
 
 // Os canais da categoria apagada continuam existindo, sem categoria.

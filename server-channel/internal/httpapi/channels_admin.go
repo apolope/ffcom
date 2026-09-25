@@ -16,33 +16,47 @@ import (
 )
 
 // Criar/renomear/mover/apagar categoria e canal — ver docs/architecture.md,
-// "Decisão: gerenciar categorias e canais". Tudo exige ManageChannels na
-// permissão base (sem overwrite por canal): é administração da estrutura do
-// servidor, não de um canal específico.
+// "Decisão: gerenciar categorias e canais". Checado só na permissão base
+// (sem overwrite por canal): é administração da estrutura do servidor, não
+// de um canal específico. ManageChannels vale tudo; cada ação também aceita
+// o bit granular dela (CreateChannels, ReorderCategories etc., ver
+// docs/permissions.md). Renomear só com ManageChannels.
 
 // maxStructureNameLength limita nome de categoria/canal em caracteres (não
 // bytes). Sem limite, um nome gigante quebraria a sidebar de todo membro.
 const maxStructureNameLength = 100
 
-// requireManageChannels resolve a permissão base do membro autenticado e
-// devolve false (já com a resposta HTTP escrita) se ele não tiver
-// ManageChannels nem for dono do servidor.
-func requireManageChannels(w http.ResponseWriter, r *http.Request, roles *store.RoleStore) bool {
+// structureBase resolve a permissão base do membro autenticado, com a
+// resposta de erro já escrita quando ok é false.
+func structureBase(w http.ResponseWriter, r *http.Request, roles *store.RoleStore) (int64, bool) {
 	member, ok := auth.MemberFromContext(r.Context())
 	if !ok {
 		http.Error(w, "membro não encontrado no contexto", http.StatusInternalServerError)
-		return false
+		return 0, false
 	}
 	base, _, err := memberBasePermission(r.Context(), roles, member)
 	if err != nil {
 		http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
-		return false
+		return 0, false
 	}
-	if !permissions.Has(base, permissions.ManageChannels) {
-		http.Error(w, "requer a permissão ManageChannels", http.StatusForbidden)
-		return false
+	return base, true
+}
+
+// allowStructure confere se base tem ManageChannels ou o bit granular da
+// ação (bit 0 = só ManageChannels), escrevendo 403 se não.
+func allowStructure(w http.ResponseWriter, base, bit int64, bitName string) bool {
+	if permissions.Has(base, permissions.ManageChannels|bit) {
+		return true
 	}
-	return true
+	http.Error(w, "requer a permissão "+bitName, http.StatusForbidden)
+	return false
+}
+
+// requireStructure junta structureBase e allowStructure para as rotas que
+// fazem uma ação só.
+func requireStructure(w http.ResponseWriter, r *http.Request, roles *store.RoleStore, bit int64, bitName string) bool {
+	base, ok := structureBase(w, r, roles)
+	return ok && allowStructure(w, base, bit, bitName)
 }
 
 // normalizeStructureName tira espaços das pontas e valida o tamanho,
@@ -84,7 +98,7 @@ type createCategoryRequest struct {
 // POST /api/categories — cria uma categoria, por padrão no fim da lista.
 func handleCreateCategory(categories *store.CategoryStore, roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !requireManageChannels(w, r, roles) {
+		if !requireStructure(w, r, roles, permissions.CreateCategories, "ManageChannels ou CreateCategories") {
 			return
 		}
 		var body createCategoryRequest
@@ -114,16 +128,23 @@ type updateCategoryRequest struct {
 	Position *int    `json:"position,omitempty"`
 }
 
-// PATCH /api/categories/{id} — renomeia e/ou reposiciona. Campo ausente
-// mantém o valor atual.
+// PATCH /api/categories/{id} — renomeia (só ManageChannels) e/ou
+// reposiciona (ReorderCategories). Campo ausente mantém o valor atual.
 func handleUpdateCategory(categories *store.CategoryStore, roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !requireManageChannels(w, r, roles) {
+		base, ok := structureBase(w, r, roles)
+		if !ok {
 			return
 		}
 		var body updateCategoryRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			return
+		}
+		if body.Name != nil && !allowStructure(w, base, 0, "ManageChannels") {
+			return
+		}
+		if body.Name == nil && !allowStructure(w, base, permissions.ReorderCategories, "ManageChannels ou ReorderCategories") {
 			return
 		}
 
@@ -167,7 +188,7 @@ func handleUpdateCategory(categories *store.CategoryStore, roles *store.RoleStor
 // existindo, sem categoria (mesmo comportamento do Discord).
 func handleDeleteCategory(categories *store.CategoryStore, roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !requireManageChannels(w, r, roles) {
+		if !requireStructure(w, r, roles, permissions.DeleteCategories, "ManageChannels ou DeleteCategories") {
 			return
 		}
 		err := categories.Delete(r.Context(), r.PathValue("id"))
@@ -177,6 +198,77 @@ func handleDeleteCategory(categories *store.CategoryStore, roles *store.RoleStor
 		}
 		if err != nil {
 			http.Error(w, "erro ao apagar categoria", http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+}
+
+type reorderCategoriesRequest struct {
+	IDs []string `json:"ids"`
+}
+
+// PUT /api/categories/order — grava a ordem inteira das categorias de uma
+// vez (arrastar e soltar no client), em transação, com posições 0..n-1.
+// ids precisa ser exatamente o conjunto atual: se alguém criou ou apagou
+// uma categoria no meio tempo, 409 e o client recarrega em vez de gravar
+// uma ordem montada sobre uma lista velha.
+func handleReorderCategories(categories *store.CategoryStore, roles *store.RoleStore) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !requireStructure(w, r, roles, permissions.ReorderCategories, "ManageChannels ou ReorderCategories") {
+			return
+		}
+		var body reorderCategoriesRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			return
+		}
+		err := categories.Reorder(r.Context(), body.IDs)
+		if errors.Is(err, store.ErrOrderMismatch) {
+			http.Error(w, "a lista de categorias mudou; recarregue e tente de novo", http.StatusConflict)
+			return
+		}
+		if err != nil {
+			http.Error(w, "erro ao reordenar categorias", http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+}
+
+type reorderChannelsRequest struct {
+	Groups []struct {
+		CategoryID *string  `json:"categoryId"`
+		IDs        []string `json:"ids"`
+	} `json:"groups"`
+}
+
+// PUT /api/channels/order — grava a ordem dos canais de uma ou mais
+// categorias (arrastar e soltar no client; mover entre categorias manda o
+// grupo de origem e o de destino). Canais da categoria que não vieram na
+// lista vão para o fim dela, ver ChannelStore.Reorder. Canal ou categoria
+// apagada no meio tempo dá 409, e o client recarrega e tenta de novo.
+func handleReorderChannels(channels *store.ChannelStore, roles *store.RoleStore) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !requireStructure(w, r, roles, permissions.ReorderChannels, "ManageChannels ou ReorderChannels") {
+			return
+		}
+		var body reorderChannelsRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.Groups) == 0 {
+			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			return
+		}
+		groups := make([]store.ChannelGroup, len(body.Groups))
+		for i, g := range body.Groups {
+			groups[i] = store.ChannelGroup{CategoryID: g.CategoryID, IDs: g.IDs}
+		}
+		err := channels.Reorder(r.Context(), groups)
+		if errors.Is(err, store.ErrChannelOrderInvalid) {
+			http.Error(w, "a lista de canais mudou; recarregue e tente de novo", http.StatusConflict)
+			return
+		}
+		if err != nil {
+			http.Error(w, "erro ao reordenar canais", http.StatusInternalServerError)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -194,7 +286,7 @@ type createChannelRequest struct {
 // fim da categoria (ou entre os sem categoria, com categoryId nulo).
 func handleCreateChannel(categories *store.CategoryStore, channels *store.ChannelStore, roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !requireManageChannels(w, r, roles) {
+		if !requireStructure(w, r, roles, permissions.CreateChannels, "ManageChannels ou CreateChannels") {
 			return
 		}
 		var body createChannelRequest
@@ -229,18 +321,27 @@ func handleCreateChannel(categories *store.CategoryStore, channels *store.Channe
 	})
 }
 
-// PATCH /api/channels/{id} — renomeia, move de categoria e/ou reposiciona.
-// Campo ausente mantém o valor atual; "categoryId": null tira o canal da
+// PATCH /api/channels/{id} — renomeia (só ManageChannels), move de
+// categoria e/ou reposiciona (ReorderChannels). Campo ausente mantém o
+// valor atual; "categoryId": null tira o canal da
 // categoria. Por isso o corpo é lido como mapa: com um *string comum não dá
 // pra distinguir campo ausente de null. O tipo do canal não muda.
 func handleUpdateChannel(categories *store.CategoryStore, channels *store.ChannelStore, roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !requireManageChannels(w, r, roles) {
+		base, ok := structureBase(w, r, roles)
+		if !ok {
 			return
 		}
 		var body map[string]json.RawMessage
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			return
+		}
+		_, renames := body["name"]
+		if renames && !allowStructure(w, base, 0, "ManageChannels") {
+			return
+		}
+		if !renames && !allowStructure(w, base, permissions.ReorderChannels, "ManageChannels ou ReorderChannels") {
 			return
 		}
 
@@ -310,7 +411,7 @@ func handleUpdateChannel(categories *store.CategoryStore, channels *store.Channe
 // rota.
 func handleDeleteChannel(channels *store.ChannelStore, attachments *store.AttachmentStore, files *storage.FileStore, roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !requireManageChannels(w, r, roles) {
+		if !requireStructure(w, r, roles, permissions.DeleteChannels, "ManageChannels ou DeleteChannels") {
 			return
 		}
 		channelID := r.PathValue("id")

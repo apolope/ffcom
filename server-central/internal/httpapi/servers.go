@@ -98,6 +98,38 @@ func handleRemoveServer(servers *store.KnownServerStore) http.Handler {
 	})
 }
 
+type reorderServersRequest struct {
+	IDs []string `json:"ids"`
+}
+
+// PUT /api/servers/order — grava a ordem do rail da conta autenticada
+// (arrastar e soltar os ícones). ids precisa ser a lista completa; se ela
+// mudou em outra aba ou dispositivo, 409 e o client relê e tenta de novo.
+func handleReorderServers(servers *store.KnownServerStore) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		account, ok := auth.AccountFromContext(r.Context())
+		if !ok {
+			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			return
+		}
+		var body reorderServersRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			return
+		}
+		err := servers.Reorder(r.Context(), account.ID, body.IDs)
+		if errors.Is(err, store.ErrOrderMismatch) {
+			http.Error(w, "a lista de servidores mudou; recarregue e tente de novo", http.StatusConflict)
+			return
+		}
+		if err != nil {
+			http.Error(w, "erro ao reordenar servidores", http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+}
+
 type listServersResponse struct {
 	Servers []knownServerView `json:"servers"`
 }
@@ -109,19 +141,21 @@ type addServerRequest struct {
 }
 
 type knownServerView struct {
-	ID      string    `json:"id"`
-	Address string    `json:"address"`
-	Name    string    `json:"name"`
-	IconURL *string   `json:"iconUrl,omitempty"`
-	AddedAt time.Time `json:"addedAt"`
+	ID       string    `json:"id"`
+	Address  string    `json:"address"`
+	Name     string    `json:"name"`
+	IconURL  *string   `json:"iconUrl,omitempty"`
+	Position int       `json:"position"`
+	AddedAt  time.Time `json:"addedAt"`
 }
 
 func toKnownServerView(k store.KnownServer) knownServerView {
 	return knownServerView{
-		ID:      k.ID,
-		Address: k.Address,
-		Name:    k.Name,
-		IconURL: k.IconURL,
-		AddedAt: k.AddedAt,
+		ID:       k.ID,
+		Address:  k.Address,
+		Name:     k.Name,
+		IconURL:  k.IconURL,
+		Position: k.Position,
+		AddedAt:  k.AddedAt,
 	}
 }
