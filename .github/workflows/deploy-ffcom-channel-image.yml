@@ -2,7 +2,8 @@ name: deploy-ffcom-channel-image
 
 # Imagem do container evergreen de server-channel (ver docs/architecture.md,
 # "Decisão: container evergreen em `server-channel`", item 9). A tag
-# channel-image-vX.Y.Z builda ghcr.io/apolope/ffcom-channel:X.Y.Z e :X, onde
+# channel-image-vX.Y.Z builda ghcr.io/apolope/ffcom-channel:X.Y.Z, :X e
+# :latest, onde
 # X.Y.Z é a versão do CONTRATO do container (lançador ffcom-runtime), não a
 # do serviço. O serviço sai por channel-vX.Y.Z (deploy-ffcom-channel.yml) e
 # entra na imagem só como semente, resolvida no índice assinado na hora do
@@ -143,9 +144,10 @@ jobs:
           echo "Semente: server-channel $SEED (trilha $CHANNEL_VERSION)"
           echo "value=$SEED" >> "$GITHUB_OUTPUT"
 
-      # :X acompanha o último build do major. Rebuild de um patch antigo
-      # depois de um mais novo moveria :X para trás; publique sempre em
-      # ordem crescente.
+      # :X acompanha o último build do major e :latest o último build de
+      # todos (para quem faz pull sem tag). Rebuild de um patch antigo
+      # depois de um mais novo moveria :X e :latest para trás; publique
+      # sempre em ordem crescente.
       - name: Build e push da imagem
         working-directory: server-channel
         env:
@@ -161,9 +163,9 @@ jobs:
             --build-arg CHANNEL_VERSION="$SEED" \
             --build-arg FFCOM_RELEASE_INDEX_URL \
             --build-arg FFCOM_RELEASE_PUBKEY \
-            -t "${IMAGE}:${RUNTIME_VERSION}" -t "${IMAGE}:${MAJOR}" \
+            -t "${IMAGE}:${RUNTIME_VERSION}" -t "${IMAGE}:${MAJOR}" -t "${IMAGE}:latest" \
             --push .
-          echo "Publicado ${IMAGE}:${RUNTIME_VERSION} e :${MAJOR} (runtime ${RUNTIME_VERSION}, semente ${SEED}, ${PLATFORMS})"
+          echo "Publicado ${IMAGE}:${RUNTIME_VERSION}, :${MAJOR} e :latest (runtime ${RUNTIME_VERSION}, semente ${SEED}, ${PLATFORMS})"
 
       - name: Limpeza de imagens antigas
         run: docker image prune -f

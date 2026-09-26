@@ -50,7 +50,9 @@ disco em vez de usar a imagem publicada), o caminho é o override
 A imagem e o serviço têm versões separadas. A tag da imagem (`:1`) é a
 versão do **contrato** do container: variáveis de ambiente, portas, volumes e
 healthcheck. Ela muda raramente e só quebra compatibilidade quando o número
-principal muda (`1` → `2`). O serviço (`server-channel` `0.7.0`, `0.7.1`,
+principal muda (`1` → `2`). Existe também `:latest`, que segue a imagem mais
+nova e por isso pode pular para um número principal novo sem aviso; para
+hospedar, prefira `:1`. O serviço (`server-channel` `0.7.0`, `0.7.1`,
 ...) é baixado pelo próprio container: um lançador (`ffcom-runtime`) roda
 como processo principal, consulta um índice de versões assinado publicado
 nos releases do GitHub, confere assinatura e sha256 do binário, troca a
