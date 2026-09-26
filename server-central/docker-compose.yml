@@ -58,6 +58,16 @@ services:
       # container.
       AVATARS_DIR: /data/avatars
       AVATAR_MAX_MB: ${AVATAR_MAX_MB:-}
+      # Sugestões de melhoria (varinha do Claude). Opcional: sem
+      # CLAUDE_RELAY_URL a varinha fica desligada e toda sugestão enviada vai
+      # para moderação. Ver .env.example.
+      CLAUDE_RELAY_URL: ${CLAUDE_RELAY_URL:-}
+      CLAUDE_RELAY_API_KEY: ${CLAUDE_RELAY_API_KEY:-}
+      CLAUDE_CALLBACK_SECRET: ${CLAUDE_CALLBACK_SECRET:-}
+      CLAUDE_CALLBACK_BASE_URL: ${CLAUDE_CALLBACK_BASE_URL:-}
+      IDEAS_ADMIN_GROUP: ${IDEAS_ADMIN_GROUP:-}
+      IDEAS_WAND_PER_DAY: ${IDEAS_WAND_PER_DAY:-}
+      IDEAS_OFFENSIVE_PENALTY: ${IDEAS_OFFENSIVE_PENALTY:-}
     ports:
       - "${SERVER_CENTRAL_PORT:-8081}:8080"
     volumes:

@@ -15,6 +15,7 @@ const (
 	subjectContextKey
 	sessionContextKey
 	profileNameContextKey
+	groupsContextKey
 )
 
 // Middleware exige um Bearer token válido em cada requisição e garante (via
@@ -30,6 +31,7 @@ func Middleware(verifier *Verifier, accounts *store.AccountStore) func(http.Hand
 			// novo.
 			subject, ok := r.Context().Value(subjectContextKey).(string)
 			profileName, _ := r.Context().Value(profileNameContextKey).(*string)
+			groups, _ := r.Context().Value(groupsContextKey).([]string)
 			if !ok {
 				rawToken, hasToken := bearerToken(r)
 				if !hasToken {
@@ -44,6 +46,7 @@ func Middleware(verifier *Verifier, accounts *store.AccountStore) func(http.Hand
 				}
 				subject = claims.Subject
 				profileName = claims.ProfileName()
+				groups = claims.Groups
 			}
 
 			account, err := accounts.GetOrCreateBySubject(r.Context(), subject, profileName)
@@ -53,6 +56,7 @@ func Middleware(verifier *Verifier, accounts *store.AccountStore) func(http.Hand
 			}
 
 			ctx := context.WithValue(r.Context(), accountContextKey, account)
+			ctx = context.WithValue(ctx, groupsContextKey, groups)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -78,7 +82,20 @@ func IdentifyRequest(verifier *Verifier, r *http.Request) (*http.Request, string
 	ctx := context.WithValue(r.Context(), subjectContextKey, claims.Subject)
 	ctx = context.WithValue(ctx, sessionContextKey, claims.SessionID)
 	ctx = context.WithValue(ctx, profileNameContextKey, claims.ProfileName())
+	ctx = context.WithValue(ctx, groupsContextKey, claims.Groups)
 	return r.WithContext(ctx), claims.Subject, claims.SessionID, true
+}
+
+// InGroupFromContext diz se o token da requisição trazia o grupo name (ver
+// Claims.Groups). Falso para requisição sem token.
+func InGroupFromContext(ctx context.Context, name string) bool {
+	groups, _ := ctx.Value(groupsContextKey).([]string)
+	for _, g := range groups {
+		if g == name {
+			return true
+		}
+	}
+	return false
 }
 
 // SessionFromContext devolve o "sid" do token anexado por IdentifyRequest
@@ -125,8 +142,40 @@ func wsProtocolToken(r *http.Request) (string, bool) {
 	return token, token != ""
 }
 
+// OptionalAccount é o Middleware para rotas públicas que mudam de acordo com
+// quem pede (ex. a lista de ideias mostra o voto de quem está logado): com
+// token válido anexa a conta ao contexto, sem token (ou com token inválido)
+// segue como visitante, sem 401.
+func OptionalAccount(verifier *Verifier, accounts *store.AccountStore) func(http.Handler) http.Handler {
+	required := Middleware(verifier, accounts)
+	return func(next http.Handler) http.Handler {
+		withAccount := required(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if _, ok := r.Context().Value(subjectContextKey).(string); ok {
+				withAccount.ServeHTTP(w, r)
+				return
+			}
+			if rawToken, hasToken := bearerToken(r); hasToken {
+				if _, err := verifier.Verify(r.Context(), rawToken); err == nil {
+					withAccount.ServeHTTP(w, r)
+					return
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // AccountFromContext devolve a conta autenticada anexada pelo Middleware.
 func AccountFromContext(ctx context.Context) (store.Account, bool) {
 	account, ok := ctx.Value(accountContextKey).(store.Account)
 	return account, ok
+}
+
+// WithAccount anexa account (e os grupos do token) ao contexto, como o
+// Middleware faria. Usado pelos testes dos handlers, que não têm um
+// Authentik para emitir token.
+func WithAccount(ctx context.Context, account store.Account, groups ...string) context.Context {
+	ctx = context.WithValue(ctx, accountContextKey, account)
+	return context.WithValue(ctx, groupsContextKey, groups)
 }

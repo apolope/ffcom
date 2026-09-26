@@ -49,6 +49,21 @@ type Claims struct {
 	// nome exibido de quem não preencheu um no perfil do FFCom.
 	Name              string `json:"name"`
 	PreferredUsername string `json:"preferred_username"`
+	// Groups vem do scope ffcom-groups (mapeamento próprio do FFCom no
+	// Authentik, que só devolve os grupos ffcom-*). Hoje só decide quem
+	// modera as sugestões da home (grupo ffcom-admins); tokens pedidos sem
+	// esse scope, como os do app, chegam sem a claim.
+	Groups []string `json:"groups"`
+}
+
+// InGroup diz se o token traz o grupo name.
+func (c Claims) InGroup(name string) bool {
+	for _, g := range c.Groups {
+		if g == name {
+			return true
+		}
+	}
+	return false
 }
 
 // ProfileName devolve o nome do perfil do Authentik (name, ou

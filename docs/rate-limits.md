@@ -70,8 +70,15 @@ Por instância do client, com a pessoa só olhando a tela.
 
 ### server-central
 
-Nenhum poll. Presença, DMs e status chegam pelo WebSocket de presença
+Nenhum poll no app. Presença, DMs e status chegam pelo WebSocket de presença
 (`GET /api/presence/ws`), que conta uma ficha só no handshake.
+
+A seção de ideias da home page consulta enquanto espera o Claude, e só
+nessa hora: `GET /api/ideas/assist/{id}` a cada 2,5 s enquanto a varinha
+trabalha (24 por minuto, no máximo 7 minutos) e `GET /api/ideas/me` a cada
+3 s depois de enviar uma sugestão (20 por minuto, até a checagem terminar ou
+por 3 minutos). As duas param com a aba escondida e nunca rodam juntas numa
+mesma aba, então ficam bem abaixo dos 120 RPM.
 
 ### Fora dos limiters
 

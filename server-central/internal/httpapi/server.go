@@ -19,7 +19,10 @@ import (
 // server-channel, ver docs/architecture.md, "Decisão: CORS em
 // server-channel") — origens do client (web/PWA, Electron) autorizadas a
 // chamar esta instância de uma origem diferente.
-func NewRouter(verifier *auth.Verifier, db *store.Store, avatarFiles *storage.AvatarStore, avatarMaxBytes int64, allowedOrigins []string, version string, rateLimitRPM, rateLimitBurst int, requireTLS bool) http.Handler {
+//
+// ideasCfg configura as sugestões de melhoria da home (ver
+// internal/httpapi/ideas.go).
+func NewRouter(verifier *auth.Verifier, db *store.Store, avatarFiles *storage.AvatarStore, avatarMaxBytes int64, allowedOrigins []string, version string, rateLimitRPM, rateLimitBurst int, requireTLS bool, ideasCfg IdeasConfig) http.Handler {
 	mux := http.NewServeMux()
 	hub := realtime.NewHub()
 
@@ -55,6 +58,15 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, avatarFiles *storage.Av
 	mux.Handle("POST /api/friends/requests/{id}/accept", protected(handleAcceptFriendRequest(hub, db.Friendships, db.Profiles)))
 	mux.Handle("DELETE /api/friends/requests/{id}", protected(handleDeleteFriendRequest(hub, db.Friendships)))
 	mux.Handle("GET /api/dms/{accountId}/messages", protected(handleListDMs(db.Friendships, db.DirectMessages)))
+
+	optional := auth.OptionalAccount(verifier, db.Accounts)
+	mux.Handle("GET /api/ideas", optional(handleListIdeas(db.Ideas, ideasCfg)))
+	mux.Handle("GET /api/ideas/me", protected(handleIdeasMe(db, ideasCfg)))
+	mux.Handle("POST /api/ideas", protected(handleCreateIdea(db, ideasCfg)))
+	mux.Handle("POST /api/ideas/assist", protected(handleCreateAssist(db, ideasCfg)))
+	mux.Handle("GET /api/ideas/assist/{id}", protected(handleGetAssist(db, ideasCfg)))
+	mux.Handle("PUT /api/ideas/{id}/vote", protected(handleVoteIdea(db, ideasCfg)))
+	mux.Handle("PATCH /api/ideas/{id}", protected(handleModerateIdea(db, ideasCfg)))
 
 	limiter := newRateLimiter(rateLimitRPM, rateLimitBurst)
 	identify := func(r *http.Request) (*http.Request, string, string, bool) { return auth.IdentifyRequest(verifier, r) }

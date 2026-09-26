@@ -7,9 +7,11 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"a3sitsolutions.com/ffcom/server-central/internal/auth"
 	"a3sitsolutions.com/ffcom/server-central/internal/httpapi"
+	"a3sitsolutions.com/ffcom/server-central/internal/relay"
 	"a3sitsolutions.com/ffcom/server-central/internal/storage"
 	"a3sitsolutions.com/ffcom/server-central/internal/store"
 )
@@ -61,12 +63,56 @@ func main() {
 	rateLimitRPM := envInt("RATE_LIMIT_RPM", 120)
 	rateLimitBurst := envInt("RATE_LIMIT_BURST", 60)
 	requireTLS := envBool("REQUIRE_TLS", false)
-	router := httpapi.NewRouter(verifier, db, avatarFiles, avatarMaxBytes, parseAllowedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS")), version, rateLimitRPM, rateLimitBurst, requireTLS)
+	ideasCfg := ideasConfigFromEnv()
+	router := httpapi.NewRouter(verifier, db, avatarFiles, avatarMaxBytes, parseAllowedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS")), version, rateLimitRPM, rateLimitBurst, requireTLS, ideasCfg)
+
+	// Varinha e checagem das sugestões da home via a3s-claude-relay: o relay
+	// devolve o resultado por webhook num listener interno próprio, numa
+	// porta que o proxy público não encaminha (ver docs/architecture.md,
+	// "Decisão: sugestões de melhoria com varinha do Claude").
+	if ideasCfg.Relay != nil {
+		callbackPort := os.Getenv("CLAUDE_CALLBACK_PORT")
+		if callbackPort == "" {
+			callbackPort = "8090"
+		}
+		go func() {
+			log.Printf("server-central: callback do relay ouvindo em :%s", callbackPort)
+			if err := http.ListenAndServe(":"+callbackPort, httpapi.NewCallbackHandler(db, ideasCfg)); err != nil {
+				log.Fatalf("server-central: callback do relay: %v", err)
+			}
+		}()
+		go httpapi.RunIdeasSweeper(ctx, db, ideasCfg, 30*time.Second)
+	} else {
+		log.Printf("server-central: CLAUDE_RELAY_URL vazio; varinha desligada e sugestões vão direto para moderação")
+	}
 
 	log.Printf("server-central: versão %s, ouvindo em :%s (OIDC issuer: %s)", version, port, issuerURL)
 	if err := http.ListenAndServe(":"+port, router); err != nil {
 		log.Fatalf("server-central: %v", err)
 	}
+}
+
+// ideasConfigFromEnv lê a configuração das sugestões da home. Sem
+// CLAUDE_RELAY_URL a varinha fica desligada; com ela, a chave, o segredo do
+// callback e a URL pela qual o relay alcança este container são
+// obrigatórios.
+func ideasConfigFromEnv() httpapi.IdeasConfig {
+	cfg := httpapi.IdeasConfig{
+		WandPerDay:       envInt("IDEAS_WAND_PER_DAY", 3),
+		OffensivePenalty: envInt("IDEAS_OFFENSIVE_PENALTY", 2),
+		AdminGroup:       os.Getenv("IDEAS_ADMIN_GROUP"),
+		ImproveTimeout:   time.Duration(envInt("IDEAS_ASSIST_TIMEOUT_SECONDS", 360)) * time.Second,
+		CheckTimeout:     time.Duration(envInt("IDEAS_CHECK_TIMEOUT_MINUTES", 30)) * time.Minute,
+	}
+	if cfg.AdminGroup == "" {
+		cfg.AdminGroup = "ffcom-admins"
+	}
+	if relayURL := os.Getenv("CLAUDE_RELAY_URL"); relayURL != "" {
+		cfg.Relay = relay.New(relayURL, requireEnv("CLAUDE_RELAY_API_KEY"))
+		cfg.CallbackSecret = requireEnv("CLAUDE_CALLBACK_SECRET")
+		cfg.CallbackBaseURL = requireEnv("CLAUDE_CALLBACK_BASE_URL")
+	}
+	return cfg
 }
 
 func requireEnv(name string) string {
