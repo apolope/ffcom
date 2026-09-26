@@ -22,7 +22,7 @@ jobs:
     name: Lint do Dockerfile
     runs-on: [self-hosted, a3s-network]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Hadolint
         uses: hadolint/hadolint-action@v3.1.0
         with:
@@ -32,7 +32,7 @@ jobs:
     name: Scan de segredos
     runs-on: [self-hosted, a3s-network]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: "Gitleaks (escopo: client)"
         run: |
           docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
@@ -44,7 +44,7 @@ jobs:
     runs-on: [self-hosted, a3s-network]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Login no GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
