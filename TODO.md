@@ -105,7 +105,7 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
   - [x] Fase 1: pacote `internal/release` (índice assinado ed25519), `cmd/release-tool` e workflow `channel-v*` publicando binários + índice no release `channel-stable`
   - [x] Fase 2: lançador `cmd/ffcom-runtime` (resolve, baixa, verifica, supervisiona, troca, rollback)
   - [x] Fase 3: Dockerfile com lançador + binário semente e workflow `channel-image-v*`
-  - [ ] Fase 4: composes (`deploy/channel` e referência) e deploy da instância de teste por `SIGHUP`
+  - [x] Fase 4: composes (`deploy/channel` e referência) e deploy da instância de teste por `SIGHUP`
   - [ ] Fase 5: README de self-hosting e guia de atualização
   - [ ] Gerar o par de chaves, cadastrar `CHANNEL_RELEASE_SIGNING_KEY` no environment `channel-release` e publicar `channel-v*` + `channel-image-v1.0.0` pela primeira vez
 - [ ] Testar a permissão de convidar num browser real, depois do deploy de `channel-v*`/`client-v*`: `teste-ffcom02` sem bit não vê "Convidar"; ligar "Criar convites" na @everyone e conferir que ele gera convite, mas `GET`/`DELETE /api/invites` continuam `403` para ele; role antiga com só "Gerenciar convites" continua criando

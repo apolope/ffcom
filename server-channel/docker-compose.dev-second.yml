@@ -32,7 +32,13 @@ services:
       retries: 10
 
   app:
-    build: .
+    # Mesma imagem de dev do override docker-compose.dev.yml (Dockerfile.dev,
+    # server-channel compilado do código local, sem o lançador do container
+    # evergreen).
+    image: ffcom-channel-dev:local
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
     depends_on:
       postgres:
         condition: service_healthy

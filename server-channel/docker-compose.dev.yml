@@ -1,0 +1,25 @@
+# Override SÓ para desenvolvimento local: troca a imagem publicada do `app`
+# (ghcr.io/apolope/ffcom-channel, container evergreen com o lançador
+# ffcom-runtime) por uma compilada do código deste diretório pelo
+# Dockerfile.dev, que roda o server-channel direto, sem lançador nem
+# auto-update. Não é um jeito de hospedar.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+#
+# scripts/dev-local.ps1 já passa os dois arquivos. Nome explícito (e não
+# docker-compose.override.yml) de propósito: o override automático também
+# valeria para quem autohospeda a partir de um clone do repositório, que
+# passaria a compilar em vez de usar a imagem.
+#
+# O mesmo nome de imagem é usado por docker-compose.dev-second.yml, então um
+# build serve às duas instâncias locais.
+
+services:
+  app:
+    image: ffcom-channel-dev:local
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    # Sem lançador, as variáveis FFCOM_* e o volume /data/runtime do compose
+    # principal ficam sem uso (inofensivos). Sem lançador também não há
+    # espera de 30s no stop; o server-channel encerra em até 25s.

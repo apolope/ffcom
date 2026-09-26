@@ -42,7 +42,10 @@ server-central (`:8082`), o server-channel "Teste" (`:8080`, com LiveKit e
 coturn), um segundo server-channel "Estúdio" (`:8083`,
 `server-channel/docker-compose.dev-second.yml`, que só existe para
 desenvolvimento) e o Vite (`:5173`). `-Build` recompila as imagens e
-`-NoClient` não sobe o Vite. Os `.env` de `server-central` e
+`-NoClient` não sobe o Vite. O `server-channel/docker-compose.yml` sozinho
+usa a imagem publicada no GHCR (container evergreen); o script soma o
+override `server-channel/docker-compose.dev.yml`, que compila o código local
+pelo `Dockerfile.dev`. Os `.env` de `server-central` e
 `server-channel` precisam existir.
 
 Além de subir, o script:

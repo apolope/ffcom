@@ -4,6 +4,7 @@ networks:
 volumes:
   postgres_data:
   attachments_data:
+  runtime_data:
 
 services:
   postgres:
@@ -95,8 +96,25 @@ services:
   # server-central, validada localmente sem chamada entre os dois
   # componentes — ver docs/architecture.md, "modelo de dados de
   # server-channel".
+  #
+  # Container evergreen (ver docs/architecture.md, "Decisão: container
+  # evergreen em `server-channel`"): a tag da imagem é a versão do
+  # CONTRATO do container (variáveis, portas, volumes), não a do serviço.
+  # O lançador ffcom-runtime dentro dela baixa, verifica (índice assinado) e
+  # troca o binário server-channel sozinho, conforme as variáveis FFCOM_*
+  # abaixo. `:1` acompanha todo o contrato 1.x (patches e minors são
+  # compatíveis); só troque de major lendo as notas da versão.
+  #
+  # Desenvolvimento local (compilar o código do disco em vez de usar a
+  # imagem publicada): docker-compose.dev.yml, ver o topo dele.
   app:
-    build: .
+    image: ghcr.io/apolope/ffcom-channel:1
+    restart: unless-stopped
+    # O lançador repassa o SIGTERM ao server-channel, que encerra em até 25s
+    # (WebSockets fechados com 1001, requisições em andamento terminam), e
+    # espera o filho até 30s. O padrão de 10s do Docker mataria os dois no
+    # meio do shutdown.
+    stop_grace_period: 40s
     depends_on:
       postgres:
         condition: service_healthy
@@ -131,9 +149,26 @@ services:
       # cada recriação do container.
       ATTACHMENTS_DIR: /data/attachments
       ATTACHMENT_MAX_MB: ${ATTACHMENT_MAX_MB:-}
+      # Política de atualização do lançador ffcom-runtime (todas opcionais):
+      # - FFCOM_CHANNEL_VERSION: trilha. Vazio (padrão) = o minor do binário
+      #   semente da imagem, ou seja, só patches automáticos (ex. 0.7.x);
+      #   "X.Y" = só patches desse minor; "X.Y.Z" = fixa nessa versão;
+      #   "latest" = qualquer versão nova, inclusive minor.
+      # - FFCOM_AUTO_UPDATE: true (padrão) ou false (só loga que há versão
+      #   nova, não troca).
+      # - FFCOM_UPDATE_INTERVAL: intervalo entre checagens (padrão 1h, mínimo
+      #   1m), com até 25% de variação aleatória. `docker compose kill -s HUP
+      #   app` força a checagem na hora.
+      FFCOM_CHANNEL_VERSION: ${FFCOM_CHANNEL_VERSION:-}
+      FFCOM_AUTO_UPDATE: ${FFCOM_AUTO_UPDATE:-}
+      FFCOM_UPDATE_INTERVAL: ${FFCOM_UPDATE_INTERVAL:-}
     ports:
       - "${SERVER_CHANNEL_PORT:-8080}:8080"
     volumes:
       - attachments_data:/data/attachments
+      # Binários baixados pelo lançador (versions/<versão>/, current, bad).
+      # Sem volume, cada recriação do container volta para a semente da
+      # imagem e baixa tudo de novo.
+      - runtime_data:/data/runtime
     networks:
       - ffcom-channel

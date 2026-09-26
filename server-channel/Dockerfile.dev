@@ -1,0 +1,31 @@
+# Imagem SÓ de desenvolvimento local: compila o server-channel direto do
+# código fonte e roda o binário sem o lançador ffcom-runtime, como a imagem
+# antiga fazia. Usada por docker-compose.dev.yml (override do compose de
+# referência) e docker-compose.dev-second.yml, via scripts/dev-local.ps1.
+#
+# A imagem de produção é o Dockerfile ao lado (container evergreen, ver
+# docs/architecture.md, "Decisão: container evergreen em `server-channel`"),
+# que exige RUNTIME_VERSION/CHANNEL_VERSION e baixa a semente do índice
+# assinado; nada disso faz sentido para testar o código que está no disco.
+#
+# Roda como root, igual à imagem antiga, para os volumes de dev já criados
+# (attachments_data) continuarem graváveis. O .dockerignore tira .env,
+# binários locais, dist/ e dev/ (os seeds SQL, aplicados pelo script, não
+# pela imagem) do contexto; nenhum deles é necessário para compilar.
+
+FROM golang:1.27-alpine AS builder
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+# Sem VERSION, /healthz responde "dev" (o padrão de main.version).
+ARG VERSION=dev
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -ldflags "-X main.version=${VERSION}" -o /out/server-channel .
+
+# alpine:3.20 já traz ca-certificates-bundle (o OIDC discovery do Authentik
+# é HTTPS); sem apk add.
+FROM alpine:3.20
+COPY --from=builder /out/server-channel /usr/local/bin/server-channel
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/server-channel"]

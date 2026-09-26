@@ -1,5 +1,8 @@
 # O Dockerfile só copia go.mod, go.sum, internal/release e cmd/ffcom-runtime;
-# isto evita mandar segredo de desenvolvimento e binários locais no contexto.
+# o Dockerfile.dev (só desenvolvimento local) copia o contexto inteiro para
+# compilar o server-channel. Nos dois casos isto evita mandar segredo de
+# desenvolvimento e binários locais no contexto; nada daqui é necessário para
+# compilar (dev/ só tem os seeds SQL que scripts/dev-local.ps1 aplica).
 .env
 .env.*
 *.exe

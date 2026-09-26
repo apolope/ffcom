@@ -59,7 +59,9 @@ function Invoke-Seed {
 }
 
 Invoke-Compose 'server-central' @()
-Invoke-Compose 'server-channel' @()
+# server-channel/docker-compose.yml é a referência de self-hosting (imagem
+# publicada no GHCR); docker-compose.dev.yml troca o app pelo código local.
+Invoke-Compose 'server-channel' @('-f', 'docker-compose.yml', '-f', 'docker-compose.dev.yml')
 Invoke-Compose 'server-channel' @('-f', 'docker-compose.dev-second.yml')
 
 Wait-Healthy 'http://localhost:8082'

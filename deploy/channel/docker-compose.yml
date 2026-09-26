@@ -12,6 +12,15 @@
 # coturn (stack VoIP/FreeSWITCH) — as faixas default abaixo podem colidir;
 # ajustar via .env antes do primeiro deploy caso a checagem de portas do
 # host acuse conflito.
+#
+# Nome do projeto fixo: é o que já valia pelo nome do diretório
+# (deploy/channel → "channel"), e os volumes existentes se chamam
+# channel_ffcom_channel_db e channel_ffcom_channel_attachments. Mudar o nome
+# do projeto (ou das chaves em `volumes:`) faria o compose criar volumes
+# novos e vazios: banco e anexos "sumiriam". Os workflows também passam
+# `-p channel`.
+name: channel
+
 services:
   db:
     image: postgres:17-alpine
@@ -79,10 +88,22 @@ services:
       # NPM por nome — não é publicada no host, só nesta rede.
       - a3s-services
 
+  # Container evergreen (ver docs/architecture.md, "Decisão: container
+  # evergreen em `server-channel`"): IMAGE_TAG é a versão do CONTRATO do
+  # container (lançador ffcom-runtime), não a do serviço. O workflow
+  # deploy-ffcom-channel-image.yml (tags channel-image-v*) passa a versão
+  # X.Y.Z recém publicada; sem ele, o padrão `1` acompanha o contrato 1.x.
+  # O serviço em si é trocado pelo lançador, sem recriar o container:
+  # deploy-ffcom-channel.yml (tags channel-v*) publica o release e manda
+  # SIGHUP para este container checar na hora.
   app:
-    image: ghcr.io/apolope/ffcom-channel:${IMAGE_TAG}
+    image: ghcr.io/apolope/ffcom-channel:${IMAGE_TAG:-1}
     container_name: ffcom-channel-app
     restart: unless-stopped
+    # O lançador repassa o SIGTERM ao server-channel (graceful shutdown de
+    # até 25s) e espera o filho até 30s; o padrão de 10s do Docker cortaria
+    # o shutdown no meio.
+    stop_grace_period: 40s
     depends_on:
       db:
         condition: service_healthy
@@ -113,17 +134,29 @@ services:
       # "Decisão: upload de anexo em mensagem".
       ATTACHMENTS_DIR: /data/attachments
       ATTACHMENT_MAX_MB: ${ATTACHMENT_MAX_MB:-}
+      # Instância de teste = canário: segue qualquer versão nova (inclusive
+      # minor), enquanto o padrão para quem autohospeda é só patch. Dá para
+      # fixar (X.Y.Z) ou restringir (X.Y) pelo .env sem mexer aqui.
+      FFCOM_CHANNEL_VERSION: ${FFCOM_CHANNEL_VERSION:-latest}
+      FFCOM_AUTO_UPDATE: ${FFCOM_AUTO_UPDATE:-}
+      FFCOM_UPDATE_INTERVAL: ${FFCOM_UPDATE_INTERVAL:-}
     volumes:
+      # Criado como root pela imagem antiga (binário direto, antes do
+      # container evergreen). A imagem nova roda como UID 10001; o workflow
+      # de imagem faz chown -R 10001:10001 neste volume antes de cada `up`
+      # (idempotente).
       - ffcom_channel_attachments:/data/attachments
+      # Binários baixados pelo lançador (versions/, current, bad,
+      # last-update). Volume novo nasce com o dono do diretório da imagem
+      # (10001).
+      - ffcom_channel_runtime:/data/runtime
     networks:
       - internal
       - a3s-services
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
+    # Sem healthcheck aqui: vale o HEALTHCHECK da imagem (mesmo wget em
+    # /healthz, porta de SERVER_PORT, start-period de 30s para o primeiro
+    # boot copiar a semente e rodar migrations). Repetir aqui só criaria
+    # duas fontes para divergir a cada versão do contrato.
 
   coturn:
     image: coturn/coturn:latest
@@ -155,6 +188,7 @@ services:
 volumes:
   ffcom_channel_db:
   ffcom_channel_attachments:
+  ffcom_channel_runtime:
 
 networks:
   internal:

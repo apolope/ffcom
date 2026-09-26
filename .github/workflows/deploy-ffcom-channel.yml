@@ -242,6 +242,107 @@ jobs:
             }
             core.info(`índice publicado em ${rel.html_url}`);
 
-      # Fase 4: enviar SIGHUP para ffcom-channel-app na instância de teste
-      # (FFCOM_CHANNEL_VERSION=latest, canário) e esperar o /healthz responder
-      # com "version": "$VERSION"; ver docs/architecture.md, item 10.
+  # Canário: a instância de teste (FFCOM_CHANNEL_VERSION=latest em
+  # deploy/channel/docker-compose.yml) troca para a versão recém publicada
+  # sem recriar o container: SIGHUP faz o lançador checar o índice na hora
+  # (ver docs/architecture.md, "Decisão: container evergreen em
+  # `server-channel`", item 10). Se a versão não subir no prazo, o job falha
+  # com os logs do lançador, para a release ruim aparecer aqui antes de
+  # chegar em quem autohospeda (que checa de hora em hora).
+  #
+  # O runner roda no próprio SVRUBS24IPS0101, então fala direto com o
+  # Docker do host; o container não publica porta, por isso o /healthz é
+  # lido de dentro dele (wget do busybox). Sem environment channel-release:
+  # este job não precisa da chave.
+  canary:
+    name: Canário na instância de teste
+    needs: [build, publish]
+    runs-on: [self-hosted, a3s-network]
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+      CONTAINER: ffcom-channel-app
+    steps:
+      - name: SIGHUP e espera pelo /healthz com a versão nova
+        run: |
+          # Sem -e (o shell padrão do Actions liga): o wget falha durante a
+          # troca de versão, e isso não pode derrubar o passo.
+          set +e -u
+
+          if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)" != "true" ]; then
+            echo "::notice::$CONTAINER não existe ou não está rodando; nada a atualizar"
+            exit 0
+          fi
+          # Imagem antiga (binário direto, sem lançador): ainda não migrou
+          # para o container evergreen, que chega por channel-image-v*.
+          if ! docker inspect -f '{{json .Config.Entrypoint}}' "$CONTAINER" | grep -q ffcom-runtime; then
+            echo "::notice::$CONTAINER ainda roda a imagem antiga (sem ffcom-runtime); publique channel-image-v* para migrar"
+            exit 0
+          fi
+
+          envval() {
+            docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" | sed -n "s/^$1=//p" | tail -n 1
+          }
+          healthz_version() {
+            docker exec "$CONTAINER" sh -c 'wget -qO- -T 5 "http://127.0.0.1:${SERVER_PORT:-8080}/healthz"' 2>/dev/null \
+              | sed -n 's/.*"version":"\([^"]*\)".*/\1/p'
+          }
+
+          if [ "$(envval FFCOM_AUTO_UPDATE)" = "false" ]; then
+            echo "::notice::FFCOM_AUTO_UPDATE=false em $CONTAINER; o lançador só loga a versão nova"
+            exit 0
+          fi
+          # Trilha diferente de latest (ex. versão fixada no .env para segurar
+          # uma release ruim): só espera a troca se $VERSION estiver nela.
+          # Vazio = minor da semente da imagem (label seed-version).
+          TRACK="$(envval FFCOM_CHANNEL_VERSION)"
+          if [ -z "$TRACK" ]; then
+            SEED="$(docker inspect -f '{{index .Config.Labels "br.com.a3sitsolutions.ffcom.seed-version"}}' "$CONTAINER")"
+            TRACK="${SEED%.*}"
+          fi
+          echo "Trilha de $CONTAINER: $TRACK; versão publicada: $VERSION"
+          case "$TRACK" in
+            latest|"$VERSION") ;;
+            *.*.*)
+              echo "::notice::$CONTAINER fixado em $TRACK; $VERSION não entra"
+              exit 0 ;;
+            *)
+              if [[ "$VERSION" != "$TRACK".* ]]; then
+                echo "::notice::$VERSION fora da trilha $TRACK de $CONTAINER"
+                exit 0
+              fi ;;
+          esac
+
+          BEFORE="$(healthz_version)"
+          echo "Versão atual: ${BEFORE:-desconhecida}"
+          if [ "$BEFORE" = "$VERSION" ]; then
+            echo "$CONTAINER já está em $VERSION"
+            exit 0
+          fi
+
+          # SIGHUP de novo a cada 60s: o download do índice pode pegar a
+          # janela de troca dos assets de channel-stable ou um cache do CDN
+          # do GitHub, e aí o lançador só tentaria no próximo intervalo.
+          # Sinais repetidos durante uma troca se fundem numa checagem.
+          START="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          DEADLINE=$(( $(date +%s) + 180 ))
+          NEXT_HUP=0
+          while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            if [ "$(date +%s)" -ge "$NEXT_HUP" ]; then
+              echo "SIGHUP em $CONTAINER"
+              docker kill -s HUP "$CONTAINER" >/dev/null
+              NEXT_HUP=$(( $(date +%s) + 60 ))
+            fi
+            sleep 5
+            NOW="$(healthz_version)"
+            if [ "$NOW" = "$VERSION" ]; then
+              echo "$CONTAINER trocou ${BEFORE:-?} -> $VERSION"
+              docker logs --since "$START" "$CONTAINER" 2>&1 | grep 'ffcom-runtime:' || true
+              exit 0
+            fi
+            echo "Aguardando... /healthz em ${NOW:-sem resposta (troca em andamento?)}"
+          done
+
+          echo "::error::$CONTAINER não chegou em $VERSION em 3 minutos (continua em ${NOW:-?})"
+          echo "--- logs desde o SIGHUP ---"
+          docker logs --since "$START" "$CONTAINER" 2>&1 | tail -n 200
+          exit 1
