@@ -1,0 +1,21 @@
+# Compose de implantação da home page (site estático, servido via nginx) em
+# SVRUBS24IPS0101, no mesmo molde de deploy/client: container na rede
+# overlay a3s-services, exposto pelo NPM em ffcom.a3sitsolutions.com.br e
+# www.ffcom.a3sitsolutions.com.br (o nginx do container redireciona www).
+services:
+  site:
+    image: ghcr.io/apolope/ffcom-site:${IMAGE_TAG}
+    container_name: ffcom-site
+    restart: unless-stopped
+    networks:
+      - a3s-services
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+networks:
+  a3s-services:
+    external: true

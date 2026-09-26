@@ -1494,6 +1494,25 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Ajustes ao texto acima, conferidos no código do lançador (2026-09-26):** a trilha padrão é o minor da semente, na falta dela o da versão ativa, e por último `latest`; `FFCOM_AUTO_UPDATE=false` também impede o downgrade por pin `X.Y.Z` (o boot continua subindo numa semente mais nova); o aviso de `min_runtime` só aparece para versões dentro da trilha em uso; o jitter do intervalo só soma (de 0 a +25%). O guia para quem autohospeda está em `server-channel/README.md`, seções "Atualizações" e "Migrando da imagem antiga".
 
+## Decisão: home page em `site/`, container próprio, marca "Friends & Family Communication"
+
+**Contexto:** o apex `ffcom.a3sitsolutions.com.br` (e o `www.`) não servia nada; quem chegava ao projeto só encontrava o app em `app.` (que exige login e o grupo `ffcom-users`) ou o repositório. O projeto também não tinha marca: o favicon do client ainda era o raio padrão do Vite, e o nome "FFCom" nunca tinha tido significado registrado.
+
+**Alternativas consideradas (hospedagem):** servir a home pelo mesmo container do client (nginx da SPA respondendo a dois hostnames); gerar a home com um framework de site estático; um container nginx próprio com HTML/CSS puros.
+
+**Decisão:**
+1. **Container próprio** (`site/`, imagem `ghcr.io/apolope/ffcom-site`, container `ffcom-site`, workflow `deploy-ffcom-site.yml` disparado por tag `site-v*`), no mesmo molde de `deploy/client`. Mexer na home nunca rebuilda nem derruba o app, e o PWA do client não passa a cachear páginas que não são dele.
+2. **HTML e CSS puros, sem build.** Uma página só, conteúdo que muda pouco; um gerador de site seria mais uma dependência sem ganho. As animações (rede de servidores no hero, chat e terminal "vivos", pacotes no diagrama) usam SVG/CSS e um `main.js` pequeno, como aprimoramento: sem JavaScript o conteúdo aparece parado. Com `prefers-reduced-motion` some todo deslocamento, mas o chat e o terminal seguem trocando de conteúdo, porque desligar tudo deixava a página estática para quem só tem os efeitos do Windows desligados (caso da máquina do próprio Apolonio).
+3. **`www.` redireciona (301) para o apex no próprio nginx do container**, então o NPM só precisa apontar os dois hostnames para `ffcom-site:8080`.
+4. **Fonte servida pelo próprio site** (Bricolage Grotesque, OFL), sem Google Fonts: um projeto cuja razão de existir é não depender de terceiros não entrega os visitantes da home a um.
+5. **Nome e marca:** FFCom = *Friends & Family Communication* (significado oficial, escolhido pelo Apolonio em 2026-09-26, já que a intenção original do nome não tinha sido registrada); o "dar FF" dos jogos online fica só como easter egg no rodapé. Marca: dois "f" minúsculos com a barra em comum (a ligadura "ff") dentro de um balão de fala, em `#aa3bff`. Ela substituiu `client/public/favicon.svg`, e os ícones do PWA foram regenerados a partir dele.
+
+**Infra (lado operacional):** DNS de `ffcom.a3sitsolutions.com.br` e `www.ffcom.a3sitsolutions.com.br` para `137.131.249.145` e Proxy Hosts no NPM de `VMSUBS24OCI0102` para `ffcom-site:8080`, como os outros quatro hostnames. Um curinga `*.a3sitsolutions.com.br` cobre o apex `ffcom.` mas não `www.ffcom.` (curinga de TLS vale para um nível só), então o `www.` precisa de certificado próprio (Let's Encrypt, como os outros).
+
+**Histórico de versões (2026-09-26):** a home mostra o que cada versão publicada implementou, e a fonte única é o `CHANGELOG.md` da raiz (uma seção `## <componente> vX.Y.Z · AAAA-MM-DD` por tag, itens em linguagem de usuário; as 38 tags anteriores foram preenchidas retroativamente a partir dos commits). Alternativas consideradas: GitHub Releases (só `channel-v*` gera release hoje, e a API exigiria o navegador do visitante falar com o GitHub ou um token no servidor); um JSON próprio (pior de editar e de ler no GitHub); embutir o arquivo só no build da imagem (exigiria reimplantar o site a cada release de outro componente). Decisão: o nginx do site faz proxy de `/changelog.md` para `raw.githubusercontent.com/apolope/ffcom/main/CHANGELOG.md` com cache de 5 minutos e `proxy_cache_use_stale`, e cai numa cópia embutida no build se o GitHub não responder; o navegador de quem visita nunca fala com o GitHub. O `resolver` vem do `/etc/resolv.conf` do container pelo mecanismo de templates da imagem oficial (`NGINX_ENTRYPOINT_LOCAL_RESOLVERS`), porque `127.0.0.11` só existe em rede Docker definida. Para o histórico não depender de alguém lembrar, cada workflow de deploy ganhou o job `changelog` (`scripts/check-changelog.sh`), que recusa a tag sem entrada no arquivo.
+
+**Revisitar quando:** a home precisar de conteúdo que muda com frequência além do histórico de versões (novidades, blog), ou o app desktop tiver download publicado (a seção "No navegador ou instalado" diz que ele está em preparação).
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

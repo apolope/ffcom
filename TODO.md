@@ -24,6 +24,12 @@ Todas as decisões abaixo foram tomadas — ver `docs/architecture.md` para o de
 - [x] CI rodar testes/lint de código — `.github/workflows/ci.yml` (novo, roda em `push`/`pull_request`, separado dos workflows de deploy que só disparam em tag): `go vet`/`go test` para `server-central` e `server-channel`, `npm run lint`/`npm run build` para `client`. Ver `docs/architecture.md`
 - [x] Definir versionamento e forma de release dos binários (`server-central`, `server-channel`, `client`) — semver independente por componente, disparado por push de git tag (`central-v*`/`channel-v*`/`client-v*`); imagem GHCR ganha a tag de versão além do sha; `server-central`/`server-channel` expõem a versão em `GET /healthz`. Ver `docs/architecture.md`
 - [x] Provisionar `ffcom.a3sitsolutions.com` (DNS + certificado) para a instância oficial — domínio confirmado como `.com.br` (2026-09-21); coincide com o já usado na implantação de teste (`*.ffcom.a3sitsolutions.com.br`), que passa a ser a instância oficial, sem domínio novo a provisionar. Hostnames mantêm o sufixo `-test` onde já existia. Ver `docs/architecture.md`
+- [x] Home page pública em `site/` (HTML/CSS puros, container `ffcom-site`, workflow `deploy-ffcom-site.yml` por tag `site-v*`) e marca do projeto (nome = *Friends & Family Communication*, logo "ff" no balão, favicon e ícones do PWA do client trocados). Ver `docs/architecture.md`, "Decisão: home page em `site/`"
+- [ ] Agente de infra: DNS de `ffcom.a3sitsolutions.com.br` e `www.ffcom.a3sitsolutions.com.br` para `137.131.249.145` e Proxy Hosts no NPM de `VMSUBS24OCI0102` para `ffcom-site:8080`, com certificado Let's Encrypt cobrindo os dois (o curinga não cobre `www.ffcom.`)
+- [x] Histórico de versões na home, com o `CHANGELOG.md` da raiz como fonte única (lido do `main` pelo nginx do site, cópia de reserva embutida no build) e checagem em todo workflow de deploy (`scripts/check-changelog.sh`). Ver `docs/architecture.md`, "Decisão: home page em `site/`"
+- [ ] Primeiro deploy da home (`site-v0.1.0`) e conferir `https://ffcom.a3sitsolutions.com.br/` e o redirecionamento do `www.`
+- [ ] Ícone do app desktop (Electron/`electron-builder`) com a marca nova; hoje o empacotamento sai sem ícone customizado
+- [ ] Escolher e adicionar uma licença (`LICENSE`): o repositório é público, mas sem licença ninguém tem permissão legal de usar, modificar ou redistribuir o código, o que contradiz o convite da home para hospedar o próprio servidor
 
 ## Primeira implantação de teste (infra `a3s-network`, `SVRUBS24IPS0101`)
 

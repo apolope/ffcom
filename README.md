@@ -1,5 +1,7 @@
 # FFCom
 
+*Friends & Family Communication* · [ffcom.a3sitsolutions.com.br](https://ffcom.a3sitsolutions.com.br/)
+
 Alternativa self-hosted ao Discord: organização em servidores, categorias e canais (texto, voz, forum), mas cada "servidor" é hospedado por quem cria a comunidade, via IP ou DNS próprio, em vez de depender de uma empresa central controlando tudo.
 
 ## Arquitetura
@@ -38,6 +40,7 @@ Alternativa self-hosted ao Discord: organização em servidores, categorias e ca
 
 - **[client](client/)** — interface gráfica, web + desktop (Electron) a partir da mesma base de código.
 - **[server-central](server-central/)** — instância única oficial em `ffcom.a3sitsolutions.com`: login, perfil, lista de amigos, diretório de servidores.
+- **[site](site/)** — home page pública em `ffcom.a3sitsolutions.com.br` (HTML/CSS estáticos) e identidade visual do projeto.
 - **[server-channel](server-channel/)** — o "servidor" propriamente dito, hospedado por quem cria a comunidade (categorias, canais de texto/voz/forum).
 
 ## Documentação

@@ -1,0 +1,103 @@
+name: deploy-ffcom-site
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'site-v*'
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/apolope/ffcom-site
+
+jobs:
+  lint-dockerfile:
+    name: Lint do Dockerfile
+    runs-on: [self-hosted, a3s-network]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: site/Dockerfile
+
+  security-scan:
+    name: Scan de segredos
+    runs-on: [self-hosted, a3s-network]
+    steps:
+      - uses: actions/checkout@v7
+      - name: "Gitleaks (escopo: site)"
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
+            detect --source="/repo/site" --no-git -v
+
+  changelog:
+    name: Entrada no CHANGELOG
+    runs-on: [self-hosted, a3s-network]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Conferir CHANGELOG.md
+        env:
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: bash scripts/check-changelog.sh "$TAG"
+
+  build-push-deploy:
+    name: Build, push e deploy
+    needs: [lint-dockerfile, security-scan, changelog]
+    runs-on: [self-hosted, a3s-network]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Login no GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Determinar versão
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/site-v* ]]; then
+            echo "value=${GITHUB_REF#refs/tags/site-}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=dev" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build e push da imagem
+        working-directory: site
+        run: |
+          # Cópia de reserva do histórico de versões (ver site/Dockerfile).
+          cp ../CHANGELOG.md CHANGELOG.md
+          VERSION="${{ steps.version.outputs.value }}"
+          TAGS=(-t "${IMAGE}:$(git rev-parse --short HEAD)")
+          if [ "$VERSION" != "dev" ]; then
+            TAGS+=(-t "${IMAGE}:${VERSION}")
+          fi
+          docker buildx build "${TAGS[@]}" \
+            -f Dockerfile --push .
+
+      - name: Deploy ffcom-site
+        working-directory: deploy/site
+        run: |
+          export IMAGE_TAG=$(git rev-parse --short HEAD)
+          docker compose -f docker-compose.yml up -d --pull always --remove-orphans
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 12); do
+            status=$(docker inspect --format='{{.State.Health.Status}}' ffcom-site 2>/dev/null)
+            [ "$status" = "healthy" ] && echo "ffcom-site healthy" && exit 0
+            echo "Aguardando... status: ${status:-iniciando} (tentativa $i/12)"
+            sleep 10
+          done
+          echo "Timeout: ffcom-site nao ficou healthy em 2 minutos"
+          docker logs --tail 50 ffcom-site
+          exit 1
+
+      - name: Limpeza de imagens antigas
+        run: docker image prune -f
+
+      - name: Logout do GHCR
+        if: always()
+        run: docker logout ghcr.io
