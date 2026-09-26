@@ -248,3 +248,16 @@ func TestResolve(t *testing.T) {
 		t.Errorf("err = %v, quer ErrNoVersion", err)
 	}
 }
+
+func TestMatchesTrack(t *testing.T) {
+	v, _ := ParseSemver("0.7.2")
+	for track, want := range map[string]bool{"latest": true, "0.7": true, "0.8": false, "0.7.2": true, "0.7.1": false} {
+		got, err := MatchesTrack(track, v)
+		if err != nil || got != want {
+			t.Errorf("MatchesTrack(%q) = %v, %v; quer %v", track, got, err, want)
+		}
+	}
+	if _, err := MatchesTrack("v0.7", v); err == nil {
+		t.Error("trilha inválida deveria falhar")
+	}
+}

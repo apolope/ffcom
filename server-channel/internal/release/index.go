@@ -219,6 +219,17 @@ func Resolve(idx *Index, track, runtimeVersion, platform string) (chosen Version
 	return *best, skippedForRuntime, nil
 }
 
+// MatchesTrack diz se v pertence à trilha (latest, X.Y ou X.Y.Z), com as
+// mesmas regras de Resolve. Devolve erro se a trilha for inválida; o
+// lançador usa também para validar FFCOM_CHANNEL_VERSION na partida.
+func MatchesTrack(track string, v Semver) (bool, error) {
+	match, err := trackMatcher(track)
+	if err != nil {
+		return false, err
+	}
+	return match(v), nil
+}
+
 func trackMatcher(track string) (func(Semver) bool, error) {
 	if track == "latest" {
 		return func(Semver) bool { return true }, nil

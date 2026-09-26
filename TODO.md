@@ -103,7 +103,7 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
   - [x] Fase 0: graceful shutdown em SIGTERM, flag `--version`, tolerância a schema à frente nas migrations
   - [x] Client: reconectar o WebSocket de canal de texto e forum com backoff quando o servidor fecha (1001 na troca de versão), recarregando o histórico perdido — job em `client/src/lib/reconnectingSocket.ts` (1s dobrando até 30s com jitter, sem limite, zera ao abrir); a cada abertura recarrega histórico/threads/posts da thread aberta pela REST e mescla por id; para de tentar em 400/401/403/404 (sondados pela REST, o navegador não expõe o status do upgrade); token lido na hora de cada tentativa; "Reconectando…" na tela do canal
   - [x] Fase 1: pacote `internal/release` (índice assinado ed25519), `cmd/release-tool` e workflow `channel-v*` publicando binários + índice no release `channel-stable`
-  - [ ] Fase 2: lançador `cmd/ffcom-runtime` (resolve, baixa, verifica, supervisiona, troca, rollback)
+  - [x] Fase 2: lançador `cmd/ffcom-runtime` (resolve, baixa, verifica, supervisiona, troca, rollback)
   - [ ] Fase 3: Dockerfile com lançador + binário semente e workflow `channel-image-v*`
   - [ ] Fase 4: composes (`deploy/channel` e referência) e deploy da instância de teste por `SIGHUP`
   - [ ] Fase 5: README de self-hosting e guia de atualização
