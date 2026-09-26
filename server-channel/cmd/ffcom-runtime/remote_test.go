@@ -171,4 +171,22 @@ func TestInstallSeed(t *testing.T) {
 	if err := installSeed(context.Background(), l.fetch, "1.0.0", "0.9.0", platform, t.TempDir(), time.Millisecond, l.log); err == nil {
 		t.Error("versão inexistente deveria falhar")
 	}
+
+	// Trilha: latest e X.Y resolvem para a mais nova aceita pelo runtime
+	// (0.8.0 exige 2.0.0), e VERSION recebe a versão resolvida.
+	for _, track := range []string{"latest", "0.7"} {
+		dest := filepath.Join(t.TempDir(), "seed")
+		if err := installSeed(context.Background(), l.fetch, "1.0.0", track, platform, dest, time.Millisecond, l.log); err != nil {
+			t.Fatalf("trilha %s: %v", track, err)
+		}
+		if v, err := readSeed(dest); v != "0.7.0" || err != nil {
+			t.Errorf("trilha %s: readSeed = %q, %v", track, v, err)
+		}
+	}
+	if !strings.Contains(logs.String(), "trilha latest resolvida para 0.7.0") {
+		t.Errorf("log sem a resolução da trilha:\n%s", logs.String())
+	}
+	if err := installSeed(context.Background(), l.fetch, "1.0.0", "0.9", platform, t.TempDir(), time.Millisecond, l.log); err == nil {
+		t.Error("trilha sem versão deveria falhar")
+	}
 }

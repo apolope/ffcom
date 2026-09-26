@@ -1,0 +1,7 @@
+# O Dockerfile só copia go.mod, go.sum, internal/release e cmd/ffcom-runtime;
+# isto evita mandar segredo de desenvolvimento e binários locais no contexto.
+.env
+.env.*
+*.exe
+dev/
+dist/

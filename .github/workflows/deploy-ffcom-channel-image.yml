@@ -1,0 +1,179 @@
+name: deploy-ffcom-channel-image
+
+# Imagem do container evergreen de server-channel (ver docs/architecture.md,
+# "Decisão: container evergreen em `server-channel`", item 9). A tag
+# channel-image-vX.Y.Z builda ghcr.io/apolope/ffcom-channel:X.Y.Z e :X, onde
+# X.Y.Z é a versão do CONTRATO do container (lançador ffcom-runtime), não a
+# do serviço. O serviço sai por channel-vX.Y.Z (deploy-ffcom-channel.yml) e
+# entra na imagem só como semente, resolvida no índice assinado na hora do
+# build.
+#
+# Sem workflow_dispatch: a versão vem da tag. Rebuild por CVE da base =
+# nova tag de patch (channel-image-v1.0.1).
+
+on:
+  push:
+    tags:
+      - 'channel-image-v*'
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: channel-image
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/apolope/ffcom-channel
+  # Semente: latest = versão mais nova do índice que este runtime aceita no
+  # momento do build. Aceita também X.Y ou X.Y.Z.
+  CHANNEL_VERSION: latest
+  # Só amd64 por enquanto. O Dockerfile já builda arm64 sem QEMU (nenhum RUN
+  # executa binário da plataforma alvo; o teste local da Fase 3 buildou as
+  # duas). O que não foi conferido é o builder do runner: o driver "docker"
+  # sem containerd image store não faz build multi-plataforma. Para ligar
+  # arm64, troque para "linux/amd64,linux/arm64"; o passo "Builder buildx"
+  # abaixo cria então um builder docker-container, que faz.
+  PLATFORMS: linux/amd64
+
+jobs:
+  lint-dockerfile:
+    name: Lint do Dockerfile
+    runs-on: [self-hosted, a3s-network]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: server-channel/Dockerfile
+
+  security-scan:
+    name: Scan de segredos
+    runs-on: [self-hosted, a3s-network]
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Gitleaks (escopo: server-channel)"
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
+            detect --source="/repo/server-channel" --no-git -v
+
+  build-push:
+    name: Build e push da imagem
+    needs: [lint-dockerfile, security-scan]
+    runs-on: [self-hosted, a3s-network]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determinar versão
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          if ! [[ "$TAG" =~ ^channel-image-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Tag '$TAG' fora do formato channel-image-vX.Y.Z"
+            exit 1
+          fi
+          RUNTIME_VERSION="${TAG#channel-image-v}"
+          MIN_RUNTIME="$(tr -d '[:space:]' < server-channel/MIN_RUNTIME)"
+          if ! [[ "$MIN_RUNTIME" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "server-channel/MIN_RUNTIME ('$MIN_RUNTIME') não é X.Y.Z"
+            exit 1
+          fi
+          # Comparação numérica campo a campo (1.10.0 > 1.9.0), sem sort -V.
+          IFS=. read -r a1 a2 a3 <<< "$RUNTIME_VERSION"
+          IFS=. read -r b1 b2 b3 <<< "$MIN_RUNTIME"
+          if (( a1 < b1 || (a1 == b1 && (a2 < b2 || (a2 == b2 && a3 < b3))) )); then
+            echo "Runtime $RUNTIME_VERSION abaixo de MIN_RUNTIME $MIN_RUNTIME: esta imagem não instalaria as versões publicadas"
+            exit 1
+          fi
+          {
+            echo "runtime=$RUNTIME_VERSION"
+            echo "major=${RUNTIME_VERSION%%.*}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Builder buildx
+        id: builder
+        run: |
+          # Uma plataforma: builder padrão (driver docker), como no workflow
+          # antigo. Várias: builder docker-container dedicado, reaproveitado
+          # entre execuções no runner self-hosted.
+          if [[ "$PLATFORMS" == *,* ]]; then
+            docker buildx inspect ffcom-multiarch >/dev/null 2>&1 \
+              || docker buildx create --name ffcom-multiarch --driver docker-container
+            echo "name=ffcom-multiarch" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=default" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Login no GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      # Resolve a trilha da semente antes do build da imagem: o BuildKit não
+      # sabe que o índice mudou (--no-cache-filter seed força o download), e
+      # com a versão exata o LABEL da imagem mostra a semente de verdade e
+      # todas as plataformas recebem a mesma versão. Usa a primeira
+      # plataforma da lista.
+      # FFCOM_RELEASE_INDEX_URL / FFCOM_RELEASE_PUBKEY: variáveis do repo,
+      # vazias por padrão (índice channel-stable e chave embutida); servem a
+      # forks que publicam o próprio índice.
+      - name: Resolver versão da semente
+        id: seed
+        working-directory: server-channel
+        env:
+          RUNTIME_VERSION: ${{ steps.version.outputs.runtime }}
+          FFCOM_RELEASE_INDEX_URL: ${{ vars.FFCOM_RELEASE_INDEX_URL }}
+          FFCOM_RELEASE_PUBKEY: ${{ vars.FFCOM_RELEASE_PUBKEY }}
+        run: |
+          OUT="$RUNNER_TEMP/seed-version"
+          rm -rf "$OUT"
+          docker buildx build --builder "${{ steps.builder.outputs.name }}" \
+            --platform "${PLATFORMS%%,*}" --target seed-version --no-cache-filter seed \
+            --build-arg RUNTIME_VERSION="$RUNTIME_VERSION" \
+            --build-arg CHANNEL_VERSION="$CHANNEL_VERSION" \
+            --build-arg FFCOM_RELEASE_INDEX_URL \
+            --build-arg FFCOM_RELEASE_PUBKEY \
+            --output "type=local,dest=$OUT" .
+          SEED="$(tr -d '[:space:]' < "$OUT/VERSION")"
+          if ! [[ "$SEED" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Versão da semente inválida: '$SEED'"
+            exit 1
+          fi
+          echo "Semente: server-channel $SEED (trilha $CHANNEL_VERSION)"
+          echo "value=$SEED" >> "$GITHUB_OUTPUT"
+
+      # :X acompanha o último build do major. Rebuild de um patch antigo
+      # depois de um mais novo moveria :X para trás; publique sempre em
+      # ordem crescente.
+      - name: Build e push da imagem
+        working-directory: server-channel
+        env:
+          RUNTIME_VERSION: ${{ steps.version.outputs.runtime }}
+          MAJOR: ${{ steps.version.outputs.major }}
+          SEED: ${{ steps.seed.outputs.value }}
+          FFCOM_RELEASE_INDEX_URL: ${{ vars.FFCOM_RELEASE_INDEX_URL }}
+          FFCOM_RELEASE_PUBKEY: ${{ vars.FFCOM_RELEASE_PUBKEY }}
+        run: |
+          docker buildx build --builder "${{ steps.builder.outputs.name }}" \
+            --platform "$PLATFORMS" --no-cache-filter seed \
+            --build-arg RUNTIME_VERSION="$RUNTIME_VERSION" \
+            --build-arg CHANNEL_VERSION="$SEED" \
+            --build-arg FFCOM_RELEASE_INDEX_URL \
+            --build-arg FFCOM_RELEASE_PUBKEY \
+            -t "${IMAGE}:${RUNTIME_VERSION}" -t "${IMAGE}:${MAJOR}" \
+            --push .
+          echo "Publicado ${IMAGE}:${RUNTIME_VERSION} e :${MAJOR} (runtime ${RUNTIME_VERSION}, semente ${SEED}, ${PLATFORMS})"
+
+      - name: Limpeza de imagens antigas
+        run: docker image prune -f
+
+      - name: Logout do GHCR
+        if: always()
+        run: docker logout ghcr.io
+
+      # Fase 4: deploy da instância de teste quando a imagem muda. Copiar
+      # /opt/ffcom/envs/ffcom-channel.env para deploy/channel/.env, rodar
+      # `docker compose up -d --pull always` com IMAGE_TAG=<X.Y.Z> (compose
+      # já no modelo evergreen: volume em /data/runtime, env
+      # FFCOM_CHANNEL_VERSION=latest como canário, chown do volume de anexos
+      # para o UID 10001) e esperar ffcom-channel-app ficar healthy, como no
+      # workflow antigo. Não implementado aqui.

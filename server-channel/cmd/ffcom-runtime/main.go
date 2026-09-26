@@ -8,7 +8,7 @@
 // Subcomandos:
 //
 //	ffcom-runtime [run]
-//	ffcom-runtime install-seed -version X.Y.Z [-platform linux/amd64] [-dest /opt/ffcom/seed]
+//	ffcom-runtime install-seed -version X.Y.Z|X.Y|latest [-platform linux/amd64] [-dest /opt/ffcom/seed]
 //	ffcom-runtime --version
 //
 // A versão deste binário (-ldflags "-X main.version=1.0.0") é a do contrato
@@ -65,7 +65,7 @@ const devRuntimeVersion = "999.0.0"
 
 const usage = `uso:
   ffcom-runtime [run]
-  ffcom-runtime install-seed -version X.Y.Z [-platform os/arch] [-dest /opt/ffcom/seed]
+  ffcom-runtime install-seed -version X.Y.Z|X.Y|latest [-platform os/arch] [-dest /opt/ffcom/seed]
   ffcom-runtime --version
 `
 
