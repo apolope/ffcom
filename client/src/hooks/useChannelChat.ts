@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import { createReconnectingSocket, type ChannelConnectionStatus, type ReconnectingSocket } from '../lib/reconnectingSocket'
 import {
   decodeChannelSocketFrame,
   fetchChannelHistory,
+  mergeChannelHistory,
   openChannelSocket,
   sendCreateMessage,
   sendDeleteMessage,
@@ -10,7 +12,9 @@ import {
   type ChannelMessage,
 } from '../lib/serverChannelApi'
 
-export type ChatConnectionStatus = 'loading' | 'open' | 'closed' | 'error'
+export type ChatConnectionStatus = ChannelConnectionStatus
+
+const HISTORY_LIMIT = 50
 
 interface UseChannelChatResult {
   messages: ChannelMessage[]
@@ -24,6 +28,9 @@ interface UseChannelChatResult {
 
 // Carrega o histórico (REST) e mantém uma conexão WebSocket para um canal de
 // texto de server-channel, reconectando do zero sempre que channelId muda.
+// Se a conexão cai (ex. troca de versão do servidor), reconecta com backoff
+// e recarrega o histórico mesclando com o que já está na tela (ver
+// lib/reconnectingSocket.ts).
 export function useChannelChat(
   serverBaseUrl: string,
   channelId: string,
@@ -32,7 +39,15 @@ export function useChannelChat(
   const [messages, setMessages] = useState<ChannelMessage[]>([])
   const [status, setStatus] = useState<ChatConnectionStatus>('loading')
   const [error, setError] = useState<string>()
-  const socketRef = useRef<WebSocket | null>(null)
+  const connectionRef = useRef<ReconnectingSocket | null>(null)
+
+  // O token fica fora das dependências do efeito da conexão: renovar o
+  // token não derruba um socket aberto (o servidor só confere no
+  // handshake), e cada reconexão lê daqui o token mais recente.
+  const accessTokenRef = useRef(accessToken)
+  useEffect(() => {
+    accessTokenRef.current = accessToken
+  }, [accessToken])
 
   useEffect(() => {
     let cancelled = false
@@ -40,60 +55,47 @@ export function useChannelChat(
     setStatus('loading')
     setError(undefined)
 
-    let socket: WebSocket | null = null
-
-    fetchChannelHistory(serverBaseUrl, channelId, accessToken)
-      .then((history) => {
+    const connection = createReconnectingSocket({
+      label: 'canal de texto',
+      connect: () => openChannelSocket(serverBaseUrl, channelId, accessTokenRef.current),
+      sync: async () => {
+        const history = await fetchChannelHistory(serverBaseUrl, channelId, accessTokenRef.current, HISTORY_LIMIT)
+        if (!cancelled) setMessages((prev) => mergeChannelHistory(prev, history, HISTORY_LIMIT))
+      },
+      onStatus: (next, err) => {
         if (cancelled) return
-        setMessages(history)
-
-        socket = openChannelSocket(serverBaseUrl, channelId, accessToken)
-        socketRef.current = socket
-
-        socket.onopen = () => {
-          if (!cancelled) setStatus('open')
+        setStatus(next)
+        if (err) setError(err)
+      },
+      onMessage: (data) => {
+        const frame = decodeChannelSocketFrame(data)
+        if (!frame) return
+        if (frame.type === 'message.created') {
+          // Pode já ter vindo pelo histórico recarregado numa reconexão.
+          setMessages((prev) => (prev.some((m) => m.id === frame.message.id) ? prev : [...prev, frame.message]))
+        } else if (frame.type === 'message.updated') {
+          setMessages((prev) =>
+            prev.map((m) => (m.id === frame.message.id ? frame.message : m)),
+          )
+        } else if (frame.type === 'message.deleted') {
+          setMessages((prev) => prev.filter((m) => m.id !== frame.id))
+        } else if (frame.type === 'error') {
+          setError(frame.error)
         }
-        socket.onclose = () => {
-          if (!cancelled) setStatus('closed')
-        }
-        socket.onerror = () => {
-          if (!cancelled) {
-            setStatus('error')
-            setError('conexão com o servidor foi interrompida')
-          }
-        }
-        socket.onmessage = (event) => {
-          const frame = decodeChannelSocketFrame(String(event.data))
-          if (!frame) return
-          if (frame.type === 'message.created') {
-            setMessages((prev) => [...prev, frame.message])
-          } else if (frame.type === 'message.updated') {
-            setMessages((prev) =>
-              prev.map((m) => (m.id === frame.message.id ? frame.message : m)),
-            )
-          } else if (frame.type === 'message.deleted') {
-            setMessages((prev) => prev.filter((m) => m.id !== frame.id))
-          } else if (frame.type === 'error') {
-            setError(frame.error)
-          }
-        }
-      })
-      .catch((err) => {
-        if (cancelled) return
-        setStatus('error')
-        setError(err instanceof Error ? err.message : 'falha ao carregar histórico')
-      })
+      },
+    })
+    connectionRef.current = connection
 
     return () => {
       cancelled = true
-      socket?.close()
-      socketRef.current = null
+      connection.cancel()
+      connectionRef.current = null
     }
-  }, [serverBaseUrl, channelId, accessToken])
+  }, [serverBaseUrl, channelId])
 
   function sendMessage(content: string) {
-    const socket = socketRef.current
-    if (!socket || socket.readyState !== WebSocket.OPEN) return
+    const socket = connectionRef.current?.current()
+    if (!socket) return
     sendCreateMessage(socket, content)
   }
 
@@ -111,14 +113,14 @@ export function useChannelChat(
   }
 
   function editMessage(id: string, content: string) {
-    const socket = socketRef.current
-    if (!socket || socket.readyState !== WebSocket.OPEN) return
+    const socket = connectionRef.current?.current()
+    if (!socket) return
     sendUpdateMessage(socket, id, content)
   }
 
   function deleteMessage(id: string) {
-    const socket = socketRef.current
-    if (!socket || socket.readyState !== WebSocket.OPEN) return
+    const socket = connectionRef.current?.current()
+    if (!socket) return
     sendDeleteMessage(socket, id)
   }
 

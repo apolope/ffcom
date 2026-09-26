@@ -88,7 +88,8 @@ export function ForumChannelView({ serverBaseUrl, channel }: ForumChannelViewPro
               </div>
             ))}
         </div>
-        {error && <div className="message-error">{error}</div>}
+        {status === 'reconnecting' && <div className="message-status">Reconectando…</div>}
+      {error && <div className="message-error">{error}</div>}
         <form className="message-form" onSubmit={handleReply}>
           <input
             type="text"
@@ -121,6 +122,7 @@ export function ForumChannelView({ serverBaseUrl, channel }: ForumChannelViewPro
           </button>
         ))}
       </div>
+      {status === 'reconnecting' && <div className="message-status">Reconectando…</div>}
       {error && <div className="message-error">{error}</div>}
       {composing ? (
         <form className="forum-new-thread-form" onSubmit={handleCreateThread}>

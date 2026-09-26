@@ -158,6 +158,7 @@ export function TextChannelView({ serverBaseUrl, channel, canModerateMessages }:
           <p className="placeholder">Nenhuma mensagem ainda. Seja o primeiro a escrever.</p>
         )}
       </div>
+      {status === 'reconnecting' && <div className="message-status">Reconectando…</div>}
       {error && <div className="message-error">{error}</div>}
       {pendingFile && (
         <div className="pending-attachment">

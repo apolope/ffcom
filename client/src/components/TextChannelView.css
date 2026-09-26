@@ -123,6 +123,14 @@
   font-size: 0.9em;
 }
 
+/* Conexão do canal caiu e está tentando voltar (ver
+   lib/reconnectingSocket.ts). Também usado por ForumChannelView. */
+.message-status {
+  padding: 4px 16px;
+  color: var(--warning);
+  font-size: 0.9em;
+}
+
 .pending-attachment {
   display: flex;
   align-items: center;

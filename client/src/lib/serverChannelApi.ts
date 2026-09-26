@@ -76,10 +76,23 @@ export interface Me {
   roleIds?: string[]
 }
 
+// Erro de resposta HTTP não-2xx. A mensagem continua no formato de antes
+// ("403 Forbidden: ..."); status fica exposto para quem precisa decidir se
+// vale tentar de novo (ver lib/reconnectingSocket.ts).
+export class HttpError extends Error {
+  readonly status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'HttpError'
+    this.status = status
+  }
+}
+
 async function parseJsonOrThrow<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${res.statusText}${text ? `: ${text}` : ''}`)
+    throw new HttpError(res.status, `${res.status} ${res.statusText}${text ? `: ${text}` : ''}`)
   }
   return res.json() as Promise<T>
 }
@@ -487,6 +500,49 @@ export async function fetchChannelHistory(
   )
   const body = await parseJsonOrThrow<{ messages: ChannelMessage[] }>(res)
   return body.messages.slice().reverse()
+}
+
+function createdAtMs(item: { createdAt: string }): number {
+  return Date.parse(item.createdAt)
+}
+
+// Mescla um histórico recém-buscado (fetchChannelHistory/fetchThreadMessages,
+// ordem cronológica, até `limit` itens) com o que já está na tela, depois
+// de uma reconexão. Dentro da janela do histórico vale o servidor (some o
+// que foi apagado no intervalo), exceto edição mais nova que já chegou pelo
+// socket. Fora da janela: fica o que é mais novo que o snapshot (chegou
+// pelo socket enquanto a REST respondia) e o que é mais antigo, se a janela
+// veio cheia (o servidor tem mais coisa para trás que não foi buscada).
+export function mergeChannelHistory(
+  local: ChannelMessage[],
+  history: ChannelMessage[],
+  limit: number,
+): ChannelMessage[] {
+  if (history.length === 0) return []
+  const localById = new Map(local.map((m) => [m.id, m]))
+  const historyIds = new Set(history.map((m) => m.id))
+  const oldest = createdAtMs(history[0])
+  const newest = createdAtMs(history[history.length - 1])
+
+  const older =
+    history.length >= limit ? local.filter((m) => !historyIds.has(m.id) && createdAtMs(m) < oldest) : []
+  const newer = local.filter((m) => !historyIds.has(m.id) && createdAtMs(m) > newest)
+  const window = history.map((m) => {
+    const mine = localById.get(m.id)
+    if (mine?.editedAt && (!m.editedAt || Date.parse(mine.editedAt) > Date.parse(m.editedAt))) return mine
+    return m
+  })
+  return [...older, ...window, ...newer]
+}
+
+// Mesma ideia para a lista de threads de um forum (mais recente primeiro,
+// sem paginação): vale a lista do servidor, mais o que chegou pelo socket
+// depois do snapshot.
+export function mergeForumThreads(local: RemoteThread[], remote: RemoteThread[]): RemoteThread[] {
+  const remoteIds = new Set(remote.map((t) => t.id))
+  const newest = remote.length > 0 ? createdAtMs(remote[0]) : -Infinity
+  const newer = local.filter((t) => !remoteIds.has(t.id) && createdAtMs(t) > newest)
+  return [...newer, ...remote]
 }
 
 // GET /api/channels/{id}/threads — lista as threads de um canal forum, mais
