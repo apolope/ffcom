@@ -13,14 +13,81 @@ type FriendshipStore struct {
 	pool *pgxpool.Pool
 }
 
-// Request cria um pedido de amizade de requesterID para addresseeID.
+// Request cria um pedido de amizade pendente de requesterID para
+// addresseeID (ver docs/architecture.md, "Decisão: pedido de amizade pela
+// lista de membros"). Devolve ErrConflict se já existir qualquer relação
+// entre as duas contas, em qualquer direção, mesmo critério de
+// CreateAccepted; o chamador usa Between antes para dar a resposta certa a
+// cada caso, e isto só cobre a corrida entre os dois.
 func (s *FriendshipStore) Request(ctx context.Context, requesterID, addresseeID string) (Friendship, error) {
 	const query = `
 		INSERT INTO friendships (requester_id, addressee_id, status)
-		VALUES ($1, $2, 'pending')
+		SELECT $1, $2, 'pending'
+		WHERE NOT EXISTS (
+			SELECT 1 FROM friendships
+			WHERE (requester_id = $1 AND addressee_id = $2)
+			   OR (requester_id = $2 AND addressee_id = $1)
+		)
+		ON CONFLICT (requester_id, addressee_id) DO NOTHING
 		RETURNING id, requester_id, addressee_id, status, created_at, updated_at
 	`
-	return s.scanOne(ctx, query, requesterID, addresseeID)
+	f, err := s.scanOne(ctx, query, requesterID, addresseeID)
+	if errors.Is(err, ErrNotFound) {
+		return Friendship{}, ErrConflict
+	}
+	return f, err
+}
+
+// Between devolve a relação entre accountA e accountB em qualquer direção,
+// ou ErrNotFound se não houver nenhuma.
+func (s *FriendshipStore) Between(ctx context.Context, accountA, accountB string) (Friendship, error) {
+	const query = `
+		SELECT id, requester_id, addressee_id, status, created_at, updated_at
+		FROM friendships
+		WHERE (requester_id = $1 AND addressee_id = $2)
+		   OR (requester_id = $2 AND addressee_id = $1)
+		ORDER BY created_at
+		LIMIT 1
+	`
+	return s.scanOne(ctx, query, accountA, accountB)
+}
+
+// Accept aceita o pedido pendente id, desde que addresseeID seja quem o
+// recebeu (quem mandou não pode aceitar o próprio pedido). Devolve
+// ErrNotFound se o pedido não existir, já tiver sido respondido ou não for
+// para addresseeID.
+func (s *FriendshipStore) Accept(ctx context.Context, id, addresseeID string) (Friendship, error) {
+	const query = `
+		UPDATE friendships SET status = 'accepted', updated_at = now()
+		WHERE id = $1 AND addressee_id = $2 AND status = 'pending'
+		RETURNING id, requester_id, addressee_id, status, created_at, updated_at
+	`
+	return s.scanOne(ctx, query, id, addresseeID)
+}
+
+// DeletePending apaga o pedido pendente id, seja recusado por quem recebeu
+// ou cancelado por quem mandou (accountID precisa ser um dos dois). Recusar
+// não deixa rastro: quem mandou pode pedir de novo. Devolve ErrNotFound se
+// não houver pedido pendente id envolvendo accountID.
+func (s *FriendshipStore) DeletePending(ctx context.Context, id, accountID string) (Friendship, error) {
+	const query = `
+		DELETE FROM friendships
+		WHERE id = $1 AND status = 'pending' AND (requester_id = $2 OR addressee_id = $2)
+		RETURNING id, requester_id, addressee_id, status, created_at, updated_at
+	`
+	return s.scanOne(ctx, query, id, accountID)
+}
+
+// PendingForAccount lista os pedidos pendentes em que accountID participa,
+// recebidos e enviados, do mais recente para o mais antigo.
+func (s *FriendshipStore) PendingForAccount(ctx context.Context, accountID string) ([]Friendship, error) {
+	const query = `
+		SELECT id, requester_id, addressee_id, status, created_at, updated_at
+		FROM friendships
+		WHERE status = 'pending' AND (requester_id = $1 OR addressee_id = $1)
+		ORDER BY created_at DESC
+	`
+	return s.scanMany(ctx, query, accountID)
 }
 
 // SetStatus atualiza o status de um pedido de amizade existente (ex.: accepted, blocked).
@@ -41,7 +108,11 @@ func (s *FriendshipStore) ListForAccount(ctx context.Context, accountID string) 
 		WHERE requester_id = $1 OR addressee_id = $1
 		ORDER BY updated_at DESC
 	`
-	rows, err := s.pool.Query(ctx, query, accountID)
+	return s.scanMany(ctx, query, accountID)
+}
+
+func (s *FriendshipStore) scanMany(ctx context.Context, query string, args ...any) ([]Friendship, error) {
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("friendships: list por account_id: %w", err)
 	}

@@ -63,7 +63,7 @@ func newUpgrader(allowedOrigins map[string]bool) websocket.Upgrader {
 // para todos os clients conectados a este canal (broadcast, inclusive para
 // o autor, para confirmar id/timestamp atribuídos pelo servidor).
 //
-// wsLimiter throttla frames por membro dentro desta conexão já aberta (ver
+// wsLimiter throttla frames por membro+dispositivo dentro desta conexão já aberta (ver
 // docs/architecture.md, "Decisão: rate limiting em server-channel") — o
 // limiter por IP em withRateLimit só cobre o handshake HTTP inicial, não
 // protege contra flood de mensagens depois do upgrade.
@@ -105,6 +105,13 @@ func handleChannelWS(hub *realtime.Hub, channels *store.ChannelStore, roles *sto
 		// Num canal forum, o mesmo bit controla abrir thread e postar
 		// resposta — não ganhou bit próprio (ver docs/architecture.md).
 		canSend := permissions.Has(effective, permissions.SendMessages)
+		// Um balde por membro+dispositivo ("sid" do token do handshake), como
+		// no limiter de REST: o celular mandando mensagem não esgota o
+		// orçamento do PC. Sem "sid", todas as conexões do membro dividem um.
+		frameKey := member.ID
+		if session := auth.SessionFromContext(r.Context()); session != "" {
+			frameKey += "|sid:" + session
+		}
 
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -119,7 +126,7 @@ func handleChannelWS(hub *realtime.Hub, channels *store.ChannelStore, roles *sto
 		go client.WritePump()
 		if channel.Type == store.ChannelForum {
 			client.ReadPump(func(raw []byte) {
-				if !wsLimiter.allow(member.ID) {
+				if !wsLimiter.allow(frameKey) {
 					client.SendError("muitas mensagens, aguarde um instante")
 					return
 				}
@@ -132,7 +139,7 @@ func handleChannelWS(hub *realtime.Hub, channels *store.ChannelStore, roles *sto
 			return
 		}
 		client.ReadPump(func(raw []byte) {
-			if !wsLimiter.allow(member.ID) {
+			if !wsLimiter.allow(frameKey) {
 				client.SendError("muitas mensagens, aguarde um instante")
 				return
 			}

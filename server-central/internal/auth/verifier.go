@@ -37,6 +37,13 @@ func NewVerifier(ctx context.Context, issuerURL string) (*Verifier, error) {
 // Claims são os campos do access token que server-central de fato usa.
 type Claims struct {
 	Subject string `json:"sub"`
+	// SessionID é o "sid" que o Authentik põe no access token: hash da
+	// sessão de login do navegador/app que pediu o token. Cada dispositivo
+	// loga separado e tem o seu; abas do mesmo navegador dividem o mesmo.
+	// Usado só pelo rate limit, que conta por usuário+dispositivo (ver
+	// docs/rate-limits.md). Pode vir vazio (token emitido sem sessão), e aí
+	// o rate limit cai para o balde só do usuário.
+	SessionID string `json:"sid"`
 }
 
 // Verify valida rawToken e devolve as claims relevantes.

@@ -48,8 +48,14 @@ Base URL: `VITE_SERVER_CENTRAL_URL` no client (`http://localhost:8081` em dev).
 | GET | `/api/presence/ws` | Bearer (subprotocolo) | upgrade WS | ver abaixo | — |
 | GET | `/api/friends` | Bearer | — | `{friends: [{accountId, displayName?, avatarUrl?, e2ePublicKey?, lastMessageAt?}]}` — `lastMessageAt` é a DM mais recente trocada com esse amigo em qualquer sentido, mesmo uso do `lastMessageAt` de canal em `server-channel` (ver `docs/architecture.md`, "Decisão: indicador de não lida") | — |
 | POST | `/api/friends/invites` | Bearer | — | `201` `{code, createdAt}` | — |
-| POST | `/api/friends/invites/{code}/redeem` | Bearer | — | `201` `{friendAccountId}` | `400` convite próprio, `404`, `409` já usado, `410` expirado |
+| POST | `/api/friends/invites/{code}/redeem` | Bearer | — | `201` `{friendAccountId}`; um pedido pendente entre os dois vira amizade aceita | `400` convite próprio, `404`, `409` já usado ou já amigos, `410` expirado |
+| GET | `/api/friends/requests` | Bearer | — | `{incoming: [FriendRequest], outgoing: [FriendRequest]}` — pedidos pendentes, recebidos e enviados | — |
+| POST | `/api/friends/requests` | Bearer | `{accountId}` | `201` `{status: "pending", request: FriendRequest}`; `200` `{status: "accepted", ...}` quando o outro lado já tinha pedido | `400` a si mesmo, `404` conta inexistente, `409` já amigos ou pedido já enviado |
+| POST | `/api/friends/requests/{id}/accept` | Bearer | — | `200` `{status: "accepted", request: FriendRequest}` | `404` (inexistente, já respondido, ou quem chama não é o destinatário) |
+| DELETE | `/api/friends/requests/{id}` | Bearer | — | `204` — recusa (destinatário) ou cancela (remetente) | `404` |
 | GET | `/api/dms/{accountId}/messages?before=&limit=` | Bearer | — | `{messages: [DirectMessage]}` | `403` se não são amigos |
+
+`FriendRequest`: `{id, accountId, displayName?, avatarUrl?, createdAt}` — `accountId`/`displayName`/`avatarUrl` são sempre do **outro** lado do pedido, do ponto de vista de quem recebe a resposta ou o frame.
 
 `DirectMessage`: `{id, senderId, recipientId, ciphertext, nonce, createdAt, editedAt?}` — `ciphertext`/`nonce` são base64, opacos ao servidor (criptografia ponta-a-ponta, ver `docs/architecture.md`, "Decisão: criptografia ponta-a-ponta em DMs"). O client decifra localmente com a chave pública atual do outro lado da conversa (`GET /api/friends`) + a chave privada do dispositivo.
 
@@ -61,6 +67,9 @@ Uma conexão por sessão do client, mantida aberta enquanto online; serve **pres
 - **servidor → client:**
   - `presence.update` — `{"type": "presence.update", "accountId": "...", "online": bool}`, só para amigos aceitos.
   - `dm.created` — `{"type": "dm.created", "message": DirectMessage}`, broadcast para remetente e destinatário.
+  - `friend.request` — `{"type": "friend.request", "request": FriendRequest}`, para quem recebeu um pedido de amizade novo.
+  - `friend.request.removed` — `{"type": "friend.request.removed", "id": "..."}`, para os dois lados quando um pedido pendente é recusado ou cancelado.
+  - `friend.accepted` — `{"type": "friend.accepted", "requestId": "...", "accountId": "...", "displayName"?: "..."}`, para os dois lados quando uma amizade passa a valer (pedido aceito ou convite resgatado); `accountId` é o novo amigo de quem recebe o frame.
   - `error` — `{"type": "error", "error": "..."}`.
 
 ### Rate limiting

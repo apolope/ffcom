@@ -47,10 +47,14 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, avatarFiles *storage.Av
 	mux.Handle("GET /api/presence/ws", protected(handlePresenceWS(hub, db.Friendships, db.DirectMessages, upgrader)))
 	mux.Handle("GET /api/friends", protected(handleListFriends(db.Friendships, db.Profiles, db.Accounts, db.DirectMessages)))
 	mux.Handle("POST /api/friends/invites", protected(handleCreateFriendInvite(db.FriendInvites)))
-	mux.Handle("POST /api/friends/invites/{code}/redeem", protected(handleRedeemFriendInvite(db.FriendInvites, db.Friendships)))
+	mux.Handle("POST /api/friends/invites/{code}/redeem", protected(handleRedeemFriendInvite(hub, db.FriendInvites, db.Friendships, db.Profiles)))
+	mux.Handle("GET /api/friends/requests", protected(handleListFriendRequests(db.Friendships, db.Profiles)))
+	mux.Handle("POST /api/friends/requests", protected(handleCreateFriendRequest(hub, db.Friendships, db.Accounts, db.Profiles)))
+	mux.Handle("POST /api/friends/requests/{id}/accept", protected(handleAcceptFriendRequest(hub, db.Friendships, db.Profiles)))
+	mux.Handle("DELETE /api/friends/requests/{id}", protected(handleDeleteFriendRequest(hub, db.Friendships)))
 	mux.Handle("GET /api/dms/{accountId}/messages", protected(handleListDMs(db.Friendships, db.DirectMessages)))
 
 	limiter := newRateLimiter(rateLimitRPM, rateLimitBurst)
-	identify := func(r *http.Request) (*http.Request, string, bool) { return auth.IdentifyRequest(verifier, r) }
+	identify := func(r *http.Request) (*http.Request, string, string, bool) { return auth.IdentifyRequest(verifier, r) }
 	return withRequireTLS(requireTLS, withCORS(allowed, withRateLimit(limiter, identify, mux)))
 }

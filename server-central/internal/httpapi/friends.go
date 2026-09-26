@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"a3sitsolutions.com/ffcom/server-central/internal/auth"
+	"a3sitsolutions.com/ffcom/server-central/internal/realtime"
 	"a3sitsolutions.com/ffcom/server-central/internal/store"
 )
 
@@ -70,7 +71,7 @@ func handleCreateFriendInvite(invites *store.FriendInviteStore) http.Handler {
 // POST /api/friends/invites/{code}/redeem — resgata um convite de amizade,
 // criando a amizade já como "accepted" entre quem criou o código e quem
 // resgatou (resgatar é o consentimento mútuo, ver docs/architecture.md).
-func handleRedeemFriendInvite(invites *store.FriendInviteStore, friendships *store.FriendshipStore) http.Handler {
+func handleRedeemFriendInvite(hub *realtime.Hub, invites *store.FriendInviteStore, friendships *store.FriendshipStore, profiles *store.ProfileStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
@@ -110,14 +111,22 @@ func handleRedeemFriendInvite(invites *store.FriendInviteStore, friendships *sto
 			return
 		}
 
-		if _, err := friendships.CreateAccepted(r.Context(), invite.CreatedByAccountID, account.ID); err != nil {
-			if errors.Is(err, store.ErrConflict) {
+		friendship, err := friendships.CreateAccepted(r.Context(), invite.CreatedByAccountID, account.ID)
+		if errors.Is(err, store.ErrConflict) {
+			// Um pedido pendente entre os dois (ver friend_requests.go) não
+			// impede o convite: resgatar já é o consentimento dos dois lados.
+			existing, betweenErr := friendships.Between(r.Context(), invite.CreatedByAccountID, account.ID)
+			if betweenErr != nil || existing.Status != store.FriendshipPending {
 				http.Error(w, "vocês já são amigos", http.StatusConflict)
 				return
 			}
+			friendship, err = friendships.SetStatus(r.Context(), existing.ID, store.FriendshipAccepted)
+		}
+		if err != nil {
 			http.Error(w, "erro ao criar amizade", http.StatusInternalServerError)
 			return
 		}
+		notifyFriendAccepted(r.Context(), hub, profiles, friendship)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)

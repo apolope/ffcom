@@ -229,6 +229,75 @@ export async function redeemFriendInvite(accessToken: string, code: string): Pro
   }
 }
 
+// Pedidos de amizade feitos pela lista de membros (ver docs/architecture.md,
+// "Decisão: pedido de amizade pela lista de membros"). accountId/nome/avatar
+// são sempre do outro lado do pedido.
+export interface FriendRequest {
+  id: string
+  accountId: string
+  displayName?: string
+  avatarUrl?: string
+  createdAt: string
+}
+
+export interface FriendRequests {
+  incoming: FriendRequest[]
+  outgoing: FriendRequest[]
+}
+
+// Nome de quem está do outro lado de um pedido. Sem perfil em server-central
+// (a pessoa nunca definiu avatar), sobra o começo do id, mesmo recurso das
+// listas de membros.
+export function friendRequestName(request: { accountId: string; displayName?: string }): string {
+  return request.displayName ?? request.accountId.slice(0, 8)
+}
+
+async function throwWithBody(res: Response): Promise<void> {
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(text.trim() || `server-central: ${res.status} ${res.statusText}`)
+  }
+}
+
+export async function fetchFriendRequests(accessToken: string): Promise<FriendRequests> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/friends/requests`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  return parseJsonOrThrow<FriendRequests>(res)
+}
+
+// status 'accepted' quando o outro lado já tinha mandado um pedido: vira
+// amizade na hora.
+export async function sendFriendRequest(
+  accessToken: string,
+  accountId: string,
+): Promise<{ status: 'pending' | 'accepted'; request: FriendRequest }> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/friends/requests`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accountId }),
+  })
+  await throwWithBody(res)
+  return res.json()
+}
+
+export async function acceptFriendRequest(accessToken: string, id: string): Promise<void> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/friends/requests/${encodeURIComponent(id)}/accept`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  await throwWithBody(res)
+}
+
+// Recusa (pedido recebido) ou cancela (pedido enviado).
+export async function deleteFriendRequest(accessToken: string, id: string): Promise<void> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/friends/requests/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  await throwWithBody(res)
+}
+
 function toPresenceWebSocketUrl(): string {
   const url = new URL(`${SERVER_CENTRAL_URL}/api/presence/ws`)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -287,6 +356,9 @@ export function sendPresenceIdleFrame(socket: WebSocket, idle: boolean): void {
 type PresenceSocketFrame =
   | { type: 'presence.update'; accountId: string; status?: PresenceStatus; online: boolean }
   | { type: 'dm.created'; message: RemoteDirectMessage }
+  | { type: 'friend.request'; request: FriendRequest }
+  | { type: 'friend.request.removed'; id: string }
+  | { type: 'friend.accepted'; requestId?: string; accountId: string; displayName?: string }
   | { type: 'error'; error: string }
 
 export function decodePresenceSocketFrame(raw: string): PresenceSocketFrame | null {
@@ -295,6 +367,9 @@ export function decodePresenceSocketFrame(raw: string): PresenceSocketFrame | nu
     if (
       parsed.type === 'presence.update' ||
       parsed.type === 'dm.created' ||
+      parsed.type === 'friend.request' ||
+      parsed.type === 'friend.request.removed' ||
+      parsed.type === 'friend.accepted' ||
       parsed.type === 'error'
     ) {
       return parsed as PresenceSocketFrame

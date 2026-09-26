@@ -14,6 +14,7 @@ type contextKey int
 const (
 	subjectContextKey contextKey = iota
 	memberContextKey
+	sessionContextKey
 )
 
 // VerifyToken exige um Bearer token válido, sem exigir que o "sub" já seja
@@ -52,22 +53,32 @@ func VerifyToken(verifier *Verifier) func(http.Handler) http.Handler {
 }
 
 // IdentifyRequest verifica o token da requisição, se houver, e devolve o
-// "sub" junto com a requisição já com o "sub" no contexto (VerifyToken, mais
+// "sub" e o "sid" (sessão do dispositivo) junto com a requisição já com os
+// dois no contexto (VerifyToken, mais
 // adiante na cadeia, reaproveita em vez de verificar de novo). Sem token ou
 // com token inválido devolve ok=false e a requisição intacta: quem decide
 // o 401 continua sendo VerifyToken. Usado pelo rate limit, que conta por
-// usuário e só cai para IP quando não sabe quem é (ver docs/rate-limits.md).
-func IdentifyRequest(verifier *Verifier, r *http.Request) (*http.Request, string, bool) {
+// usuário+dispositivo e só cai para IP quando não sabe quem é (ver
+// docs/rate-limits.md).
+func IdentifyRequest(verifier *Verifier, r *http.Request) (*http.Request, string, string, bool) {
 	rawToken, ok := bearerToken(r)
 	if !ok {
-		return r, "", false
+		return r, "", "", false
 	}
 	claims, err := verifier.Verify(r.Context(), rawToken)
 	if err != nil {
-		return r, "", false
+		return r, "", "", false
 	}
 	ctx := context.WithValue(r.Context(), subjectContextKey, claims.Subject)
-	return r.WithContext(ctx), claims.Subject, true
+	ctx = context.WithValue(ctx, sessionContextKey, claims.SessionID)
+	return r.WithContext(ctx), claims.Subject, claims.SessionID, true
+}
+
+// SessionFromContext devolve o "sid" do token anexado por IdentifyRequest
+// (vazio se o token não trouxe "sid" ou a requisição não passou por ali).
+func SessionFromContext(ctx context.Context) string {
+	session, _ := ctx.Value(sessionContextKey).(string)
+	return session
 }
 
 // RequireMember exige que o "sub" autenticado (anexado por VerifyToken, que

@@ -1,5 +1,8 @@
+import type { ReactNode } from 'react'
+import { friendRequestName, type FriendRequest } from '../lib/serverCentralApi'
 import type { Friend } from '../types'
 import { AvatarWithStatus } from './AvatarWithStatus'
+import { UserAvatar } from './UserAvatar'
 import './FriendsView.css'
 
 interface FriendsViewProps {
@@ -10,6 +13,12 @@ interface FriendsViewProps {
   unreadFriendIds: Set<string>
   onSelectFriend: (accountId: string) => void
   onAddFriend: () => void
+  // Pedidos pendentes (ver hooks/useFriends.ts): recebidos com aprovar e
+  // recusar, enviados com cancelar.
+  incomingRequests: FriendRequest[]
+  outgoingRequests: FriendRequest[]
+  onAcceptRequest: (id: string) => void
+  onRemoveRequest: (id: string) => void
 }
 
 // Lista de amigos + presença (via server-central, ver hooks/useFriends.ts).
@@ -23,6 +32,10 @@ export function FriendsView({
   unreadFriendIds,
   onSelectFriend,
   onAddFriend,
+  incomingRequests,
+  outgoingRequests,
+  onAcceptRequest,
+  onRemoveRequest,
 }: FriendsViewProps) {
   const online = friends.filter((f) => f.online)
   const offline = friends.filter((f) => !f.online)
@@ -35,6 +48,56 @@ export function FriendsView({
           Adicionar amigo
         </button>
       </header>
+
+      {(incomingRequests.length > 0 || outgoingRequests.length > 0) && (
+        <div className="friends-list friends-requests">
+          {incomingRequests.length > 0 && (
+            <div className="friends-group">
+              <div className="friends-group-name">Pedidos recebidos — {incomingRequests.length}</div>
+              {incomingRequests.map((request) => (
+                <FriendRequestRow key={request.id} request={request} hint="Quer ser seu amigo">
+                  <button
+                    type="button"
+                    className="friend-request-action accept"
+                    title="Aceitar"
+                    aria-label={`Aceitar pedido de ${friendRequestName(request)}`}
+                    onClick={() => onAcceptRequest(request.id)}
+                  >
+                    ✓
+                  </button>
+                  <button
+                    type="button"
+                    className="friend-request-action decline"
+                    title="Recusar"
+                    aria-label={`Recusar pedido de ${friendRequestName(request)}`}
+                    onClick={() => onRemoveRequest(request.id)}
+                  >
+                    ✕
+                  </button>
+                </FriendRequestRow>
+              ))}
+            </div>
+          )}
+          {outgoingRequests.length > 0 && (
+            <div className="friends-group">
+              <div className="friends-group-name">Pedidos enviados — {outgoingRequests.length}</div>
+              {outgoingRequests.map((request) => (
+                <FriendRequestRow key={request.id} request={request} hint="Aguardando resposta">
+                  <button
+                    type="button"
+                    className="friend-request-action decline"
+                    title="Cancelar pedido"
+                    aria-label={`Cancelar pedido para ${friendRequestName(request)}`}
+                    onClick={() => onRemoveRequest(request.id)}
+                  >
+                    ✕
+                  </button>
+                </FriendRequestRow>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {friends.length === 0 ? (
         <div className="friends-empty">
@@ -110,5 +173,27 @@ function FriendRow({
       {friend.displayName}
       {unread && <span className="unread-dot" aria-label="mensagens não lidas" />}
     </button>
+  )
+}
+
+function FriendRequestRow({
+  request,
+  hint,
+  children,
+}: {
+  request: FriendRequest
+  hint: string
+  children: ReactNode
+}) {
+  const name = friendRequestName(request)
+  return (
+    <div className="friend-request-row">
+      <UserAvatar avatarUrl={request.avatarUrl} displayName={name} size={24} />
+      <span className="friend-request-text">
+        <span className="friend-request-name">{name}</span>
+        <span className="friend-request-hint">{hint}</span>
+      </span>
+      {children}
+    </div>
   )
 }

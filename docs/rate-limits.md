@@ -9,7 +9,8 @@ atualizar as tabelas daqui.
 As decisões de desenho (por que token bucket em memória, por que dois limiters
 em server-channel) ficam em `docs/architecture.md`, nas seções "Decisão: rate
 limiting em server-central", "Decisão: rate limiting em server-channel" e
-"Decisão: rate limit por usuário em vez de por IP".
+"Decisão: rate limit por usuário em vez de por IP" e "Decisão: rate limit por
+usuário e dispositivo".
 
 ## Regras
 
@@ -22,16 +23,19 @@ próxima requisição).
 
 | Limiter | Onde | Chave | Padrão (RPM / burst) | Variáveis |
 |---|---|---|---|---|
-| REST de server-central | toda a API, menos `/healthz` | `sub` do token verificado; sem token válido, IP | 120 / 60 | `RATE_LIMIT_RPM`, `RATE_LIMIT_BURST` |
-| REST de server-channel | toda a API, menos `/healthz`, incluindo o handshake do WebSocket de canal | `sub` do token verificado; sem token válido, IP | 120 / 60 | `RATE_LIMIT_RPM`, `RATE_LIMIT_BURST` |
-| Frames do WebSocket de canal | cada frame recebido numa conexão já aberta (`message.create`, `message.update`, `message.delete`, `thread.create`, `post.create`) | id do membro | 60 / 10 | `RATE_LIMIT_WS_RPM`, `RATE_LIMIT_WS_BURST` |
+| REST de server-central | toda a API, menos `/healthz` | `sub` + `sid` do token verificado (só `sub` se o token não trouxer `sid`); sem token válido, IP | 120 / 60 | `RATE_LIMIT_RPM`, `RATE_LIMIT_BURST` |
+| REST de server-channel | toda a API, menos `/healthz`, incluindo o handshake do WebSocket de canal | `sub` + `sid` do token verificado (só `sub` se o token não trouxer `sid`); sem token válido, IP | 120 / 60 | `RATE_LIMIT_RPM`, `RATE_LIMIT_BURST` |
+| Frames do WebSocket de canal | cada frame recebido numa conexão já aberta (`message.create`, `message.update`, `message.delete`, `thread.create`, `post.create`) | id do membro + `sid` do token do handshake | 60 / 10 | `RATE_LIMIT_WS_RPM`, `RATE_LIMIT_WS_BURST` |
 
-Consequências da chave por usuário que importam para a conta:
+Consequências da chave por usuário e dispositivo que importam para a conta:
 
-1. **O orçamento é da pessoa, não do dispositivo.** Três abas, o app Electron
-   e o celular da mesma conta gastam do mesmo balde em cada servidor. As
-   tabelas abaixo são por instância do client; multiplique pelo número de
-   instâncias abertas da mesma conta.
+1. **O orçamento é do par pessoa/dispositivo.** O `sid` é o hash da sessão de
+   login no Authentik, que vem assinado dentro do access token. Celular, PC e
+   notebook da mesma conta logam cada um por conta própria e têm baldes
+   separados; o app Electron e o navegador no mesmo PC também. Abas do mesmo
+   navegador dividem a sessão (o `oidc-client-ts` guarda o token em
+   `localStorage`) e portanto o balde. As tabelas abaixo são por instância do
+   client; multiplique pelo número de abas abertas no mesmo navegador.
 2. **Cada servidor tem seu próprio balde.** server-central e cada
    server-channel contam separado; gastar tudo num server-channel não afeta
    outro.
@@ -158,7 +162,8 @@ A conta de cada cenário é por conta de usuário, no pior servidor envolvido.
 |---|---|---|
 | Abrir o app com um servidor e um canal de texto | 9 a 11 no server-channel (16 em dev), 7 + avatares no central | Passa |
 | Recarregar duas vezes seguidas em dev | 32 no server-channel | Passa (com o burst antigo de 20, dava 429; foi o que motivou a mudança) |
-| Três instâncias da mesma conta abrindo juntas | 27 a 33 (48 em dev) | Passa |
+| Três abas do mesmo navegador abrindo juntas | 27 a 33 (48 em dev) | Passa |
+| Mesma conta no celular, PC e notebook | balde separado por dispositivo | Passa; com a chave só por `sub`, os três dividiam o mesmo balde |
 | Trocar de canal de texto a cada 1 s | 3 por troca, recarga de 2/s | Perde 1 ficha por segundo; depois de uns 40 s seguidos começa 429 |
 | Trocar de canal de texto a cada 2 s | 3 por troca, recarga de 4 por troca | Sustentável indefinidamente |
 | Lista de membros com 60 pessoas com avatar, cache vazio | 60 + 7 no central | **Estoura**: uns 7 avatares recebem 429 e caem para a inicial |
@@ -175,8 +180,8 @@ resto é folga que dá para recuperar se o orçamento apertar.
    aparece. Com mais de uns 50 avatares novos na tela, parte falha. Caminhos:
    servir avatar por URL pública com hash (sem Bearer, cacheável pelo
    navegador), ou enfileirar as buscas com concorrência limitada.
-2. **Várias instâncias da mesma conta abrindo juntas** somam as rajadas no
-   mesmo balde. Um client que recebe 429 hoje não tenta de novo (o histórico
+2. **Várias abas do mesmo navegador abrindo juntas** somam as rajadas no
+   mesmo balde (dispositivos diferentes não, ver as regras acima). Um client que recebe 429 hoje não tenta de novo (o histórico
    fica em erro até trocar de canal). Tratar 429 com uma nova tentativa depois
    do `Retry-After` resolve para todas as rotas de uma vez.
 3. **Troca rápida de canal** gasta 3 fichas por clique.

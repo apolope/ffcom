@@ -130,3 +130,53 @@ func EncodeDMCreated(m DirectMessageView) ([]byte, error) {
 func EncodeError(message string) ([]byte, error) {
 	return json.Marshal(errorEnvelope{Type: typeError, Error: message})
 }
+
+// FriendRequestView é um pedido de amizade pendente do ponto de vista de
+// quem o recebe no frame: AccountID/DisplayName/AvatarURL são sempre do
+// outro lado (quem mandou, num pedido recebido). Mesmo formato dos itens de
+// GET /api/friends/requests.
+type FriendRequestView struct {
+	ID          string    `json:"id"`
+	AccountID   string    `json:"accountId"`
+	DisplayName *string   `json:"displayName,omitempty"`
+	AvatarURL   *string   `json:"avatarUrl,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
+type friendRequestEnvelope struct {
+	Type    string            `json:"type"`
+	Request FriendRequestView `json:"request"`
+}
+
+type friendRequestRemovedEnvelope struct {
+	Type string `json:"type"`
+	ID   string `json:"id"`
+}
+
+type friendAcceptedEnvelope struct {
+	Type      string  `json:"type"`
+	RequestID string  `json:"requestId,omitempty"`
+	AccountID string  `json:"accountId"`
+	Name      *string `json:"displayName,omitempty"`
+}
+
+// EncodeFriendRequest serializa "friend.request", enviado a quem recebeu
+// um pedido de amizade novo (ver docs/architecture.md, "Decisão: pedido de
+// amizade pela lista de membros").
+func EncodeFriendRequest(req FriendRequestView) ([]byte, error) {
+	return json.Marshal(friendRequestEnvelope{Type: "friend.request", Request: req})
+}
+
+// EncodeFriendRequestRemoved serializa "friend.request.removed", enviado aos
+// dois lados quando um pedido pendente é recusado ou cancelado.
+func EncodeFriendRequestRemoved(id string) ([]byte, error) {
+	return json.Marshal(friendRequestRemovedEnvelope{Type: "friend.request.removed", ID: id})
+}
+
+// EncodeFriendAccepted serializa "friend.accepted": accountID (e o nome,
+// quando houver perfil) é o novo amigo do ponto de vista de quem recebe o
+// frame. requestID é o pedido que deixou de estar pendente, vazio quando a
+// amizade veio de um convite.
+func EncodeFriendAccepted(requestID, accountID string, displayName *string) ([]byte, error) {
+	return json.Marshal(friendAcceptedEnvelope{Type: "friend.accepted", RequestID: requestID, AccountID: accountID, Name: displayName})
+}

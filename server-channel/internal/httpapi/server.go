@@ -101,6 +101,6 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, attachmentFiles *storag
 	mux.Handle("DELETE /api/members/{memberId}/roles/{roleId}", protected(handleRemoveRole(db.Roles)))
 
 	restLimiter := newRateLimiter(restRateLimitRPM, restRateLimitBurst)
-	identify := func(r *http.Request) (*http.Request, string, bool) { return auth.IdentifyRequest(verifier, r) }
+	identify := func(r *http.Request) (*http.Request, string, string, bool) { return auth.IdentifyRequest(verifier, r) }
 	return withRequireTLS(requireTLS, withCORS(allowed, withRateLimit(restLimiter, identify, mux)))
 }

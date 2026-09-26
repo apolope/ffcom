@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ServerRail } from './components/ServerRail'
 import { ChannelSidebar } from './components/ChannelSidebar'
 import { MainPanel } from './components/MainPanel'
-import { MemberList } from './components/MemberList'
+import { MemberList, type MemberFriendActions } from './components/MemberList'
 import { LoginScreen } from './components/LoginScreen'
 import { AddServerDialog } from './components/AddServerDialog'
 import { InviteServerDialog } from './components/InviteServerDialog'
@@ -22,7 +22,7 @@ import { useAppUpdate } from './hooks/useAppUpdate'
 import { useAccountsBySubject } from './hooks/useAccountsBySubject'
 import { useIdle } from './hooks/useIdle'
 import { useKnownServers } from './hooks/useKnownServers'
-import { useFriends } from './hooks/useFriends'
+import { useFriends, type FriendEvent } from './hooks/useFriends'
 import { useE2EKeys } from './hooks/useE2EKeys'
 import { useMe } from './hooks/useMe'
 import { useMyProfile } from './hooks/useMyProfile'
@@ -44,7 +44,7 @@ import {
   updateCategory,
   updateChannel,
 } from './lib/serverChannelApi'
-import { sendPresenceIdleFrame } from './lib/serverCentralApi'
+import { friendRequestName, sendPresenceIdleFrame } from './lib/serverCentralApi'
 import { markRead } from './lib/unread'
 import { NO_STRUCTURE_PERMISSIONS, PERMISSIONS, hasPermission, structurePermissionsOf } from './lib/permissions'
 import type { Category } from './types'
@@ -70,7 +70,30 @@ function App() {
     [notify],
   )
   const { servers, addServer, saveOrder: saveServerOrder } = useKnownServers(accessToken ?? '', onServerOrderSaveError)
-  const { friends, createInvite, redeemInvite, socket: presenceSocket } = useFriends(accessToken ?? '')
+  // Pedido de amizade recebido ou aceito chega pelo WebSocket de presença,
+  // com a pessoa em qualquer tela: vira aviso no canto (ver
+  // docs/architecture.md, "Decisão: pedido de amizade pela lista de membros").
+  const onFriendEvent = useCallback(
+    (event: FriendEvent) => {
+      if (event.kind === 'request-received') {
+        notify(`${friendRequestName(event.request)} te enviou um pedido de amizade. Veja em Amigos.`)
+      } else {
+        notify(`${friendRequestName(event)} aceitou seu pedido de amizade.`, 'success')
+      }
+    },
+    [notify],
+  )
+  const {
+    friends,
+    createInvite,
+    redeemInvite,
+    incomingRequests,
+    outgoingRequests,
+    sendRequest: sendFriendRequest,
+    acceptRequest: acceptFriendRequest,
+    removeRequest: removeFriendRequest,
+    socket: presenceSocket,
+  } = useFriends(accessToken ?? '', onFriendEvent)
   const { keyPair: myE2EKeyPair } = useE2EKeys(accessToken ?? '', accountSub)
   const [selectedServerId, setSelectedServerId] = useState<string>()
   const [showFriends, setShowFriends] = useState(false)
@@ -87,6 +110,58 @@ function App() {
   const [permissionsChannelId, setPermissionsChannelId] = useState<string>()
 
   const selectedFriend = friends.find((f) => f.accountId === selectedFriendId)
+
+  // Ações do botão direito na lista de membros. Erros (pedido duplicado,
+  // conta sumiu) voltam do servidor como texto e viram aviso.
+  const memberFriendActions = useMemo<MemberFriendActions>(() => {
+    const friendIds = new Set(friends.map((f) => f.accountId))
+    const incomingByAccount = new Map(incomingRequests.map((r) => [r.accountId, r]))
+    const outgoingIds = new Set(outgoingRequests.map((r) => r.accountId))
+    const fail = (err: unknown) =>
+      notify(err instanceof Error ? err.message : 'Falha ao atualizar a amizade.', 'error')
+    return {
+      relationOf: (accountId) => {
+        if (accountId === myProfile?.accountId) return 'self'
+        if (friendIds.has(accountId)) return 'friend'
+        if (incomingByAccount.has(accountId)) return 'incoming'
+        if (outgoingIds.has(accountId)) return 'outgoing'
+        return 'none'
+      },
+      onAddFriend: (accountId, nickname) => {
+        sendFriendRequest(accountId)
+          .then((result) =>
+            notify(
+              result === 'accepted'
+                ? `Você e ${nickname} agora são amigos.`
+                : `Pedido de amizade enviado para ${nickname}.`,
+              'success',
+            ),
+          )
+          .catch(fail)
+      },
+      onAcceptRequest: (accountId) => {
+        const request = incomingByAccount.get(accountId)
+        if (request) acceptFriendRequest(request.id).catch(fail)
+      },
+      onDeclineRequest: (accountId) => {
+        const request = incomingByAccount.get(accountId)
+        if (request) removeFriendRequest(request.id).catch(fail)
+      },
+      onMessage: (accountId) => {
+        setShowFriends(true)
+        setSelectedFriendId(accountId)
+      },
+    }
+  }, [
+    friends,
+    incomingRequests,
+    outgoingRequests,
+    myProfile?.accountId,
+    notify,
+    sendFriendRequest,
+    acceptFriendRequest,
+    removeFriendRequest,
+  ])
 
   useEffect(() => {
     if (selectedServerId && servers.some((s) => s.id === selectedServerId)) return
@@ -277,7 +352,7 @@ function App() {
             selectedServerId={selectedServerId}
             friendsSelected={showFriends}
             unreadServerIds={unreadServerIds}
-            friendsUnread={!showFriends && unreadFriendIds.size > 0}
+            friendsUnread={!showFriends && (unreadFriendIds.size > 0 || incomingRequests.length > 0)}
             updateReady={updateReady}
             onUpdate={applyUpdate}
             myProfile={myProfile}
@@ -312,6 +387,18 @@ function App() {
                 unreadFriendIds={unreadFriendIds}
                 onSelectFriend={setSelectedFriendId}
                 onAddFriend={() => setShowAddFriend(true)}
+                incomingRequests={incomingRequests}
+                outgoingRequests={outgoingRequests}
+                onAcceptRequest={(id) => {
+                  acceptFriendRequest(id).catch((err: unknown) =>
+                    notify(err instanceof Error ? err.message : 'Falha ao aceitar o pedido.', 'error'),
+                  )
+                }}
+                onRemoveRequest={(id) => {
+                  removeFriendRequest(id).catch((err: unknown) =>
+                    notify(err instanceof Error ? err.message : 'Falha ao remover o pedido.', 'error'),
+                  )
+                }}
               />
               {selectedFriend && !myE2EKeyPair ? (
                 <div className="empty-state">
@@ -353,7 +440,7 @@ function App() {
                 onReorderChannels={saveChannelOrder}
               />
               <MainPanel channel={channel} serverBaseUrl={server.baseUrl} canModerateMessages={canModerateMessages} />
-              <MemberList members={members} roles={roles} />
+              <MemberList members={members} roles={roles} friendActions={memberFriendActions} />
             </>
           ) : (
             <div className="empty-state">

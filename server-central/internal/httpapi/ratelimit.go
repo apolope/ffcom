@@ -94,19 +94,24 @@ func (l *rateLimiter) allow(key string) bool {
 }
 
 // requestIdentifier descobre de quem é a requisição (auth.IdentifyRequest
-// na montagem real; os testes passam um falso). Devolve a requisição com o
-// "sub" já no contexto, para a autenticação não verificar o token de novo.
-type requestIdentifier func(r *http.Request) (*http.Request, string, bool)
+// na montagem real; os testes passam um falso): o "sub" e o "sid" (sessão do
+// dispositivo, pode vir vazio). Devolve a requisição com os dois já no
+// contexto, para a autenticação não verificar o token de novo.
+type requestIdentifier func(r *http.Request) (*http.Request, string, string, bool)
 
 // withRateLimit aplica o limiter a todas as rotas, exceto /healthz (usado
 // pelo HEALTHCHECK do Docker e por monitoramento externo, não deve competir
 // por orçamento de requisições com tráfego de cliente real).
 //
-// A chave é o usuário ("sub" do token verificado), não o IP: várias pessoas
-// atrás do mesmo NAT (escritório, casa, CGNAT de operadora) saem com o mesmo
-// IP e dividiriam um orçamento só. Requisição sem token ou com token inválido
-// não tem dono conhecido e cai no bucket do IP, o que continua segurando
-// flood anônimo. Ver docs/rate-limits.md.
+// A chave é o par usuário+dispositivo ("sub" e "sid" do token verificado),
+// não o IP: várias pessoas atrás do mesmo NAT (escritório, casa, CGNAT de
+// operadora) saem com o mesmo IP e dividiriam um orçamento só, e a mesma
+// pessoa com celular, PC e notebook abertos não deve esgotar o orçamento de
+// um aparelho com o uso do outro. O "sid" vem assinado no token (não é header
+// que o client escolhe), então não dá para inventar dispositivos à vontade;
+// token sem "sid" cai no balde só do usuário. Requisição sem token ou com
+// token inválido não tem dono conhecido e cai no bucket do IP, o que
+// continua segurando flood anônimo. Ver docs/rate-limits.md.
 func withRateLimit(limiter *rateLimiter, identify requestIdentifier, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/healthz" {
@@ -115,9 +120,9 @@ func withRateLimit(limiter *rateLimiter, identify requestIdentifier, next http.H
 		}
 
 		key := "ip:" + clientIP(r)
-		if identified, subject, ok := identify(r); ok {
+		if identified, subject, session, ok := identify(r); ok {
 			r = identified
-			key = "sub:" + subject
+			key = userDeviceKey(subject, session)
 		}
 
 		if !limiter.allow(key) {
@@ -128,6 +133,16 @@ func withRateLimit(limiter *rateLimiter, identify requestIdentifier, next http.H
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// userDeviceKey monta a chave de bucket de um usuário autenticado: um balde
+// por dispositivo quando o token traz "sid", um balde só do usuário quando
+// não traz.
+func userDeviceKey(subject, session string) string {
+	if session == "" {
+		return "sub:" + subject
+	}
+	return "sub:" + subject + "|sid:" + session
 }
 
 // clientIP extrai o IP do cliente. server-central roda atrás de um proxy

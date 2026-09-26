@@ -65,21 +65,55 @@ func TestRateLimiterTracksKeysIndependently(t *testing.T) {
 }
 
 // identifyByHeader faz o papel de auth.IdentifyRequest sem token OIDC real:
-// o "sub" vem do header X-Test-Subject.
-func identifyByHeader(r *http.Request) (*http.Request, string, bool) {
+// o "sub" vem do header X-Test-Subject e o "sid" de X-Test-Session.
+func identifyByHeader(r *http.Request) (*http.Request, string, string, bool) {
 	subject := r.Header.Get("X-Test-Subject")
-	return r, subject, subject != ""
+	return r, subject, r.Header.Get("X-Test-Session"), subject != ""
 }
 
 func rateLimitedStatus(h http.Handler, subject string) int {
+	return rateLimitedStatusFromDevice(h, subject, "")
+}
+
+func rateLimitedStatusFromDevice(h http.Handler, subject, session string) int {
 	req := httptest.NewRequest(http.MethodGet, "/api/me", nil)
 	req.RemoteAddr = "10.0.0.1:5000"
 	if subject != "" {
 		req.Header.Set("X-Test-Subject", subject)
 	}
+	if session != "" {
+		req.Header.Set("X-Test-Session", session)
+	}
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	return rec.Code
+}
+
+func TestWithRateLimitKeysByUserAndDevice(t *testing.T) {
+	l := &rateLimiter{
+		buckets:        make(map[string]*bucket),
+		ratePerSecond:  0,
+		burst:          1,
+		idleExpiration: time.Minute,
+	}
+	ok := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+	h := withRateLimit(l, identifyByHeader, ok)
+
+	if got := rateLimitedStatusFromDevice(h, "alice", "celular"); got != http.StatusOK {
+		t.Fatalf("alice no celular: status %d, esperado 200", got)
+	}
+	if got := rateLimitedStatusFromDevice(h, "alice", "celular"); got != http.StatusTooManyRequests {
+		t.Fatalf("alice no celular de novo: status %d, esperado 429", got)
+	}
+	// Mesma conta, outro dispositivo: não pode herdar o bucket esgotado do
+	// celular.
+	if got := rateLimitedStatusFromDevice(h, "alice", "pc"); got != http.StatusOK {
+		t.Fatalf("alice no PC: status %d, esperado 200", got)
+	}
+	// Mesmo "sid" em outra conta não compartilha bucket (a chave é o par).
+	if got := rateLimitedStatusFromDevice(h, "bob", "celular"); got != http.StatusOK {
+		t.Fatalf("bob com o mesmo sid: status %d, esperado 200", got)
+	}
 }
 
 func TestWithRateLimitKeysByUserNotSharedIP(t *testing.T) {
