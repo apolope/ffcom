@@ -99,7 +99,7 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [x] Permissões granulares de estrutura e ordenar categorias arrastando — bits `CreateChannels`/`ReorderChannels`/`DeleteChannels`/`CreateCategories`/`ReorderCategories`/`DeleteCategories` (1024 a 32768) como fatias de `ManageChannels`, que continua valendo tudo e é o único que renomeia; `PUT /api/categories/order` grava a ordem inteira numa transação (`409` se a lista mudou). Sidebar com canais recuados, "+" fixo por categoria e card "Criar nova categoria" no fim. Catálogo de permissões em `docs/permissions.md`. Ver `docs/architecture.md`, "Decisão: permissões granulares de categoria e canal"
 - [x] Arrastar canal (dentro e entre categorias, `PUT /api/channels/order`), job que regrava a ordem até conseguir (avisa só na primeira falha) e central de mensagens empilhadas de 5s, silenciada no status Ocupado. Ver o complemento em `docs/architecture.md`, "Decisão: permissões granulares de categoria e canal"
 - [x] Ordenar servidores no rail arrastando, gravado por conta em `server-central` (`position` em `known_servers`, migration `0006`, `PUT /api/servers/order`); job de gravação extraído para `client/src/lib/retryingSaver.ts`. Ver `docs/architecture.md`, "Decisão: ordem dos servidores no rail"
-- [ ] Container evergreen (ver `docs/architecture.md`, "Decisão: container evergreen em `server-channel`"):
+- [x] Container evergreen (ver `docs/architecture.md`, "Decisão: container evergreen em `server-channel`"):
   - [x] Fase 0: graceful shutdown em SIGTERM, flag `--version`, tolerância a schema à frente nas migrations
   - [x] Client: reconectar o WebSocket de canal de texto e forum com backoff quando o servidor fecha (1001 na troca de versão), recarregando o histórico perdido — job em `client/src/lib/reconnectingSocket.ts` (1s dobrando até 30s com jitter, sem limite, zera ao abrir); a cada abertura recarrega histórico/threads/posts da thread aberta pela REST e mescla por id; para de tentar em 400/401/403/404 (sondados pela REST, o navegador não expõe o status do upgrade); token lido na hora de cada tentativa; "Reconectando…" na tela do canal
   - [x] Fase 1: pacote `internal/release` (índice assinado ed25519), `cmd/release-tool` e workflow `channel-v*` publicando binários + índice no release `channel-stable`
@@ -107,10 +107,11 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
   - [x] Fase 3: Dockerfile com lançador + binário semente e workflow `channel-image-v*`
   - [x] Fase 4: composes (`deploy/channel` e referência) e deploy da instância de teste por `SIGHUP`
   - [x] Fase 5: README de self-hosting e guia de atualização (`server-channel/README.md`, seções "Atualizações" e "Migrando da imagem antiga"; dono `10001` dos anexos em `docs/backup-restore.md`)
-  - [ ] Cadastrar a chave privada (par já gerado, privada guardada fora do repositório) no secret `CHANNEL_RELEASE_SIGNING_KEY` do environment `channel-release` e publicar `channel-v*` + `channel-image-v1.0.0` pela primeira vez
-  - [ ] Deixar o pacote ghcr.io/apolope/ffcom-channel público para self-hosters puxarem sem login
+  - [x] Secret `CHANNEL_RELEASE_SIGNING_KEY` no environment `channel-release` (aprovação manual) e primeira publicação: `channel-v0.7.0`, `channel-image-v1.0.0`
+  - [x] Pacote ghcr.io/apolope/ffcom-channel público (`:1`, `:1.0.0` e `:latest` baixam sem login)
   - [ ] Ligar linux/arm64 no workflow da imagem depois de conferir o buildx do runner
-  - [ ] Testar a primeira troca real na instância de teste (channel-v0.7.0 → channel-image-v1.0.0 → channel-v0.7.1 por SIGHUP)
+  - [x] Primeira troca real na instância de teste: `channel-v0.7.1` aplicada por SIGHUP, `/healthz` em 0.7.1
+  - [ ] Publicar `client-v*` com a reconexão do WebSocket (commit 775baa0 ainda não está em nenhuma tag de client)
 - [ ] Testar a permissão de convidar num browser real, depois do deploy de `channel-v*`/`client-v*`: `teste-ffcom02` sem bit não vê "Convidar"; ligar "Criar convites" na @everyone e conferir que ele gera convite, mas `GET`/`DELETE /api/invites` continuam `403` para ele; role antiga com só "Gerenciar convites" continua criando
 
 ## client
