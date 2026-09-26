@@ -1431,6 +1431,36 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** houver pedido para trocar a frase mantendo a chave (re-cifrar o backup com a frase nova, o que exige a antiga), para desbloquear com passkey (PRF) ou para verificação de chave fora de banda.
 
+## Decisão: container evergreen em `server-channel` — lançador estável, binário do serviço baixado e verificado
+
+**Contexto:** até aqui a imagem `ghcr.io/apolope/ffcom-channel` era o próprio binário: cada tag `channel-vX.Y.Z` buildava o Go dentro do Dockerfile e publicava `ffcom-channel:X.Y.Z` (ver "Decisão: versionamento e release dos binários"). Para quem autohospeda, atualizar o serviço exigia trocar a tag da imagem no compose e recriar o container, e na prática a base instalada fica para trás, o que também gera incompatibilidade de protocolo com `client` e `server-central`. O pedido do autor foi um container evergreen: a versão do container fica estável (ex. `1.0.0`) enquanto a versão do serviço sobe sozinha (`0.6.0` → `0.7.0`).
+
+**Princípio:** separar o **runtime** (container) do **payload** (binário do serviço). A versão da imagem deixa de medir "qual código roda" e passa a medir o **contrato** entre o container e o host: variáveis de ambiente, portas, volumes, healthcheck e o formato de pacote que o lançador sabe instalar. Semver do contrato: patch = rebuild da imagem base (CVE do Alpine), minor = adição compatível (env nova opcional), major = quebra (porta ou volume novo obrigatório).
+
+**Alternativas consideradas:** Watchtower ou similar atualizando a imagem (mantém versão da imagem = versão do serviço, que é justamente o que se queria desacoplar); lançador que baixa o binário sem verificação (qualquer um que comprometa o download executa código em todos os servidores de terceiros); assinatura com Sigstore/cosign keyless (mais dependências e verificação online, sem ganho real para um único publicador); ed25519 da stdlib do Go com chave pública embutida no lançador: escolhida.
+
+**Decisão:**
+1. **Lançador `ffcom-runtime`** (`server-channel/cmd/ffcom-runtime`, mesmo módulo Go) é o PID 1 do container. Resolve a versão alvo, baixa, verifica, instala, supervisiona o processo filho e troca de versão. O binário `server-channel` passa a ser o processo filho.
+2. **Distribuição do serviço por GitHub Releases** (repo público, download sem token). A tag `channel-vX.Y.Z` não gera mais imagem: gera binários `linux/amd64` e `linux/arm64` publicados no release `channel-vX.Y.Z` e atualiza um **índice assinado** no release fixo `channel-stable` (assets `index.json` e `index.json.sig`). Não se usa `releases/latest`, que num monorepo aponta para o release mais recente de qualquer componente (um `client-v*`, por exemplo).
+3. **Formato do índice** (`server-channel/internal/release`): `{"component":"server-channel","generated_at":"<RFC3339>","versions":[{"version":"0.7.0","min_runtime":"1.0.0","published_at":"<RFC3339>","artifacts":{"linux/amd64":{"url":"...","sha256":"<hex>"},"linux/arm64":{...}}}]}`. `index.json.sig` é a assinatura ed25519 destacada, em base64, sobre os bytes exatos de `index.json`. O lançador recusa índice sem assinatura válida, artefato com sha256 divergente e versão com `min_runtime` acima da própria versão (loga que precisa de imagem nova e continua na atual).
+4. **Chave de assinatura:** a privada fica num secret (`CHANNEL_RELEASE_SIGNING_KEY`) do environment `channel-release` do GitHub, com aprovação manual, nunca no repositório; a pública fica em `server-channel/cmd/ffcom-runtime/release.pub`, embutida via `go:embed`. Ferramenta de geração e assinatura: `server-channel/cmd/release-tool` (`keygen`, `sign`, `index add`).
+5. **Política de atualização** (env do container):
+   - `FFCOM_CHANNEL_VERSION`: `latest` (qualquer versão nova), `X.Y` (só patches desse minor) ou `X.Y.Z` (fixa). **Padrão: o minor do binário semente da imagem**, ou seja, auto-update de patch ligado por padrão; subir de minor enquanto o serviço estiver em 0.x exige opt-in explícito. A instância de teste usa `latest` e funciona como canário.
+   - `FFCOM_AUTO_UPDATE`: `true` (padrão) ou `false` (só loga que há versão nova).
+   - `FFCOM_UPDATE_INTERVAL`: padrão `1h`, com jitter aleatório de até 25% para os servidores não atualizarem todos no mesmo minuto. `SIGHUP` no container força a checagem na hora.
+6. **Layout em disco:** volume em `/data/runtime`, com `versions/<versão>/server-channel` e `current` (arquivo com a versão ativa). Mantém a atual e a anterior; apaga as mais velhas. A imagem traz um **binário semente** em `/opt/ffcom/seed/` (instalado no build pelo próprio `ffcom-runtime install-seed`, com a mesma verificação), para o primeiro boot funcionar sem internet ou com o GitHub fora.
+7. **Troca de versão:** baixa e verifica antes de parar o processo atual; envia SIGTERM ao filho (graceful shutdown, até 30s); sobe o novo; espera `GET /healthz` responder com a versão esperada em até 60s. Se falhar, volta para a anterior. A troca derruba os WebSockets por alguns segundos (o client reconecta em `useChannelChat`/`useForumChannel`); a voz vai direto ao LiveKit e não cai.
+8. **Pré-requisitos no `server-channel`:** graceful shutdown em SIGTERM; flag `--version`; **tolerância a schema à frente** (se o banco está numa versão de migration que o binário não conhece, loga e segue sem rodar `Up`, em vez de falhar), para o rollback funcionar depois de uma migration; e disciplina **expand/contract** nas migrations: uma migration nunca quebra o binário da versão anterior.
+9. **Imagem:** tag nova `channel-image-vX.Y.Z` builda `ffcom-channel:X.Y.Z` e `ffcom-channel:X`. As tags antigas `ffcom-channel:0.1.0`…`0.6.0` (imagem = binário) ficam como legado; a partir daqui as tags da imagem são versões do contrato.
+10. **Deploy da instância de teste:** publicar a tag `channel-vX.Y.Z` gera o release e, no fim do mesmo workflow, envia `SIGHUP` para `ffcom-channel-app` e espera o `/healthz` com a versão nova. `docker compose up` só roda quando a imagem mudar (`channel-image-v*`).
+
+**Riscos aceitos:**
+- Quem tiver a chave privada executa código em todo `server-channel` que usa auto-update. Mitigado pelo environment com aprovação manual, pelo opt-out (`FFCOM_AUTO_UPDATE=false`) e pela versão fixável.
+- `docker ps` não mostra mais a versão do serviço; ela fica no `/healthz` e nos logs do lançador a cada troca.
+- A imagem ainda precisa de rebuild periódico por CVE da base, mas isso vira patch do contrato, sem relação com o ritmo do serviço.
+
+**Revisitar quando:** o serviço chegar a 1.0 (rever o padrão de auto-update entre minors), houver pedido de janela de manutenção para a troca, ou `server-central` quiser o mesmo modelo.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.
