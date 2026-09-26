@@ -15,7 +15,8 @@ import (
 // NewRouter monta o mux com todas as rotas. O realtime.Hub de canais de
 // texto vive pelo tempo de vida do processo, compartilhado entre a rota de
 // WebSocket e (futuramente) qualquer outro ponto que precise fazer
-// broadcast para clients conectados.
+// broadcast para clients conectados. Vem de fora (main.go) para o graceful
+// shutdown poder chamar hub.Close e derrubar os WebSockets abertos.
 //
 // authenticated exige só um Bearer token válido (auth.VerifyToken);
 // protected empilha auth.RequireMember em cima, exigindo que o "sub" já
@@ -40,9 +41,8 @@ import (
 //
 // liveKitAPIURL é onde server-channel consulta a RoomService do LiveKit
 // (quem está em cada sala de voz, ver voice_participants.go).
-func NewRouter(verifier *auth.Verifier, db *store.Store, attachmentFiles *storage.FileStore, attachmentMaxBytes int64, allowedOrigins []string, liveKitAPIKey, liveKitAPISecret, liveKitPublicURL, liveKitAPIURL, version string, requireTLS bool, restRateLimitRPM, restRateLimitBurst, wsRateLimitRPM, wsRateLimitBurst int) http.Handler {
+func NewRouter(hub *realtime.Hub, verifier *auth.Verifier, db *store.Store, attachmentFiles *storage.FileStore, attachmentMaxBytes int64, allowedOrigins []string, liveKitAPIKey, liveKitAPISecret, liveKitPublicURL, liveKitAPIURL, version string, requireTLS bool, restRateLimitRPM, restRateLimitBurst, wsRateLimitRPM, wsRateLimitBurst int) http.Handler {
 	mux := http.NewServeMux()
-	hub := realtime.NewHub()
 
 	allowed := make(map[string]bool, len(allowedOrigins))
 	for _, origin := range allowedOrigins {

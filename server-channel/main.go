@@ -2,15 +2,21 @@ package main
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
 	"a3sitsolutions.com/ffcom/server-channel/internal/httpapi"
 	"a3sitsolutions.com/ffcom/server-channel/internal/livekit"
+	"a3sitsolutions.com/ffcom/server-channel/internal/realtime"
 	"a3sitsolutions.com/ffcom/server-channel/internal/storage"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
 )
@@ -20,7 +26,23 @@ import (
 // dos binários"). "dev" fora de um build versionado (ex. go run local).
 var version = "dev"
 
+// shutdownTimeout é quanto o graceful shutdown espera as requisições REST
+// em andamento terminarem. Fica abaixo dos 30s que o lançador ffcom-runtime
+// espera depois do SIGTERM antes de matar o processo (ver
+// docs/architecture.md, "Decisão: container evergreen em server-channel").
+const shutdownTimeout = 25 * time.Second
+
 func main() {
+	// --version imprime só a versão e sai, sem exigir nenhuma variável de
+	// ambiente: o lançador usa para conferir o binário baixado antes de
+	// trocar de versão.
+	showVersion := flag.Bool("version", false, "imprime a versão e sai")
+	flag.Parse()
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
+
 	databaseURL := requireEnv("DATABASE_URL")
 	issuerURL := requireEnv("OIDC_ISSUER_URL")
 	liveKitAPIKey := requireEnv("LIVEKIT_API_KEY")
@@ -69,7 +91,9 @@ func main() {
 		log.Fatalf("server-channel: %v", err)
 	}
 
+	hub := realtime.NewHub()
 	router := httpapi.NewRouter(
+		hub,
 		verifier,
 		db,
 		attachmentFiles,
@@ -87,10 +111,37 @@ func main() {
 		envInt("RATE_LIMIT_WS_BURST", 10),
 	)
 
-	log.Printf("server-channel: versão %s, ouvindo em :%s (OIDC issuer: %s)", version, port, issuerURL)
-	if err := http.ListenAndServe(":"+port, router); err != nil {
+	srv := &http.Server{Addr: ":" + port, Handler: router}
+	// Shutdown não acompanha conexões sequestradas pelo upgrade do
+	// WebSocket; hub.Close manda close frame para cada uma.
+	srv.RegisterOnShutdown(hub.Close)
+
+	// Graceful shutdown em SIGTERM (lançador trocando de versão, docker
+	// stop) e SIGINT (Ctrl+C no go run local).
+	sigCtx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	serveErr := make(chan error, 1)
+	go func() {
+		log.Printf("server-channel: versão %s, ouvindo em :%s (OIDC issuer: %s)", version, port, issuerURL)
+		serveErr <- srv.ListenAndServe()
+	}()
+
+	select {
+	case err := <-serveErr:
 		log.Fatalf("server-channel: %v", err)
+	case <-sigCtx.Done():
 	}
+	stop()
+
+	log.Printf("server-channel: sinal recebido, encerrando (até %s)", shutdownTimeout)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("server-channel: shutdown incompleto: %v", err)
+	}
+	// db.Close (defer acima) fecha o pool do pgx depois do return.
+	log.Printf("server-channel: encerrado")
 }
 
 func requireEnv(name string) string {

@@ -10,6 +10,7 @@ import "sync"
 type Hub struct {
 	mu       sync.Mutex
 	channels map[string]map[*Client]struct{}
+	closed   bool
 }
 
 // NewHub cria um Hub vazio.
@@ -18,11 +19,17 @@ func NewHub() *Hub {
 }
 
 // Register associa client ao canal channelID, passando a receber o
-// broadcast de mensagens desse canal.
+// broadcast de mensagens desse canal. Depois de Close, o client é
+// encerrado na hora em vez de registrado (conexão que terminou o upgrade
+// durante o graceful shutdown).
 func (h *Hub) Register(channelID string, client *Client) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	if h.closed {
+		client.closeSend()
+		return
+	}
 	clients, ok := h.channels[channelID]
 	if !ok {
 		clients = make(map[*Client]struct{})
@@ -55,11 +62,27 @@ func (h *Hub) Broadcast(channelID string, payload []byte) {
 	defer h.mu.Unlock()
 
 	for client := range h.channels[channelID] {
-		select {
-		case client.send <- payload:
-		default:
-			close(client.send)
+		if !client.trySend(payload) {
+			client.closeSend()
 			delete(h.channels[channelID], client)
 		}
+	}
+}
+
+// Close encerra todas as conexões registradas no graceful shutdown (ver
+// main.go): fecha a fila de saída de cada client, o que faz o WritePump
+// mandar um close frame e fechar o conn, e o ReadPump do handler retorna
+// em seguida. Necessário porque http.Server.Shutdown não acompanha
+// conexões sequestradas pelo upgrade do WebSocket.
+func (h *Hub) Close() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	h.closed = true
+	for channelID, clients := range h.channels {
+		for client := range clients {
+			client.closeSend()
+		}
+		delete(h.channels, channelID)
 	}
 }
