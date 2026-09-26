@@ -24,6 +24,7 @@ import { useIdle } from './hooks/useIdle'
 import { useKnownServers } from './hooks/useKnownServers'
 import { useFriends, type FriendEvent } from './hooks/useFriends'
 import { useE2EKeys } from './hooks/useE2EKeys'
+import { E2EKeyPanel } from './components/E2EKeyPanel'
 import { useMe } from './hooks/useMe'
 import { useMyProfile } from './hooks/useMyProfile'
 import { useServerMembers } from './hooks/useServerMembers'
@@ -94,7 +95,8 @@ function App() {
     removeRequest: removeFriendRequest,
     socket: presenceSocket,
   } = useFriends(accessToken ?? '', onFriendEvent)
-  const { keyPair: myE2EKeyPair } = useE2EKeys(accessToken ?? '', accountSub)
+  const e2eKeys = useE2EKeys(accessToken ?? '', accountSub)
+  const myE2EKeyPair = e2eKeys.keyPair
   const [selectedServerId, setSelectedServerId] = useState<string>()
   const [showFriends, setShowFriends] = useState(false)
   const [showAddServer, setShowAddServer] = useState(false)
@@ -400,11 +402,9 @@ function App() {
                   )
                 }}
               />
-              {selectedFriend && !myE2EKeyPair ? (
-                <div className="empty-state">
-                  <p>Preparando a chave de criptografia deste dispositivo…</p>
-                </div>
-              ) : selectedFriend && myE2EKeyPair ? (
+              {!myE2EKeyPair ? (
+                <E2EKeyPanel e2e={e2eKeys} />
+              ) : selectedFriend ? (
                 <DirectMessageView
                   key={selectedFriend.accountId}
                   peer={selectedFriend}

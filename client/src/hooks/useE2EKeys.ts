@@ -1,91 +1,208 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   adoptLegacyKeyPair,
-  createKeyPair,
+  generateKeyPair,
+  keyPairFromSecretKey,
   legacyPublicKeyBase64,
   loadKeyPair,
   publicKeyToBase64,
+  storeKeyPair,
   type E2EKeyPair,
 } from '../crypto/e2e'
-import { fetchMyProfile, setMyE2EPublicKey } from '../lib/serverCentralApi'
+import { decryptKeyBackup, encryptKeyBackup } from '../crypto/keyBackup'
+import {
+  E2EKeyBackupConflictError,
+  fetchMyE2EKeyBackup,
+  fetchMyProfile,
+  setMyE2EKeyBackup,
+  type MyProfile,
+} from '../lib/serverCentralApi'
 
-// Flag em localStorage para não republicar a mesma chave a cada carregamento
-// do app -- só falha silenciosamente se a publicação anterior não tiver ido
-// pra frente (ex.: primeira vez offline); tenta de novo no próximo load. Por
-// conta, como o par de chaves (ver crypto/e2e.ts): uma flag compartilhada
-// fazia a segunda conta do navegador nunca publicar a própria chave.
-function publishedFlagKey(accountSub: string): string {
-  return `ffcom.e2e.publishedKey.v2:${accountSub}` // gitleaks:allow (nome de chave de localStorage, não segredo)
+// Estado da chave de E2E desta conta neste dispositivo:
+// - needs-setup: a conta ainda não tem frase de recuperação; criar uma
+//   publica a chave e sobe o backup (primeiro dispositivo, ou conta vinda de
+//   antes do backup).
+// - needs-unlock: a conta já tem backup, mas este dispositivo não tem a chave
+//   (dispositivo novo, localStorage limpo, ou a chave foi trocada em outro
+//   dispositivo por "esqueci a frase").
+export type E2EKeyStatus = 'loading' | 'needs-setup' | 'needs-unlock' | 'ready' | 'error'
+
+export interface E2EKeysResult {
+  status: E2EKeyStatus
+  keyPair: E2EKeyPair | null
+  error: string | undefined
+  // Em needs-setup: a chave publicada hoje é de outro dispositivo, que tem o
+  // histórico. Criar a frase aqui troca a chave e deixa esse histórico
+  // ilegível; o certo é criar a frase lá.
+  publishedElsewhere: boolean
+  setupPassphrase: (passphrase: string) => Promise<void>
+  unlock: (passphrase: string) => Promise<void>
+  resetWithNewPassphrase: (passphrase: string) => Promise<void>
+  retry: () => void
 }
 
-const LEGACY_PUBLISHED_FLAG_KEY = 'ffcom.e2e.publishedKey.v1' // gitleaks:allow (nome de chave de localStorage, não segredo)
+interface State {
+  accountSub: string
+  status: E2EKeyStatus
+  keyPair: E2EKeyPair | null
+  error?: string
+  publishedElsewhere: boolean
+}
 
-// resolveKeyPair devolve o par desta conta neste dispositivo, criando um se
-// preciso. Se o navegador ainda tiver o par de antes da chave por conta, ele
-// só é adotado quando a chave pública bate com a que a conta já publicou em
-// server-central; se não bater, fica onde está para a conta dona dele e esta
-// conta ganha um par novo.
-async function resolveKeyPair(accessToken: string, accountSub: string, isCancelled: () => boolean): Promise<E2EKeyPair | null> {
+// localKeyPair devolve o par desta conta guardado neste dispositivo. Se o
+// navegador ainda tiver o par de antes da chave por conta, ele só é adotado
+// quando a chave pública bate com a que a conta publicou (ver
+// docs/architecture.md, "Decisão: chave de E2E e cursores de não lida por
+// conta"); senão fica onde está para a conta dona dele.
+function localKeyPair(accountSub: string, profile: MyProfile): E2EKeyPair | null {
   const existing = loadKeyPair(accountSub)
   if (existing) return existing
-
   const legacyPub = legacyPublicKeyBase64()
-  if (legacyPub) {
-    const profile = await fetchMyProfile(accessToken)
-    // undefined (não null) = server-central anterior ao campo: sem como
-    // conferir de quem é o par antigo, então não decide nada agora e tenta de
-    // novo na próxima renovação de token / carregamento.
-    if (profile.e2ePublicKey === undefined) {
-      throw new Error('server-central não devolve e2ePublicKey em GET /api/me; migração da chave antiga adiada')
-    }
-    if (isCancelled()) return null
-    if (profile.e2ePublicKey === legacyPub) {
-      const adopted = adoptLegacyKeyPair(accountSub)
-      if (adopted) {
-        localStorage.setItem(publishedFlagKey(accountSub), legacyPub)
-        localStorage.removeItem(LEGACY_PUBLISHED_FLAG_KEY)
-        return adopted
-      }
-    }
-  }
-
-  return loadKeyPair(accountSub) ?? createKeyPair(accountSub)
+  if (legacyPub && profile.e2ePublicKey === legacyPub) return adoptLegacyKeyPair(accountSub)
+  return null
 }
 
-// Garante que esta conta tenha um par de chaves de E2E neste dispositivo
-// (ver crypto/e2e.ts) e que a chave pública esteja publicada em
-// server-central assim que houver accessToken -- ver docs/architecture.md,
-// "Decisão: criptografia ponta-a-ponta em DMs". Instanciado uma vez em
-// App.tsx, não adiado até abrir uma DM, para que a chave já esteja disponível
-// quando um amigo for conversar. keyPair fica null até resolver.
-export function useE2EKeys(accessToken: string, accountSub: string): { keyPair: E2EKeyPair | null } {
-  const [state, setState] = useState<{ accountSub: string; keyPair: E2EKeyPair }>()
+// resolveState decide o estado a partir do que server-central diz da conta
+// e do que este dispositivo tem guardado.
+function resolveState(accountSub: string, profile: MyProfile): State {
+  if (profile.hasE2EKeyBackup === undefined) {
+    throw new Error('server-central desatualizado: não informa o backup da chave de E2E')
+  }
+  const local = localKeyPair(accountSub, profile)
+  const localMatches = !!local && publicKeyToBase64(local) === profile.e2ePublicKey
+  if (profile.hasE2EKeyBackup) {
+    return localMatches
+      ? { accountSub, status: 'ready', keyPair: local, publishedElsewhere: false }
+      : { accountSub, status: 'needs-unlock', keyPair: null, publishedElsewhere: false }
+  }
+  return {
+    accountSub,
+    status: 'needs-setup',
+    keyPair: null,
+    publishedElsewhere: !!profile.e2ePublicKey && !localMatches,
+  }
+}
+
+// Chave de E2E da conta (ver crypto/e2e.ts e crypto/keyBackup.ts, e
+// docs/architecture.md, "Decisão: backup da chave de E2E com frase de
+// recuperação"). Instanciado uma vez em App.tsx. Resolve de novo a cada
+// renovação de token, para um dispositivo aberto perceber quando a chave da
+// conta foi trocada em outro ("esqueci a frase") e parar de cifrar com a
+// antiga.
+export function useE2EKeys(accessToken: string, accountSub: string): E2EKeysResult {
+  const [state, setState] = useState<State>()
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     if (!accessToken || !accountSub) return
 
     let cancelled = false
-    async function run() {
-      const keyPair = await resolveKeyPair(accessToken, accountSub, () => cancelled)
-      if (cancelled || !keyPair) return
-      // Mantém a identidade do par entre renovações de token: DMs decifram
-      // de novo sempre que keyPair muda (useDirectMessages.ts).
-      setState((prev) => (prev?.accountSub === accountSub ? prev : { accountSub, keyPair }))
-
-      const publicKeyB64 = publicKeyToBase64(keyPair)
-      if (localStorage.getItem(publishedFlagKey(accountSub)) === publicKeyB64) return
-      await setMyE2EPublicKey(accessToken, publicKeyB64)
-      if (!cancelled) localStorage.setItem(publishedFlagKey(accountSub), publicKeyB64)
-    }
-
-    run().catch((err) => {
-      console.error('ffcom: falha ao preparar/publicar chave de E2E', err)
-    })
+    fetchMyProfile(accessToken)
+      .then((profile) => {
+        if (cancelled) return
+        const next = resolveState(accountSub, profile)
+        // Mantém a identidade do par entre renovações de token: DMs decifram
+        // de novo sempre que keyPair muda (useDirectMessages.ts).
+        setState((prev) =>
+          prev?.accountSub === accountSub &&
+          prev.status === 'ready' &&
+          next.status === 'ready' &&
+          prev.keyPair &&
+          next.keyPair &&
+          publicKeyToBase64(prev.keyPair) === publicKeyToBase64(next.keyPair)
+            ? prev
+            : next,
+        )
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        console.error('ffcom: falha ao preparar chave de E2E', err)
+        setState((prev) =>
+          // Falha de rede numa renovação não derruba uma chave já pronta.
+          prev?.accountSub === accountSub && prev.status === 'ready'
+            ? prev
+            : {
+                accountSub,
+                status: 'error',
+                keyPair: null,
+                error: err instanceof Error ? err.message : 'falha ao preparar a chave de criptografia',
+                publishedElsewhere: false,
+              },
+        )
+      })
 
     return () => {
       cancelled = true
     }
-  }, [accessToken, accountSub])
+  }, [accessToken, accountSub, attempt])
 
-  return { keyPair: state?.accountSub === accountSub ? state.keyPair : null }
+  // publishNewBackup cifra o par com a frase, grava em server-central e só
+  // então guarda neste dispositivo, para nunca existir aqui uma chave que a
+  // conta não publicou.
+  const publishNewBackup = useCallback(
+    async (keyPair: E2EKeyPair, passphrase: string, replace: boolean) => {
+      const backup = await encryptKeyBackup(keyPair.secretKey, passphrase)
+      await setMyE2EKeyBackup(accessToken, { publicKey: publicKeyToBase64(keyPair), backup }, replace)
+      storeKeyPair(accountSub, keyPair)
+      setState({ accountSub, status: 'ready', keyPair, publishedElsewhere: false })
+    },
+    [accessToken, accountSub],
+  )
+
+  const setupPassphrase = useCallback(
+    async (passphrase: string) => {
+      const profile = await fetchMyProfile(accessToken)
+      const local = localKeyPair(accountSub, profile)
+      // Reaproveita o par deste dispositivo quando é o publicado, para o
+      // histórico de DM continuar legível; senão começa um par novo.
+      const keyPair = local && publicKeyToBase64(local) === profile.e2ePublicKey ? local : generateKeyPair()
+      try {
+        await publishNewBackup(keyPair, passphrase, false)
+      } catch (err) {
+        if (err instanceof E2EKeyBackupConflictError) {
+          // Outro dispositivo criou a frase enquanto esta tela estava aberta.
+          setState({ accountSub, status: 'needs-unlock', keyPair: null, publishedElsewhere: false })
+          throw new Error('Esta conta já tem uma frase de recuperação, criada em outro dispositivo. Digite-a para continuar.')
+        }
+        throw err
+      }
+    },
+    [accessToken, accountSub, publishNewBackup],
+  )
+
+  const unlock = useCallback(
+    async (passphrase: string) => {
+      const { publicKey, backup } = await fetchMyE2EKeyBackup(accessToken)
+      const secretKey = await decryptKeyBackup(backup, passphrase)
+      if (!secretKey) throw new Error('Frase de recuperação incorreta.')
+      const keyPair = keyPairFromSecretKey(secretKey)
+      // A chave decifrada tem que ser a que a conta publicou; se não for, o
+      // backup e a chave pública estão dessincronizados no servidor.
+      if (publicKeyToBase64(keyPair) !== publicKey) {
+        throw new Error('O backup não corresponde à chave publicada da conta.')
+      }
+      storeKeyPair(accountSub, keyPair)
+      setState({ accountSub, status: 'ready', keyPair, publishedElsewhere: false })
+    },
+    [accessToken, accountSub],
+  )
+
+  const resetWithNewPassphrase = useCallback(
+    (passphrase: string) => publishNewBackup(generateKeyPair(), passphrase, true),
+    [publishNewBackup],
+  )
+
+  const retry = useCallback(() => setAttempt((n) => n + 1), [])
+
+  const current = state?.accountSub === accountSub ? state : undefined
+  return {
+    status: current?.status ?? 'loading',
+    keyPair: current?.keyPair ?? null,
+    error: current?.error,
+    publishedElsewhere: current?.publishedElsewhere ?? false,
+    setupPassphrase,
+    unlock,
+    resetWithNewPassphrase,
+    retry,
+  }
 }

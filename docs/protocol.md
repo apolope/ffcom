@@ -38,8 +38,10 @@ Base URL: `VITE_SERVER_CENTRAL_URL` no client (`http://localhost:8081` em dev).
 | Método | Rota | Auth | Request | Response | Erros |
 |---|---|---|---|---|---|
 | GET | `/healthz` | não | — | `{status, version}` | — |
-| GET | `/api/me` | Bearer | — | `{accountId, oidcSubject, createdAt, e2ePublicKey, displayName?, avatarUrl?}` — `e2ePublicKey` é base64 ou `null` (nunca omitido) | — |
-| PUT | `/api/me/e2e-public-key` | Bearer | `{publicKey}` (base64, 32 bytes) | `204` | `400` tamanho inválido |
+| GET | `/api/me` | Bearer | — | `{accountId, oidcSubject, createdAt, e2ePublicKey, hasE2EKeyBackup, displayName?, avatarUrl?}` — `e2ePublicKey` é base64 ou `null` (nunca omitido) | — |
+| PUT | `/api/me/e2e-public-key` | Bearer | `{publicKey}` (base64, 32 bytes) | `204` | `400` tamanho inválido; `409` se a conta já tem backup da chave (rota de clients antigos) |
+| GET | `/api/me/e2e-key-backup` | Bearer | — | `{publicKey, backup}` (base64) — backup cifrado com a frase de recuperação, opaco para o servidor | `404` sem backup |
+| PUT | `/api/me/e2e-key-backup` | Bearer | `{publicKey, backup, replace}` — `publicKey` 32 bytes, `backup` até 1024 bytes (base64) | `204` | `400` tamanho inválido; `409` se já houver backup e `replace` for falso |
 | GET | `/api/servers` | Bearer | — | `{servers: [{id, address, name, iconUrl?, position, addedAt}]}`, na ordem do rail (`position`) | — |
 | POST | `/api/servers` | Bearer | `{address, name, iconUrl?}` | `201` + `KnownServer`; servidor novo entra no topo do rail, readicionar mantém a posição | `400` address/name vazios |
 | PUT | `/api/servers/order` | Bearer | `{ids: [string]}` — todos os servidores da conta, na ordem nova | `204` | `409` se `ids` não for exatamente a lista da conta |

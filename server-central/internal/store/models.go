@@ -9,6 +9,9 @@ type Account struct {
 	OIDCSubject  string
 	CreatedAt    time.Time
 	E2EPublicKey []byte
+	// Se a conta já guardou o backup cifrado da chave privada (a partir daí
+	// a chave é da conta, não de um dispositivo; ver SetE2EKeyWithBackup).
+	HasE2EKeyBackup bool
 	// Status escolhido pela pessoa (PresenceStatus*), não o que os amigos
 	// veem: esse depende também das conexões abertas (ver realtime.Hub).
 	PresenceStatus string

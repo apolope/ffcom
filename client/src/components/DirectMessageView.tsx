@@ -69,7 +69,7 @@ export function DirectMessageView({ peer, accessToken, socket, myKeyPair }: Dire
           {error && <div className="message-error">{error}</div>}
           {!peer.e2ePublicKey && (
             <p className="placeholder">
-              {peer.displayName} ainda não habilitou criptografia neste dispositivo — não é possível
+              {peer.displayName} ainda não criou a frase de recuperação da criptografia. Não é possível
               enviar mensagens até isso acontecer.
             </p>
           )}

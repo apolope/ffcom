@@ -31,10 +31,10 @@ func (s *AccountStore) GetOrCreateBySubject(ctx context.Context, oidcSubject str
 		VALUES ($1, $2)
 		ON CONFLICT (oidc_subject) DO UPDATE
 		SET profile_name = COALESCE(EXCLUDED.profile_name, accounts.profile_name)
-		RETURNING id, oidc_subject, created_at, e2e_public_key, presence_status
+		RETURNING id, oidc_subject, created_at, e2e_public_key, e2e_key_backup IS NOT NULL, presence_status
 	`
 	var a Account
-	err := s.pool.QueryRow(ctx, query, oidcSubject, profileName).Scan(&a.ID, &a.OIDCSubject, &a.CreatedAt, &a.E2EPublicKey, &a.PresenceStatus)
+	err := s.pool.QueryRow(ctx, query, oidcSubject, profileName).Scan(&a.ID, &a.OIDCSubject, &a.CreatedAt, &a.E2EPublicKey, &a.HasE2EKeyBackup, &a.PresenceStatus)
 	if err != nil {
 		return Account{}, fmt.Errorf("accounts: get or create por subject: %w", err)
 	}
@@ -42,9 +42,9 @@ func (s *AccountStore) GetOrCreateBySubject(ctx context.Context, oidcSubject str
 }
 
 func (s *AccountStore) GetByID(ctx context.Context, id string) (Account, error) {
-	const query = `SELECT id, oidc_subject, created_at, e2e_public_key, presence_status FROM accounts WHERE id = $1`
+	const query = `SELECT id, oidc_subject, created_at, e2e_public_key, e2e_key_backup IS NOT NULL, presence_status FROM accounts WHERE id = $1`
 	var a Account
-	err := s.pool.QueryRow(ctx, query, id).Scan(&a.ID, &a.OIDCSubject, &a.CreatedAt, &a.E2EPublicKey, &a.PresenceStatus)
+	err := s.pool.QueryRow(ctx, query, id).Scan(&a.ID, &a.OIDCSubject, &a.CreatedAt, &a.E2EPublicKey, &a.HasE2EKeyBackup, &a.PresenceStatus)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Account{}, ErrNotFound
 	}
@@ -64,7 +64,7 @@ func (s *AccountStore) GetManyByIDs(ctx context.Context, ids []string) (map[stri
 		return out, nil
 	}
 
-	const query = `SELECT id, oidc_subject, created_at, e2e_public_key, presence_status FROM accounts WHERE id = ANY($1)`
+	const query = `SELECT id, oidc_subject, created_at, e2e_public_key, e2e_key_backup IS NOT NULL, presence_status FROM accounts WHERE id = ANY($1)`
 	rows, err := s.pool.Query(ctx, query, ids)
 	if err != nil {
 		return nil, fmt.Errorf("accounts: get many por id: %w", err)
@@ -73,7 +73,7 @@ func (s *AccountStore) GetManyByIDs(ctx context.Context, ids []string) (map[stri
 
 	for rows.Next() {
 		var a Account
-		if err := rows.Scan(&a.ID, &a.OIDCSubject, &a.CreatedAt, &a.E2EPublicKey, &a.PresenceStatus); err != nil {
+		if err := rows.Scan(&a.ID, &a.OIDCSubject, &a.CreatedAt, &a.E2EPublicKey, &a.HasE2EKeyBackup, &a.PresenceStatus); err != nil {
 			return nil, fmt.Errorf("accounts: scan: %w", err)
 		}
 		out[a.ID] = a
@@ -86,18 +86,55 @@ func (s *AccountStore) GetManyByIDs(ctx context.Context, ids []string) (map[stri
 
 // SetE2EPublicKey grava a chave pública X25519 (32 bytes) do dispositivo que
 // está publicando -- ver docs/architecture.md, "Decisão: criptografia
-// ponta-a-ponta em DMs". Sobrescreve qualquer chave anterior da conta (só um
-// dispositivo "ativo" por vez nesta v1, sem sincronização multi-dispositivo).
+// ponta-a-ponta em DMs". Caminho de clients anteriores ao backup com frase de
+// recuperação: se a conta já tiver backup, a chave é da conta e não pode ser
+// trocada por um dispositivo avulso, então devolve ErrConflict.
 func (s *AccountStore) SetE2EPublicKey(ctx context.Context, accountID string, key []byte) error {
-	const query = `UPDATE accounts SET e2e_public_key = $2 WHERE id = $1`
+	const query = `UPDATE accounts SET e2e_public_key = $2 WHERE id = $1 AND e2e_key_backup IS NULL`
 	tag, err := s.pool.Exec(ctx, query, accountID, key)
 	if err != nil {
 		return fmt.Errorf("accounts: set e2e public key: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return ErrNotFound
+		return ErrConflict
 	}
 	return nil
+}
+
+// SetE2EKeyWithBackup grava juntas a chave pública e o backup cifrado da
+// chave privada correspondente, para que as duas nunca fiquem dessincronizadas
+// -- ver docs/architecture.md, "Decisão: backup da chave de E2E com frase de
+// recuperação". Sem replace, só grava se a conta ainda não tiver backup
+// (ErrConflict se já tiver: outro dispositivo chegou antes e este precisa
+// desbloquear o backup existente em vez de criar outro). Com replace, troca a
+// chave da conta ("esqueci a frase"), deixando ilegível o histórico anterior.
+func (s *AccountStore) SetE2EKeyWithBackup(ctx context.Context, accountID string, publicKey, backup []byte, replace bool) error {
+	const query = `
+		UPDATE accounts SET e2e_public_key = $2, e2e_key_backup = $3
+		WHERE id = $1 AND ($4 OR e2e_key_backup IS NULL)
+	`
+	tag, err := s.pool.Exec(ctx, query, accountID, publicKey, backup, replace)
+	if err != nil {
+		return fmt.Errorf("accounts: set e2e key com backup: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrConflict
+	}
+	return nil
+}
+
+// GetE2EKeyBackup devolve a chave pública e o backup cifrado da conta, ou
+// ErrNotFound se ela ainda não tiver backup.
+func (s *AccountStore) GetE2EKeyBackup(ctx context.Context, accountID string) (publicKey, backup []byte, err error) {
+	const query = `SELECT e2e_public_key, e2e_key_backup FROM accounts WHERE id = $1 AND e2e_key_backup IS NOT NULL`
+	err = s.pool.QueryRow(ctx, query, accountID).Scan(&publicKey, &backup)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, nil, fmt.Errorf("accounts: get e2e key backup: %w", err)
+	}
+	return publicKey, backup, nil
 }
 
 // SetPresenceStatus grava o status escolhido pela pessoa (um dos

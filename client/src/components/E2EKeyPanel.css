@@ -1,0 +1,11 @@
+.e2e-key-card {
+  width: 420px;
+  max-width: calc(100% - 32px);
+}
+
+.e2e-key-card > p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text);
+}

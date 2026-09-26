@@ -34,6 +34,8 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, avatarFiles *storage.Av
 	protected := auth.Middleware(verifier, db.Accounts)
 	mux.Handle("GET /api/me", protected(handleMe(db)))
 	mux.Handle("PUT /api/me/e2e-public-key", protected(handleSetE2EPublicKey(db.Accounts)))
+	mux.Handle("GET /api/me/e2e-key-backup", protected(handleGetE2EKeyBackup(db.Accounts)))
+	mux.Handle("PUT /api/me/e2e-key-backup", protected(handleSetE2EKeyBackup(db.Accounts)))
 	mux.Handle("PUT /api/me/status", protected(handleSetPresenceStatus(hub, db.Accounts, db.Friendships)))
 	mux.Handle("POST /api/accounts/lookup", protected(handleLookupAccounts(db.Accounts)))
 	mux.Handle("POST /api/me/avatar", protected(handleUploadAvatar(db.Profiles, avatarFiles, avatarMaxBytes)))

@@ -2,10 +2,11 @@ import nacl from 'tweetnacl'
 
 // Criptografia ponta-a-ponta de DMs (NaCl box, X25519-XSalsa20-Poly1305) --
 // ver docs/architecture.md, "Decisão: criptografia ponta-a-ponta em DMs".
-// Cada dispositivo (perfil de navegador / instalação do Electron) tem seu
-// próprio par de chaves por conta, gerado uma vez e guardado em localStorage
-// (mesmo padrão já usado por oidc-client-ts em auth/userManager.ts) -- não há
-// sincronização entre dispositivos nesta v1.
+// O par de chaves é da conta, não do dispositivo: é gerado no primeiro
+// dispositivo e levado aos outros pelo backup cifrado com a frase de
+// recuperação (crypto/keyBackup.ts, hooks/useE2EKeys.ts). Em cada dispositivo
+// já desbloqueado ele fica em localStorage (mesmo padrão já usado por
+// oidc-client-ts em auth/userManager.ts).
 //
 // A chave de localStorage leva o `sub` do OIDC: duas contas que logam no
 // mesmo navegador têm pares separados, e sair não apaga nada (o histórico de
@@ -57,7 +58,7 @@ function parseStoredKeyPair(raw: string | null): E2EKeyPair | null {
   }
 }
 
-function storeKeyPair(accountSub: string, keyPair: E2EKeyPair): void {
+export function storeKeyPair(accountSub: string, keyPair: E2EKeyPair): void {
   const stored: StoredKeyPair = {
     publicKey: bytesToBase64(keyPair.publicKey),
     secretKey: bytesToBase64(keyPair.secretKey),
@@ -71,10 +72,16 @@ export function loadKeyPair(accountSub: string): E2EKeyPair | null {
   return parseStoredKeyPair(localStorage.getItem(storageKey(accountSub)))
 }
 
-export function createKeyPair(accountSub: string): E2EKeyPair {
-  const keyPair = nacl.box.keyPair()
-  storeKeyPair(accountSub, keyPair)
-  return keyPair
+// generateKeyPair cria um par novo sem guardar: só vira o par da conta
+// neste dispositivo depois que o backup dele for aceito por server-central.
+export function generateKeyPair(): E2EKeyPair {
+  return nacl.box.keyPair()
+}
+
+// keyPairFromSecretKey reconstrói o par a partir da chave privada (a única
+// parte guardada no backup).
+export function keyPairFromSecretKey(secretKey: Uint8Array): E2EKeyPair {
+  return nacl.box.keyPair.fromSecretKey(secretKey)
 }
 
 // legacyPublicKeyBase64 devolve a chave pública do par antigo (sem conta),

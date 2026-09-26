@@ -43,11 +43,12 @@ func buildMeResponse(ctx context.Context, profiles *store.ProfileStore, account 
 	}
 
 	resp := meResponse{
-		AccountID:    account.ID,
-		OIDCSubject:  account.OIDCSubject,
-		CreatedAt:    account.CreatedAt,
-		E2EPublicKey: account.E2EPublicKey,
-		Status:       account.PresenceStatus,
+		AccountID:       account.ID,
+		OIDCSubject:     account.OIDCSubject,
+		CreatedAt:       account.CreatedAt,
+		E2EPublicKey:    account.E2EPublicKey,
+		HasE2EKeyBackup: account.HasE2EKeyBackup,
+		Status:          account.PresenceStatus,
 	}
 	if err == nil {
 		resp.DisplayName = &profile.DisplayName
@@ -66,6 +67,10 @@ type meResponse struct {
 	// por conta, quando consegue comparar com esta (ver
 	// client/src/hooks/useE2EKeys.ts).
 	E2EPublicKey []byte `json:"e2ePublicKey"`
+	// Se a conta já tem o backup cifrado da chave privada (GET
+	// /api/me/e2e-key-backup): o client decide entre criar a frase de
+	// recuperação ou pedir a existente sem baixar o backup à toa.
+	HasE2EKeyBackup bool `json:"hasE2EKeyBackup"`
 	// Status escolhido (online, busy, away ou invisible), não o visível.
 	Status      string  `json:"status"`
 	DisplayName *string `json:"displayName,omitempty"`

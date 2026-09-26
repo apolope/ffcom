@@ -133,6 +133,7 @@ Outros pontos de referência no mesmo espaço: [Spacebar](https://github.com/spa
 - **Não protege contra um operador do `server-central` ativamente malicioso** substituindo a chave pública de alguém no diretório — não há verificação fora de banda ("números de segurança" tipo Signal) nesta v1. Protege contra acesso passivo aos dados em repouso (breach, dump, intimação), não contra um MITM ativo de quem opera a instância.
 - **Sem forward secrecy / post-compromise security:** par de chaves estático por dispositivo, não um ratchet — se o dispositivo for comprometido depois, dá pra decifrar histórico antigo guardado ali.
 - **Sem sincronização entre dispositivos:** trocar de navegador/reinstalar o Electron gera um par de chaves novo, perdendo acesso ao histórico antigo (mensagens antigas mostram "não foi possível decifrar neste dispositivo"). Conversas novas funcionam normalmente, porque a chave pública atual é sempre resolvida no momento do envio — só o histórico anterior à troca fica ilegível no dispositivo novo.
+  **Superado em 2026-09-26** pela "Decisão: backup da chave de E2E com frase de recuperação": o par passou a ser da conta e chega a um dispositivo novo pelo backup cifrado. Os itens 1 e 4 acima continuam valendo no mecanismo (NaCl box, decifrar com a chave pública atual), mas "por dispositivo" virou "por conta".
 
 **Razão:** para uma instância central única que serve toda a plataforma, o ganho de "o operador não consegue ler DMs mesmo com acesso total ao banco" supera o custo de implementação de uma cifra de mensagem única (não é um protocolo de sessão completo) — mas um protocolo com ratchet/multi-dispositivo de verdade só se justifica com usuários reais e demanda por essas garantias adicionais, não antes.
 
@@ -1399,6 +1400,36 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 3. **Visual (mesmo pedido):** o servidor aberto fica num roxo mais escuro no hover (`color-mix` da cor de destaque), e o card "Criar nova categoria" ficou da altura do texto, só com o "+", mostrando o texto no hover ou no foco pelo teclado.
 
 **Verificado (2026-09-25):** `go vet`/`go test` de `server-central` (não há teste com banco nesse módulo); a migration rodou no Postgres local ao subir o container. No Chrome logado no ambiente local, com um segundo servidor temporário inserido no banco e depois removido, o arraste (simulado com `DragEvent`) trocou a ordem na tela e gravou no banco. Hover do card e do servidor ativo conferidos na tela. **Não verificado:** falha ao gravar a ordem do rail (o caminho de falha é o mesmo helper já testado com as categorias) e o arraste com o mouse de verdade.
+
+## Decisão: backup da chave de E2E com frase de recuperação
+
+**Contexto:** com uma chave por dispositivo, a mesma conta aberta em dois navegadores (ou navegador e Electron) fazia cada um publicar a própria chave pública, e o último sobrescrevia `accounts.e2e_public_key`. O primeiro não republicava (a flag de publicação local ainda batia com a própria chave) e continuava enviando mensagens cifradas com uma chave privada que ninguém conseguia conferir: o outro lado via "mensagem não pôde ser decifrada neste dispositivo" sem nenhum aviso para quem enviou. Além disso, trocar de dispositivo perdia o histórico. O pedido do autor foi logar em qualquer dispositivo e ler as próprias mensagens, com a garantia de que só ele consegue decifrá-las.
+
+**Alternativas consideradas:**
+- **Chave privada guardada no Authentik** (atributo do usuário entregue no login por uma scope mapping): zero fricção, mas no OIDC a senha só vai ao Authentik e nunca chega ao client, então o Authentik não tem como entregar um segredo que dependa de algo que só a pessoa sabe. Quem controla o Authentik (admin com personificação, dump do banco) passaria a ler todas as DMs, o que desfaz o motivo de ter E2E numa instância central. Descartada.
+- **Passkey com a extensão WebAuthn PRF:** sem frase para decorar, mas suporte ainda irregular no Electron e em parte dos navegadores. Candidata para uma segunda etapa, como forma alternativa de desbloquear o mesmo backup.
+- **Frase de recuperação só da pessoa, backup cifrado no servidor** (modelo do backup cifrado do WhatsApp e da Security Key do Element): escolhida.
+
+**Decisão:**
+1. **Uma chave por conta.** O primeiro dispositivo gera o par (ou reaproveita o que já tinha, se é o publicado, para não perder o histórico); os outros recebem o mesmo par pelo backup.
+2. **Backup cifrado no client** (`client/src/crypto/keyBackup.ts`): scrypt (`@noble/hashes`, N=2^17, r=8, p=1, parâmetros da OWASP, ~1 s por tentativa) deriva da frase uma chave de 32 bytes que cifra a chave privada com NaCl `secretbox`. O backup leva versão, parâmetros do KDF, salt e nonce, para os parâmetros poderem subir sem invalidar backups antigos. A frase passa por NFKC e trim, para a mesma frase com acento dar a mesma chave em qualquer teclado; mínimo de 12 caracteres, porque o backup fica no servidor e está exposto a força bruta offline. Ao abrir, o client recusa parâmetros acima de um teto (N ≤ 2^20, r ≤ 16, p ≤ 4), para um backup adulterado não travar o dispositivo.
+3. **server-central guarda bytes opacos** em `accounts.e2e_key_backup` (`migrations/0008_e2e_key_backup.up.sql`, até 1024 bytes). `PUT /api/me/e2e-key-backup` grava a chave pública e o backup **na mesma operação**, para os dois nunca ficarem dessincronizados; sem `replace`, devolve `409` se a conta já tiver backup (outro dispositivo chegou antes, este tem que desbloquear aquele). `GET /api/me/e2e-key-backup` só devolve o backup da própria conta. `GET /api/me` passou a informar `hasE2EKeyBackup`, para o client decidir entre criar e pedir a frase sem baixar o backup.
+4. **`PUT /api/me/e2e-public-key` recusa (`409`) quando a conta já tem backup:** é o caminho de clients anteriores a esta decisão, e um client antigo não pode trocar a chave da conta pela de um dispositivo avulso. O client atual não chama mais essa rota.
+5. **Ao desbloquear, a chave decifrada tem que gerar a chave pública publicada**; se não gerar, o client recusa em vez de guardar uma chave que não é a da conta.
+6. **Estados no client** (`hooks/useE2EKeys.ts`): `needs-setup` (conta sem backup), `needs-unlock` (conta com backup, dispositivo sem a chave ou com uma antiga), `ready`, `error`. O painel `components/E2EKeyPanel.tsx` aparece no lugar da conversa de DM enquanto não está `ready`. O estado é resolvido de novo a cada renovação de token, para um dispositivo aberto perceber que a chave foi trocada em outro e parar de cifrar com a antiga.
+7. **"Esqueci a frase"** gera um par novo e grava com `replace`: o histórico fica ilegível em todos os dispositivos e os outros passam a pedir a frase nova. É o único caminho de volta, já que ninguém consegue recuperar a frase.
+8. **Aviso ao criar a frase no dispositivo errado:** se a conta tem chave publicada mas este dispositivo não é o dono dela (`publishedElsewhere`), o painel avisa que criar a frase aqui deixa o histórico ilegível e que o certo é criar no dispositivo que tem a chave.
+
+**Limitações:**
+- A garantia depende da força da frase: com o backup em mãos, quem opera o servidor pode tentar força bruta contra o scrypt. O mínimo de 12 caracteres reduz o risco, mas não o elimina.
+- Mensagens cifradas antes desta decisão para chaves de dispositivos que não viraram a chave da conta continuam ilegíveis.
+- A chave é estática até alguém usar "esqueci a frase" (sem rotação nem forward secrecy, mesma limitação da decisão original).
+- Não há "trocar a frase mantendo a chave" nesta etapa, só "esqueci a frase" (chave nova).
+- A chave de uma conta nova só é publicada quando a pessoa cria a frase (ao abrir Amigos), não mais no login: até lá, os amigos veem "ainda não habilitou criptografia".
+
+**Deploy:** `central-v*` antes de `client-v*`. O client novo trata um server-central sem `hasE2EKeyBackup` como erro, sem cair no fluxo antigo.
+
+**Revisitar quando:** houver pedido para trocar a frase mantendo a chave (re-cifrar o backup com a frase nova, o que exige a antiga), para desbloquear com passkey (PRF) ou para verificação de chave fora de banda.
 
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 

@@ -42,6 +42,9 @@ export interface MyProfile {
   // Ausente só em server-central anterior ao campo -- ver
   // hooks/useE2EKeys.ts, que depende dessa diferença.
   e2ePublicKey?: string | null
+  // Se a conta já tem backup da chave com frase de recuperação. Ausente em
+  // server-central anterior ao campo.
+  hasE2EKeyBackup?: boolean
   displayName?: string
   avatarUrl?: string
 }
@@ -187,15 +190,34 @@ export async function fetchFriends(accessToken: string): Promise<RemoteFriend[]>
   return body.friends
 }
 
-// setMyE2EPublicKey publica a chave pública de E2E deste dispositivo (ver
-// hooks/useE2EKeys.ts) -- sobrescreve qualquer chave publicada antes por
-// outro dispositivo desta mesma conta.
-export async function setMyE2EPublicKey(accessToken: string, publicKeyB64: string): Promise<void> {
-  const res = await fetch(`${SERVER_CENTRAL_URL}/api/me/e2e-public-key`, {
+export interface E2EKeyBackup {
+  publicKey: string
+  backup: string
+}
+
+// Erro de PUT /api/me/e2e-key-backup quando a conta já tem backup (outro
+// dispositivo criou antes) -- hooks/useE2EKeys.ts passa a pedir a frase.
+export class E2EKeyBackupConflictError extends Error {}
+
+// fetchMyE2EKeyBackup busca a chave pública da conta e o backup cifrado da
+// chave privada (crypto/keyBackup.ts), para desbloquear com a frase.
+export async function fetchMyE2EKeyBackup(accessToken: string): Promise<E2EKeyBackup> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/me/e2e-key-backup`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  return parseJsonOrThrow<E2EKeyBackup>(res)
+}
+
+// setMyE2EKeyBackup grava a chave pública da conta junto com o backup
+// cifrado. replace troca a chave de uma conta que já tem backup ("esqueci a
+// frase"); sem ele, lança E2EKeyBackupConflictError se já houver backup.
+export async function setMyE2EKeyBackup(accessToken: string, backup: E2EKeyBackup, replace: boolean): Promise<void> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/me/e2e-key-backup`, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ publicKey: publicKeyB64 }),
+    body: JSON.stringify({ ...backup, replace }),
   })
+  if (res.status === 409) throw new E2EKeyBackupConflictError('a conta já tem frase de recuperação')
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     throw new Error(text || `server-central: ${res.status} ${res.statusText}`)

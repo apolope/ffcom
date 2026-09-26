@@ -101,7 +101,7 @@ export function useDirectMessages(
     (content: string) => {
       if (!socket || socket.readyState !== WebSocket.OPEN || !peerId) return
       if (!peerPublicKey) {
-        setError('amigo ainda não habilitou criptografia neste dispositivo')
+        setError('amigo ainda não criou a frase de recuperação da criptografia')
         return
       }
       const { ciphertext, nonce } = encryptDM(content, peerPublicKey, myKeyPair.secretKey)
