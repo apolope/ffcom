@@ -102,7 +102,7 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [ ] Container evergreen (ver `docs/architecture.md`, "Decisão: container evergreen em `server-channel`"):
   - [x] Fase 0: graceful shutdown em SIGTERM, flag `--version`, tolerância a schema à frente nas migrations
   - [ ] Client: reconectar o WebSocket de canal de texto e forum com backoff quando o servidor fecha (1001 na troca de versão), recarregando o histórico perdido
-  - [ ] Fase 1: pacote `internal/release` (índice assinado ed25519), `cmd/release-tool` e workflow `channel-v*` publicando binários + índice no release `channel-stable`
+  - [x] Fase 1: pacote `internal/release` (índice assinado ed25519), `cmd/release-tool` e workflow `channel-v*` publicando binários + índice no release `channel-stable`
   - [ ] Fase 2: lançador `cmd/ffcom-runtime` (resolve, baixa, verifica, supervisiona, troca, rollback)
   - [ ] Fase 3: Dockerfile com lançador + binário semente e workflow `channel-image-v*`
   - [ ] Fase 4: composes (`deploy/channel` e referência) e deploy da instância de teste por `SIGHUP`

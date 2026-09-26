@@ -1,29 +1,37 @@
 name: deploy-ffcom-channel
 
+# Release do serviço server-channel no modelo do container evergreen (ver
+# docs/architecture.md, "Decisão: container evergreen em `server-channel`").
+# A tag channel-vX.Y.Z não gera mais imagem: gera os binários linux/amd64 e
+# linux/arm64 no release channel-vX.Y.Z e estende o índice assinado
+# (index.json + index.json.sig) do release fixo channel-stable, que o
+# lançador ffcom-runtime consulta. A imagem passa a ter workflow próprio
+# (tags channel-image-v*, Fase 3); por isso o hadolint do Dockerfile saiu
+# daqui.
+#
+# Sem workflow_dispatch: a versão vem da tag, e rodar sem tag não tem versão
+# para publicar. Para republicar uma versão, apague e recrie a tag (index add
+# substitui a entrada de mesma versão).
+
 on:
-  workflow_dispatch:
   push:
     tags:
       - 'channel-v*'
 
 permissions:
   contents: read
-  packages: write
+
+# Duas tags publicadas ao mesmo tempo baixariam o mesmo índice e uma
+# apagaria a versão da outra. Serializa a publicação sem cancelar a fila.
+concurrency:
+  group: channel-stable-index
+  cancel-in-progress: false
 
 env:
-  IMAGE: ghcr.io/apolope/ffcom-channel
+  INDEX_URL: https://github.com/apolope/ffcom/releases/download/channel-stable
+  RELEASE_PUB: server-channel/cmd/ffcom-runtime/release.pub
 
 jobs:
-  lint-dockerfile:
-    name: Lint do Dockerfile
-    runs-on: [self-hosted, a3s-network]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Hadolint
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: server-channel/Dockerfile
-
   security-scan:
     name: Scan de segredos
     runs-on: [self-hosted, a3s-network]
@@ -34,61 +42,206 @@ jobs:
           docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
             detect --source="/repo/server-channel" --no-git -v
 
-  build-push-deploy:
-    name: Build, push e deploy
-    needs: [lint-dockerfile, security-scan]
+  # Build e testes sem acesso à chave de assinatura: go test executa código
+  # do repositório, então fica fora do environment channel-release.
+  #
+  # Go via actions/setup-go (e não docker run golang:1.27-alpine): o ci.yml
+  # já usa setup-go neste mesmo runner, a versão sai de go.mod, e um
+  # container com o workspace montado deixaria arquivos de root no checkout
+  # do runner self-hosted. O release-tool precisa rodar no host depois, o que
+  # também fica mais simples com o Go nativo.
+  build:
+    name: Build dos binários
+    needs: [security-scan]
     runs-on: [self-hosted, a3s-network]
-
+    outputs:
+      version: ${{ steps.version.outputs.value }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Login no GitHub Container Registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Determinar versão
         id: version
         run: |
-          if [[ "${GITHUB_REF}" == refs/tags/channel-v* ]]; then
-            echo "value=${GITHUB_REF#refs/tags/channel-}" >> "$GITHUB_OUTPUT"
-          else
-            echo "value=dev" >> "$GITHUB_OUTPUT"
+          TAG="${GITHUB_REF#refs/tags/}"
+          if ! [[ "$TAG" =~ ^channel-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Tag '$TAG' fora do formato channel-vX.Y.Z"
+            exit 1
           fi
+          # Sem o "v": é o mesmo texto do índice e do /healthz, que o
+          # lançador compara depois da troca.
+          echo "value=${TAG#channel-v}" >> "$GITHUB_OUTPUT"
 
-      - name: Build e push da imagem
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server-channel/go.mod
+
+      - name: go vet e go test
         working-directory: server-channel
         run: |
-          VERSION="${{ steps.version.outputs.value }}"
-          TAGS=(-t "${IMAGE}:$(git rev-parse --short HEAD)")
-          if [ "$VERSION" != "dev" ]; then
-            TAGS+=(-t "${IMAGE}:${VERSION}")
-          fi
-          docker buildx build "${TAGS[@]}" --build-arg VERSION="$VERSION" -f Dockerfile --push .
+          go vet ./...
+          go test ./...
 
-      - name: Carregar env file
-        working-directory: deploy/channel
-        run: cp /opt/ffcom/envs/ffcom-channel.env .env
-
-      - name: Deploy ffcom-channel
-        working-directory: deploy/channel
+      - name: Build linux/amd64 e linux/arm64
+        working-directory: server-channel
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
         run: |
-          export IMAGE_TAG=$(git rev-parse --short HEAD)
-          docker compose -f docker-compose.yml --env-file .env up -d --pull always --remove-orphans
-
-      - name: Health check
-        run: |
-          for i in $(seq 1 12); do
-            status=$(docker inspect --format='{{.State.Health.Status}}' ffcom-channel-app 2>/dev/null)
-            [ "$status" = "healthy" ] && echo "ffcom-channel-app healthy" && exit 0
-            echo "Aguardando... status: ${status:-iniciando} (tentativa $i/12)"
-            sleep 10
+          mkdir -p dist
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" \
+              go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" \
+              -o "dist/server-channel-linux-${arch}" .
           done
-          echo "Timeout: ffcom-channel-app nao ficou healthy em 2 minutos"
-          docker logs --tail 50 ffcom-channel-app
-          exit 1
+          sha256sum dist/server-channel-linux-*
 
-      - name: Limpeza de imagens antigas
-        run: docker image prune -f
+      - uses: actions/upload-artifact@v4
+        with:
+          name: server-channel-binaries
+          path: server-channel/dist/server-channel-linux-*
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Logout do GHCR
-        if: always()
-        run: docker logout ghcr.io
+  # Único job com a chave privada: environment channel-release, com
+  # aprovação manual configurada no GitHub.
+  publish:
+    name: Publicar release e índice assinado
+    needs: [build]
+    runs-on: [self-hosted, a3s-network]
+    environment: channel-release
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Chave pública presente
+        run: |
+          # Nasce na Fase 2 (ffcom-runtime a embute via go:embed). Sem ela
+          # não há como verificar o índice atual nem conferir que o secret
+          # assina com o par certo.
+          if [ ! -s "$RELEASE_PUB" ]; then
+            echo "Falta $RELEASE_PUB (ver comentário no topo de server-channel/cmd/release-tool/main.go)"
+            exit 1
+          fi
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server-channel/go.mod
+
+      - name: Build do release-tool
+        working-directory: server-channel
+        run: go build -o "$RUNNER_TEMP/release-tool" ./cmd/release-tool
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: server-channel-binaries
+          path: dist
+
+      - name: Criar release channel-v${{ env.VERSION }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: channel-v${{ env.VERSION }}
+          name: server-channel ${{ env.VERSION }}
+          files: |
+            dist/server-channel-linux-amd64
+            dist/server-channel-linux-arm64
+          fail_on_unmatched_files: true
+          make_latest: false
+
+      # Baixa o índice atual pela URL pública (a mesma que o lançador usa).
+      # 404 = primeiro release, começa vazio. Qualquer outro erro falha, para
+      # não sobrescrever um índice existente por uma falha de rede.
+      - name: Baixar índice atual
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            fs.mkdirSync('index', { recursive: true });
+            let found = 0;
+            for (const name of ['index.json', 'index.json.sig']) {
+              const res = await fetch(`${process.env.INDEX_URL}/${name}`, { cache: 'no-store' });
+              if (res.status === 404) {
+                core.info(`${name}: 404`);
+                continue;
+              }
+              if (!res.ok) throw new Error(`${name}: HTTP ${res.status}`);
+              fs.writeFileSync(`index/${name}`, Buffer.from(await res.arrayBuffer()));
+              found++;
+            }
+            if (found === 1) throw new Error('channel-stable tem só um de index.json/index.json.sig; corrija à mão antes de publicar');
+            core.info(found === 2 ? 'índice existente baixado' : 'sem índice, começando vazio');
+
+      - name: Verificar índice atual
+        run: |
+          if [ -f index/index.json ]; then
+            "$RUNNER_TEMP/release-tool" verify -index index/index.json -sig index/index.json.sig -pub "$RELEASE_PUB"
+          fi
+
+      - name: Adicionar versão e assinar
+        env:
+          CHANNEL_RELEASE_SIGNING_KEY: ${{ secrets.CHANNEL_RELEASE_SIGNING_KEY }}
+        run: |
+          MIN_RUNTIME="$(tr -d '[:space:]' < server-channel/MIN_RUNTIME)"
+          BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/channel-v${VERSION}"
+          "$RUNNER_TEMP/release-tool" index add -index index/index.json \
+            -version "$VERSION" -min-runtime "$MIN_RUNTIME" \
+            -artifact "linux/amd64=${BASE}/server-channel-linux-amd64=dist/server-channel-linux-amd64" \
+            -artifact "linux/arm64=${BASE}/server-channel-linux-arm64=dist/server-channel-linux-arm64"
+          "$RUNNER_TEMP/release-tool" sign -index index/index.json \
+            -key-env CHANNEL_RELEASE_SIGNING_KEY -out index/index.json.sig
+          # Confere que o secret é o par da pública do repo antes de publicar.
+          "$RUNNER_TEMP/release-tool" verify -index index/index.json -sig index/index.json.sig -pub "$RELEASE_PUB"
+          cat index/index.json
+
+      # Release fixo channel-stable: prerelease e make_latest=false para não
+      # virar o "latest" do repo. Os assets sobem com nome temporário e só
+      # depois substituem os antigos, para a janela sem índice (ou com índice
+      # e assinatura de gerações diferentes) ser de poucos segundos; nessa
+      # janela o lançador só falha a checagem e tenta de novo no próximo
+      # intervalo.
+      - name: Publicar índice em channel-stable
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const { owner, repo } = context.repo;
+            const tag = 'channel-stable';
+            let rel;
+            try {
+              rel = (await github.rest.repos.getReleaseByTag({ owner, repo, tag })).data;
+            } catch (e) {
+              if (e.status !== 404) throw e;
+              rel = (await github.rest.repos.createRelease({
+                owner, repo, tag_name: tag, target_commitish: context.sha,
+                name: 'server-channel: índice de versões',
+                body: 'Índice assinado (index.json + index.json.sig) consultado pelo lançador ffcom-runtime. Não é uma versão; ver docs/architecture.md, "Decisão: container evergreen em `server-channel`".',
+                prerelease: true, make_latest: 'false',
+              })).data;
+            }
+
+            const finals = ['index.json', 'index.json.sig'];
+            const suffix = `.new-${context.runId}`;
+            const uploaded = {};
+            for (const name of finals) {
+              const data = fs.readFileSync(`index/${name}`);
+              const res = await github.rest.repos.uploadReleaseAsset({
+                owner, repo, release_id: rel.id, name: name + suffix, data,
+                headers: { 'content-type': 'application/octet-stream', 'content-length': data.length },
+              });
+              uploaded[name] = res.data.id;
+            }
+
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets, { owner, repo, release_id: rel.id, per_page: 100 });
+            for (const a of assets) {
+              const stale = finals.includes(a.name) || (/\.new-\d+$/.test(a.name) && !a.name.endsWith(suffix));
+              if (stale) await github.rest.repos.deleteReleaseAsset({ owner, repo, asset_id: a.id });
+            }
+            for (const name of finals) {
+              await github.rest.repos.updateReleaseAsset({ owner, repo, asset_id: uploaded[name], name });
+            }
+            core.info(`índice publicado em ${rel.html_url}`);
+
+      # Fase 4: enviar SIGHUP para ffcom-channel-app na instância de teste
+      # (FFCOM_CHANNEL_VERSION=latest, canário) e esperar o /healthz responder
+      # com "version": "$VERSION"; ver docs/architecture.md, item 10.

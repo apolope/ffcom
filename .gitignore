@@ -3,6 +3,8 @@ node_modules/
 dist/
 dist-electron/
 release/
+# pacote Go do índice assinado, não é saída de build (o padrão acima é do electron-builder)
+!/server-channel/internal/release/
 .vite/
 *.local
 

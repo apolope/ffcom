@@ -1454,6 +1454,8 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 9. **Imagem:** tag nova `channel-image-vX.Y.Z` builda `ffcom-channel:X.Y.Z` e `ffcom-channel:X`. As tags antigas `ffcom-channel:0.1.0`…`0.6.0` (imagem = binário) ficam como legado; a partir daqui as tags da imagem são versões do contrato.
 10. **Deploy da instância de teste:** publicar a tag `channel-vX.Y.Z` gera o release e, no fim do mesmo workflow, envia `SIGHUP` para `ffcom-channel-app` e espera o `/healthz` com a versão nova. `docker compose up` só roda quando a imagem mudar (`channel-image-v*`).
 
+**Notas da implementação (Fase 1):** a versão embutida via `-X main.version` passa a ser `X.Y.Z` sem o `v` (antes a imagem recebia `vX.Y.Z`), para `/healthz`, índice e lançador compararem o mesmo texto. `min_runtime` de cada versão publicada vem de `server-channel/MIN_RUNTIME`. O workflow `channel-v*` separa o build/testes (sem segredo) do job `publish` (environment `channel-release`, único que vê a chave), serializa publicações com `concurrency` para duas tags não apagarem a versão uma da outra, e troca os assets de `channel-stable` subindo com nome temporário e renomeando, o que deixa uma janela de segundos em que o lançador pode ver 404 ou assinatura divergente e só tenta de novo no próximo intervalo. O `.gitignore` da raiz ignora `release/` (saída do electron-builder) e ganhou uma exceção para `server-channel/internal/release/`.
+
 **Riscos aceitos:**
 - Quem tiver a chave privada executa código em todo `server-channel` que usa auto-update. Mitigado pelo environment com aprovação manual, pelo opt-out (`FFCOM_AUTO_UPDATE=false`) e pela versão fixável.
 - `docker ps` não mostra mais a versão do serviço; ela fica no `/healthz` e nos logs do lançador a cada troca.
