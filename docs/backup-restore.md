@@ -9,7 +9,7 @@ Cada componente (`server-central`, `server-channel`) tem sua própria fonte de d
 | Componente | Banco Postgres | Volume(s) de arquivo |
 | --- | --- | --- |
 | `server-central` | contas, perfis, amizades, diretório de servidores, DMs (ciphertext) | `avatars_data` (avatares de conta) |
-| `server-channel` | categorias, canais, mensagens, roles/permissões, convites, membros | `attachments_data` (anexos de mensagem) |
+| `server-channel` | categorias, canais, mensagens, roles/permissões, convites, membros | `attachments_data` (anexos de mensagem); `runtime_data` fica de fora, ver abaixo |
 
 Os volumes de arquivo guardam os bytes referenciados pelas linhas do Postgres (`accounts.avatar_id` → arquivo em `avatars_data`, `messages.attachment_id` → arquivo em `attachments_data`) — restaurar só o banco sem o volume correspondente deixa referências para arquivos que não existem mais (avatar/anexo quebrado na UI). Faça backup dos dois juntos, na mesma janela de tempo, para os dois ficarem consistentes entre si.
 
@@ -60,6 +60,14 @@ docker run --rm -v <projeto>_avatars_data:/data -v "$(pwd)":/backup alpine \
 ```
 
 `<projeto>` é o prefixo que o Compose dá ao volume (nome do diretório por padrão, ex. `server-central_avatars_data`) — confirme o nome real com `docker volume ls`.
+
+**Anexos de `server-channel`:** a imagem do `app` roda como o usuário de UID `10001`, e os arquivos de `attachments_data` precisam pertencer a ele. Depois de restaurar os anexos (principalmente de um backup feito com a imagem antiga, que gravava como `root`), acerte o dono antes de subir o `app`, senão anexos novos falham ao gravar:
+
+```
+docker run --rm -v <projeto>_attachments_data:/data alpine chown -R 10001:10001 /data
+```
+
+O volume `runtime_data` de `server-channel` (`/data/runtime`, binários baixados pelo lançador do container) não precisa de backup: se ele vier vazio, o container recomeça pelo binário semente da imagem e baixa o que faltar pelo índice de versões. Ver [`../server-channel/README.md`](../server-channel/README.md), "Atualizações".
 
 ## Automação
 

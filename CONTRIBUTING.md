@@ -25,9 +25,17 @@ WebSocket entre os três está documentado em
 ## Ambiente de desenvolvimento
 
 Caminho documentado (e testado) para cada componente é Docker Compose — ver
-a seção "Rodando via Docker Compose" do README de `server-central` e
-`server-channel`, e os scripts `npm run dev`/`dev:electron` do README de
-`client`.
+a seção "Rodando via Docker Compose" do README de `server-central`, os
+scripts `npm run dev`/`dev:electron` do README de `client` e, para
+`server-channel`, o `scripts/dev-local.ps1` descrito abaixo. O "Rodando via
+Docker Compose" do README de `server-channel` é o caminho de quem
+autohospeda: usa a imagem publicada e não compila o código local. Para subir
+só o `server-channel` a partir do código do disco, sem o script:
+
+```
+# server-channel/
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+```
 
 Para iterar mais rápido nos dois servidores Go sem rebuildar a imagem, `go
 run .` funciona direto contra o Postgres já subido pelo `docker compose up

@@ -30,8 +30,232 @@ cp .env.example .env
 docker compose up -d
 ```
 
-Sobe quatro serviços: `postgres`, `livekit`, `coturn` e `app` (o binário
-`server-channel` em si, buildado a partir do `Dockerfile` local).
+Sobe quatro serviços: `postgres`, `livekit`, `coturn` e `app`. O `app` não é
+compilado na sua máquina: o compose puxa a imagem publicada
+`ghcr.io/apolope/ffcom-channel:1`, e o serviço `server-channel` dentro dela
+se atualiza sozinho (ver "Atualizações" abaixo). Nada de Go ou de clone
+compilável é necessário; basta este diretório com o `docker-compose.yml` e o
+`.env`.
+
+A imagem sai hoje só para `linux/amd64`; `arm64` (Raspberry Pi, VPS ARM)
+ainda não tem imagem publicada.
+
+Para desenvolver no código do `server-channel` (compilar o que está no
+disco em vez de usar a imagem publicada), o caminho é o override
+`docker-compose.dev.yml`, descrito em
+[`../CONTRIBUTING.md`](../CONTRIBUTING.md). Ele não serve para hospedar.
+
+## Atualizações
+
+A imagem e o serviço têm versões separadas. A tag da imagem (`:1`) é a
+versão do **contrato** do container: variáveis de ambiente, portas, volumes e
+healthcheck. Ela muda raramente e só quebra compatibilidade quando o número
+principal muda (`1` → `2`). O serviço (`server-channel` `0.7.0`, `0.7.1`,
+...) é baixado pelo próprio container: um lançador (`ffcom-runtime`) roda
+como processo principal, consulta um índice de versões assinado publicado
+nos releases do GitHub, confere assinatura e sha256 do binário, troca a
+versão em execução e volta para a anterior se a nova não subir.
+
+A primeira checagem acontece logo depois que o serviço sobe, e as seguintes
+a cada `FFCOM_UPDATE_INTERVAL` (mais uma folga aleatória de até 25%, para
+nem todo servidor atualizar no mesmo minuto). A troca derruba as conexões de
+chat por alguns segundos; o client reconecta sozinho e a voz, que vai direto
+ao LiveKit, não cai. A imagem traz uma cópia do serviço (a "semente"), então
+o primeiro boot funciona mesmo sem acesso ao GitHub.
+
+Por padrão o servidor recebe sozinho só as correções (patches) do minor que
+veio com a imagem: uma imagem com semente `0.7.x` acompanha `0.7.1`, `0.7.2`
+etc., mas não sobe para `0.8.0`. Mudanças de minor chegam quando você
+atualiza a imagem e ela traz uma semente de minor mais novo (o container sobe
+direto nela) ou quando você escolhe outra trilha.
+
+### Variáveis
+
+Todas opcionais, no `.env`; vazias valem o padrão. Valor inválido impede o
+container de subir, com o erro no log.
+
+| Variável | Valores | Padrão |
+| --- | --- | --- |
+| `FFCOM_CHANNEL_VERSION` | vazio: o minor da semente da imagem (ex. `0.7`); `X.Y`: só patches desse minor; `X.Y.Z`: fixa nessa versão; `latest`: qualquer versão nova, inclusive de minor | vazio |
+| `FFCOM_AUTO_UPDATE` | `true` troca sozinho; `false` só registra no log que há versão nova | `true` |
+| `FFCOM_UPDATE_INTERVAL` | duração no formato do Go (`30m`, `6h`); abaixo de `1m` vira `1m` | `1h` |
+
+Mudou alguma delas no `.env`? Recrie o container para ela valer:
+`docker compose up -d app`.
+
+Forks que publicam o próprio índice usam `FFCOM_RELEASE_INDEX_URL` (a URL
+base onde ficam `index.json` e `index.json.sig`) e `FFCOM_RELEASE_PUBKEY` (a
+chave pública ed25519 em base64, gerada por `cmd/release-tool keygen`, que
+substitui a chave embutida; o log avisa quando ela está em uso). Essas duas
+não estão no `docker-compose.yml` de referência: acrescente-as ao
+`environment` do `app` se precisar.
+
+### Checar agora
+
+Para não esperar o intervalo (ex. logo depois de um release):
+
+```
+docker compose kill -s HUP app
+```
+
+O container continua rodando; o sinal só antecipa a checagem.
+
+### Qual versão está rodando
+
+`docker ps` mostra só a tag da imagem. A versão do serviço aparece no
+`/healthz` (na porta de `SERVER_CHANNEL_PORT`, `8080` por padrão), que não
+exige login e continua acessível com `REQUIRE_TLS=true`:
+
+```
+curl -s http://localhost:8080/healthz
+# {"status":"ok","version":"0.7.1"}
+```
+
+e nas linhas do lançador no log, todas começando com `ffcom-runtime:`
+(trilha em uso, `server-channel 0.7.1 no ar`, `troca concluída: 0.7.0 →
+0.7.1`, avisos e rollbacks):
+
+```
+docker compose logs app | grep ffcom-runtime:
+```
+
+### Fixar ou voltar de versão
+
+Com `FFCOM_CHANNEL_VERSION=X.Y.Z` o servidor fica nessa versão e não
+atualiza mais sozinho até você mudar a variável. É também o jeito de voltar
+para uma versão anterior: fixe a versão desejada, rode `docker compose up -d
+app` e, logo depois de subir, o lançador troca para ela (só a trilha fixa
+permite descer; com `X.Y` ou `latest` a troca é sempre para frente). A
+versão precisa existir no índice e `FFCOM_AUTO_UPDATE` não pode estar em
+`false`, que bloqueia qualquer troca, inclusive essa.
+
+Voltar uma versão não desfaz migrations do banco. As migrations seguem a
+regra expand/contract (uma migration nunca quebra o binário da versão
+anterior), e o serviço sobe normalmente num banco que está à frente dele,
+então voltar **uma** versão é seguro; o schema continua o da mais nova.
+Voltar várias versões não tem essa garantia.
+
+Para sair do pin, esvazie a variável (ou ponha `X.Y`/`latest`) e rode
+`docker compose up -d app` de novo.
+
+### Rollback automático
+
+O lançador desfaz sozinho uma troca que deu errado, em dois casos:
+
+- **A versão nova não sobe:** se ela não responde `/healthz` com a versão
+  esperada em até 60s (ou sai antes disso), o lançador para ela e volta para
+  a anterior, sem sair do container.
+- **A versão nova sobe, mas fica caindo:** se, nas 24h seguintes à troca,
+  ela sai sozinha 5 vezes (seguidas ou espalhadas desde a troca), o lançador
+  volta para a anterior e registra `ROLLBACK` no log. Isso não vale para uma
+  versão fixada com `X.Y.Z` nem para a versão que veio da semente da imagem;
+  nesses casos, e numa versão que já roda há mais de 24h, 5 quedas rápidas
+  seguidas fazem o lançador sair com erro para o Docker reiniciar o
+  container (`restart: unless-stopped`).
+
+Nos dois casos a versão recusada vai para o arquivo `/data/runtime/bad`, uma
+por linha, e não é tentada de novo: o servidor espera sair uma versão mais
+nova (nem um pin `X.Y.Z` a aceita enquanto estiver ali). Falha de rede, índice
+indisponível ou assinatura inválida não marcam nada; só adiam a atualização
+para a próxima checagem. Se você corrigiu a causa (ex. configuração) e quer
+tentar de novo uma versão recusada, tire a linha dela e force a checagem:
+
+```
+docker compose exec app sed -i '/^0\.7\.1$/d' /data/runtime/bad
+docker compose kill -s HUP app
+```
+
+### Quando uma versão exige imagem nova
+
+Cada versão do serviço declara a versão mínima do contrato que precisa. Se
+sair, dentro da sua trilha, uma versão que a sua imagem não atende, o
+servidor continua na mais nova que ela aceita e o log mostra, a cada
+checagem:
+
+```
+ffcom-runtime: versão 0.9.0 existe mas exige imagem com runtime >= 1.1.0 (esta é 1.0.0); atualize a imagem para recebê-la
+```
+
+Dentro do mesmo número principal, basta puxar a imagem de novo (a tag `:1`
+acompanha todo o contrato 1.x):
+
+```
+docker compose pull app
+docker compose up -d app
+```
+
+Se a exigência for de outro número principal (ex. runtime `>= 2.0.0`), a
+tag no `docker-compose.yml` precisa mudar para `:2`; leia antes as notas do
+release da imagem, porque major é quebra de contrato (porta ou volume novo,
+por exemplo). Vale puxar a imagem de tempos em tempos mesmo sem esse aviso:
+é por ela que chegam as correções de segurança da base Alpine.
+
+O volume `runtime_data` (`/data/runtime`) guarda os binários baixados
+(a versão ativa e a anterior), a versão ativa (`current`) e a lista `bad`.
+Não precisa de backup: sem ele, o container recomeça pela semente da imagem
+e baixa o que faltar pelo índice.
+
+## Migrando da imagem antiga
+
+Quem já hospeda com a imagem antiga (`ghcr.io/apolope/ffcom-channel:0.x`,
+em que cada tag era uma versão do serviço) ou com o compose antigo que
+compilava localmente (`build: .`) precisa de uma migração única. O banco não
+muda de lugar; a novidade é que a imagem nova roda como usuário não-root
+(UID `10001`) e os anexos gravados pela antiga pertencem a `root`.
+
+1. Faça backup do banco e dos anexos antes
+   ([`../docs/backup-restore.md`](../docs/backup-restore.md)). A versão nova
+   aplica migrations no primeiro boot, e as imagens `0.x` recusam subir
+   num banco com migration que não conhecem; o caminho de volta é o backup.
+2. Atualize o `docker-compose.yml`: `git pull` num clone deste repositório
+   já traz o novo. Se você mantém um compose próprio, no serviço `app`:
+   troque `build: .` ou `image: ...:0.x` por `image:
+   ghcr.io/apolope/ffcom-channel:1`; acrescente `restart: unless-stopped` e
+   `stop_grace_period: 40s` (o serviço leva até 25s para encerrar com
+   calma, e os 10s padrão do Docker cortariam no meio); monte um volume novo
+   em `/data/runtime` (`runtime_data:/data/runtime`, declarado também em
+   `volumes:` no topo); e, se quiser, repasse `FFCOM_CHANNEL_VERSION`,
+   `FFCOM_AUTO_UPDATE` e `FFCOM_UPDATE_INTERVAL`, como no compose de
+   referência.
+3. Pare o `app` e descubra o nome real do volume de anexos (o Compose
+   prefixa com o nome do projeto, por padrão o do diretório, ex.
+   `server-channel_attachments_data`):
+
+   ```
+   docker compose stop app
+   docker volume ls | grep attachments
+   ```
+
+   Ou, direto pelo container antigo, os volumes montados e onde:
+
+   ```
+   docker inspect -f '{{range .Mounts}}{{.Name}} -> {{.Destination}}{{println}}{{end}}' $(docker compose ps -aq app)
+   ```
+
+4. Passe os anexos para o UID da imagem nova (troque o nome pelo que
+   apareceu acima):
+
+   ```
+   docker run --rm -v server-channel_attachments_data:/d alpine chown -R 10001:10001 /d
+   ```
+
+   Com bind mount em vez de volume nomeado, é `sudo chown -R 10001:10001` no
+   diretório do host. Sem isso, o serviço sobe mas falha ao gravar anexo
+   novo.
+5. Puxe a imagem e suba:
+
+   ```
+   docker compose pull app
+   docker compose up -d
+   ```
+
+6. Confira `curl -s http://localhost:8080/healthz` e as linhas
+   `ffcom-runtime:` do log (seção "Atualizações"). No primeiro boot o
+   volume `runtime_data` está vazio e o lançador usa a semente da imagem.
+
+A imagem antiga ficava com o nome gerado pelo build (ex.
+`server-channel-app`) ou com a tag `0.x`; depois de confirmar que está tudo
+no ar, dá para apagá-la com `docker image rm`.
 
 ## TLS / HTTPS
 

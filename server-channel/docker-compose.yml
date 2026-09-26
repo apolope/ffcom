@@ -87,10 +87,10 @@ services:
     networks:
       - ffcom-channel
 
-  # App Go do server-channel. Scaffolding básico (auth via Authentik +
-  # GET /api/me) já existe; integração com LiveKit, canais de
-  # texto/forum, permissões e convites ainda são TODO — ver TODO.md,
-  # seção "server-channel".
+  # App Go do server-channel: API REST + WebSocket de canais de texto e
+  # forum, voz via LiveKit, roles/permissões, convites e anexos. Estado item
+  # a item em TODO.md, seção "server-channel"; hospedagem e atualizações em
+  # README.md.
   #
   # Autenticação: mesma instância central de Authentik usada por
   # server-central, validada localmente sem chamada entre os dois

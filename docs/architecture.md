@@ -1492,6 +1492,8 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** o serviço chegar a 1.0 (rever o padrão de auto-update entre minors), houver pedido de janela de manutenção para a troca, ou `server-central` quiser o mesmo modelo.
 
+**Ajustes ao texto acima, conferidos no código do lançador (2026-09-26):** a trilha padrão é o minor da semente, na falta dela o da versão ativa, e por último `latest`; `FFCOM_AUTO_UPDATE=false` também impede o downgrade por pin `X.Y.Z` (o boot continua subindo numa semente mais nova); o aviso de `min_runtime` só aparece para versões dentro da trilha em uso; o jitter do intervalo só soma (de 0 a +25%). O guia para quem autohospeda está em `server-channel/README.md`, seções "Atualizações" e "Migrando da imagem antiga".
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

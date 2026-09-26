@@ -106,8 +106,11 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
   - [x] Fase 2: lançador `cmd/ffcom-runtime` (resolve, baixa, verifica, supervisiona, troca, rollback)
   - [x] Fase 3: Dockerfile com lançador + binário semente e workflow `channel-image-v*`
   - [x] Fase 4: composes (`deploy/channel` e referência) e deploy da instância de teste por `SIGHUP`
-  - [ ] Fase 5: README de self-hosting e guia de atualização
-  - [ ] Gerar o par de chaves, cadastrar `CHANNEL_RELEASE_SIGNING_KEY` no environment `channel-release` e publicar `channel-v*` + `channel-image-v1.0.0` pela primeira vez
+  - [x] Fase 5: README de self-hosting e guia de atualização (`server-channel/README.md`, seções "Atualizações" e "Migrando da imagem antiga"; dono `10001` dos anexos em `docs/backup-restore.md`)
+  - [ ] Cadastrar a chave privada (par já gerado, privada guardada fora do repositório) no secret `CHANNEL_RELEASE_SIGNING_KEY` do environment `channel-release` e publicar `channel-v*` + `channel-image-v1.0.0` pela primeira vez
+  - [ ] Deixar o pacote ghcr.io/apolope/ffcom-channel público para self-hosters puxarem sem login
+  - [ ] Ligar linux/arm64 no workflow da imagem depois de conferir o buildx do runner
+  - [ ] Testar a primeira troca real na instância de teste (channel-v0.7.0 → channel-image-v1.0.0 → channel-v0.7.1 por SIGHUP)
 - [ ] Testar a permissão de convidar num browser real, depois do deploy de `channel-v*`/`client-v*`: `teste-ffcom02` sem bit não vê "Convidar"; ligar "Criar convites" na @everyone e conferir que ele gera convite, mas `GET`/`DELETE /api/invites` continuam `403` para ele; role antiga com só "Gerenciar convites" continua criando
 
 ## client
