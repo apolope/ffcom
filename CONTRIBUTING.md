@@ -130,6 +130,17 @@ FFCOM_TEST_DATABASE_URL="postgres://postgres:test@localhost:55432/ffcom_test?ssl
 docker stop ffcom-test-pg
 ```
 
+## Publicando uma versão
+
+Cada componente sai por uma tag própria (`client-vX.Y.Z`, `central-vX.Y.Z`, `channel-vX.Y.Z`, `channel-image-vX.Y.Z`, `site-vX.Y.Z`), que dispara o workflow de deploy dele. Antes de criar a tag, adicione a entrada da versão no topo do [`CHANGELOG.md`](CHANGELOG.md), no formato descrito no próprio arquivo, e faça o commit no `main`:
+
+```
+## client v0.15.0 · 2026-10-01
+- O que mudou, em linguagem de quem usa.
+```
+
+O `CHANGELOG.md` é a fonte única do histórico de versões mostrado na home page, que o lê direto do `main` (com cache de 5 minutos no nginx do site). Todo workflow de deploy roda `scripts/check-changelog.sh <tag>` e falha se a entrada não existir ou estiver vazia; para conferir antes de empurrar a tag, rode o mesmo script localmente.
+
 ## Commits
 
 Mensagens em português, imperativo, sem prefixo de tipo (`feat:`/`fix:` etc.)

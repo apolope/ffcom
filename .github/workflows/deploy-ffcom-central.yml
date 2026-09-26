@@ -34,9 +34,19 @@ jobs:
           docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest \
             detect --source="/repo/server-central" --no-git -v
 
+  changelog:
+    name: Entrada no CHANGELOG
+    runs-on: [self-hosted, a3s-network]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Conferir CHANGELOG.md
+        env:
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: bash scripts/check-changelog.sh "$TAG"
+
   build-push-deploy:
     name: Build, push e deploy
-    needs: [lint-dockerfile, security-scan]
+    needs: [lint-dockerfile, security-scan, changelog]
     runs-on: [self-hosted, a3s-network]
 
     steps:

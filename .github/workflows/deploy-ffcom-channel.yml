@@ -50,9 +50,19 @@ jobs:
   # container com o workspace montado deixaria arquivos de root no checkout
   # do runner self-hosted. O release-tool precisa rodar no host depois, o que
   # também fica mais simples com o Go nativo.
+  changelog:
+    name: Entrada no CHANGELOG
+    runs-on: [self-hosted, a3s-network]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Conferir CHANGELOG.md
+        env:
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: bash scripts/check-changelog.sh "$TAG"
+
   build:
     name: Build dos binários
-    needs: [security-scan]
+    needs: [security-scan, changelog]
     runs-on: [self-hosted, a3s-network]
     outputs:
       version: ${{ steps.version.outputs.value }}
