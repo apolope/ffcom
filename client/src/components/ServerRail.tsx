@@ -4,7 +4,7 @@ import type { MyProfile } from '../lib/serverCentralApi'
 import { AvatarWithStatus } from './AvatarWithStatus'
 import { STATUS_LABELS } from './PresenceContext'
 import { ServerMenu, type ServerMenuActions } from './ServerMenu'
-import { StatusMenu } from './StatusMenu'
+import { StatusMenu, type AccountIdentity } from './StatusMenu'
 import { UpdateButton } from './UpdateButton'
 import { useScrollEdges } from '../hooks/useScrollEdges'
 import './ServerRail.css'
@@ -22,6 +22,9 @@ interface ServerRailProps {
   updateReady: boolean
   onUpdate: () => void
   myProfile: MyProfile | undefined
+  // Dados do Authentik e do servidor aberto para o cabeçalho do menu do
+  // avatar (nome e avatar vêm de myProfile quando houver).
+  account: Omit<AccountIdentity, 'displayName' | 'avatarUrl'> & { profileName?: string }
   // Como a pessoa aparece para os amigos agora (escolha + ociosidade).
   myStatus: PresenceStatus
   onSetStatus: (status: ChosenStatus) => void
@@ -48,6 +51,7 @@ export function ServerRail({
   updateReady,
   onUpdate,
   myProfile,
+  account,
   myStatus,
   onSetStatus,
   onSelectServer,
@@ -63,6 +67,8 @@ export function ServerRail({
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement>()
   const closeMenu = useCallback(() => setMenuAnchor(undefined), [])
   const chosen = myProfile?.status ?? 'online'
+  const { profileName, ...accountRest } = account
+  const displayName = myProfile?.displayName ?? profileName ?? myProfile?.oidcSubject ?? '?'
   const [serverMenu, setServerMenu] = useState<{ anchor: HTMLElement; server: KnownServer }>()
 
   // Arrastar ícone de servidor (HTML5): qual está sendo arrastado e se cai
@@ -224,7 +230,7 @@ export function ServerRail({
         >
           <AvatarWithStatus
             avatarUrl={myProfile?.avatarUrl}
-            displayName={myProfile?.displayName ?? myProfile?.oidcSubject ?? '?'}
+            displayName={displayName}
             status={myStatus}
             size={44}
           />
@@ -232,6 +238,12 @@ export function ServerRail({
         {menuAnchor && (
           <StatusMenu
             anchor={menuAnchor}
+            identity={{
+              ...accountRest,
+              displayName,
+              avatarUrl: myProfile?.avatarUrl,
+              username: accountRest.username !== displayName ? accountRest.username : undefined,
+            }}
             chosen={chosen}
             onChoose={onSetStatus}
             onEditAvatar={onOpenMyAvatar}

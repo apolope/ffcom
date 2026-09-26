@@ -358,6 +358,13 @@ function App() {
             updateReady={updateReady}
             onUpdate={applyUpdate}
             myProfile={myProfile}
+            account={{
+              profileName,
+              username: user?.profile.preferred_username,
+              email: user?.profile.email,
+              nickname: showFriends ? undefined : me?.nickname,
+              serverName: server?.name,
+            }}
             myStatus={ownStatus}
             onSetStatus={(next) => {
               setMyStatus(next).catch(() => {
@@ -375,7 +382,7 @@ function App() {
               onManageMembers: canOpenMemberAdmin ? () => setShowManageRoles(true) : undefined,
             }}
             onReorderServers={saveServerOrder}
-          onSelectFriends={() => setShowFriends(true)}
+            onSelectFriends={() => setShowFriends(true)}
             onAddServer={() => setShowAddServer(true)}
             onOpenMyAvatar={() => setShowMyAvatar(true)}
             onEditNickname={!showFriends && server && me ? () => setShowEditNickname(true) : undefined}

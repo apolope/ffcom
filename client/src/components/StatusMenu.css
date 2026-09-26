@@ -15,3 +15,35 @@
   font-weight: 400;
   color: var(--text);
 }
+
+.status-menu-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px 4px;
+  max-width: 280px;
+  /* Dá para copiar o e-mail. */
+  user-select: text;
+}
+
+.status-menu-identity-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.status-menu-identity-text strong {
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+.status-menu-identity-text > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-menu-identity-text span {
+  font-size: 12px;
+  color: var(--text);
+}
