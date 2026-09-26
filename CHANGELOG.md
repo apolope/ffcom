@@ -15,6 +15,16 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## site v0.2.0 · 2026-09-26
+- Seção "Ideias": sugestões de melhoria com login na conta do FFCom, ranking público por pontuação (like vale 2, dislike tira 1) e aba de ideias implementadas ligada ao histórico de versões.
+- Varinha que melhora o texto da sugestão com o Claude, até 3 vezes por dia, mostrando ideias parecidas que já existem para votar nelas.
+- Moderação para o grupo de administradores: aprovar ou recusar ideias retidas e marcar ideias como planejadas ou implementadas.
+
+## central v0.7.0 · 2026-09-26
+- Sugestões de melhoria: uma por pessoa por dia, votos com like e dislike, e estados planejada, implementada e recusada.
+- Varinha e checagem final de conteúdo via Claude: palavras ofensivas são trocadas, sugestão ofensiva na varinha é descartada e custa 2 usos extras, e na checagem final vai para moderação.
+- Grupo `ffcom-admins` do Authentik modera as sugestões.
+
 ## site v0.1.0 · 2026-09-26
 - Primeira versão da home page em `ffcom.a3sitsolutions.com.br`: o que é o FFCom, o que já funciona, como funciona, como hospedar um servidor e a história do nome.
 - Marca nova do projeto: dois "f" unidos pela mesma barra dentro de um balão de conversa.

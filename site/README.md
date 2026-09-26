@@ -18,6 +18,10 @@ A rede de servidores no fundo do hero é SVG animado (SMIL), e os pacotes do dia
 
 Com `prefers-reduced-motion: reduce` (no Windows, "Efeitos de animação" desligado) somem a rede em movimento, os pacotes, os pulsos e os deslizamentos; o chat e o terminal continuam trocando de conteúdo, sem deslocamento. A saída do terminal imita o `docker compose up` do compose de referência e o `/healthz` real; se os nomes dos serviços ou a versão mudarem muito, vale atualizar o texto em `index.html`.
 
+## Ideias
+
+A seção "Ideias" (`ideias.js`) fala com o server-central (`data-central` na `<section id="ideias">`): lista pública de sugestões, e login OIDC no Authentik (provider `ffcom`, callback na própria raiz do site) para sugerir, usar a varinha e votar. O `oidc-client-ts` está copiado em `assets/vendor/` (licença Apache 2.0 ao lado) em vez de vir de CDN, pelo mesmo motivo da fonte; ao atualizar a versão do client, copie de `client/node_modules/oidc-client-ts/dist/browser/`. O login pede o scope `ffcom-groups`, que traz os grupos `ffcom-*` e diz ao server-central quem modera. As regras moram no server-central (ver `docs/architecture.md`, "Decisão: sugestões de melhoria com varinha do Claude").
+
 ## Histórico de versões
 
 A seção "Histórico de versões" lê `/changelog.md`, que o nginx busca do `CHANGELOG.md` do `main` no GitHub (cache de 5 minutos; se o GitHub falhar, serve o cache antigo ou a cópia embutida no build). O cabeçalho `X-Changelog-Source` diz de onde veio a resposta (`github (HIT)`, `github (MISS)`, `local`). O `CHANGELOG.md` não fica neste diretório no git: para buildar local, copie o da raiz antes (`cp ../CHANGELOG.md .`), como o workflow faz. O `nginx.conf` é um template da imagem oficial (vai para `/etc/nginx/templates/`), para o `resolver` usar o DNS do container.

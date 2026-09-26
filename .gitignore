@@ -17,6 +17,9 @@ release/
 /server-central/bin/
 /server-channel/bin/
 vendor/
+# O site embute bibliotecas de navegador em site/assets/vendor (ver
+# site/README.md), que não é o vendor do Go.
+!site/assets/vendor/
 
 # Env / secrets
 .env

@@ -30,7 +30,7 @@
         <a href="#recursos">Recursos</a>
         <a href="#como-funciona">Como funciona</a>
         <a href="#hospedar">Hospedar</a>
-        <a href="#nome">Por que FFCom</a>
+        <a href="#ideias">Ideias</a>
         <a href="#versoes">Versões</a>
       </nav>
       <a class="btn btn-sm" href="https://app.ffcom.a3sitsolutions.com.br/">Entrar</a>
@@ -250,7 +250,21 @@
         </div>
       </div>
     </section>
-    <section id="versoes" class="secao secao-alt">
+    <section id="ideias" class="secao secao-alt" data-central="https://central.ffcom.a3sitsolutions.com.br">
+      <div class="wrap">
+        <h2>Ideias para o FFCom</h2>
+        <p class="sub">Sugira o que você quer ver no FFCom e vote nas ideias das outras pessoas. As mais votadas entram primeiro no próximo ciclo de desenvolvimento.</p>
+        <div class="composer" id="ideia-composer">
+          <noscript><p>Ative o JavaScript para ver, sugerir e votar nas ideias.</p></noscript>
+        </div>
+        <div class="filtros" id="ideias-abas" role="group" aria-label="Lista de ideias"></div>
+        <p class="versoes-aviso" id="ideias-aviso" aria-live="polite"></p>
+        <ol class="ideias-lista" id="ideias-lista"></ol>
+        <p class="ideias-regras">Uma sugestão por pessoa por dia. Like vale 2 pontos e dislike tira 1. Sugestões ofensivas são descartadas, e as que a verificação automática não liberar só aparecem depois de um moderador aprovar.</p>
+      </div>
+    </section>
+
+    <section id="versoes" class="secao">
       <div class="wrap">
         <h2>Histórico de versões</h2>
         <p class="sub">O que cada versão publicada trouxe. App, servidor central e servidor de comunidade têm versões independentes.</p>
@@ -276,10 +290,13 @@
         <a href="https://app.ffcom.a3sitsolutions.com.br/">Entrar</a>
         <a href="https://github.com/apolope/ffcom">GitHub</a>
         <a href="https://github.com/apolope/ffcom/blob/main/docs/architecture.md">Arquitetura</a>
+        <a href="#ideias">Ideias</a>
         <a href="#versoes">Versões</a>
       </p>
     </div>
   </footer>
   <script src="/main.js" defer></script>
+  <script src="/assets/vendor/oidc-client-ts.min.js" defer></script>
+  <script src="/ideias.js" defer></script>
 </body>
 </html>
