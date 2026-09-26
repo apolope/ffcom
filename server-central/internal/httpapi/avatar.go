@@ -112,13 +112,13 @@ func handleDeleteAvatar(profiles *store.ProfileStore, files *storage.AvatarStore
 			return
 		}
 
-		profile, err := profiles.GetByAccountID(r.Context(), account.ID)
+		storedName, err := profiles.StoredDisplayName(r.Context(), account.ID)
 		if err != nil && !errors.Is(err, store.ErrNotFound) {
 			http.Error(w, "erro ao buscar perfil", http.StatusInternalServerError)
 			return
 		}
 		if err == nil {
-			if _, err := profiles.Upsert(r.Context(), account.ID, profile.DisplayName, nil); err != nil {
+			if _, err := profiles.Upsert(r.Context(), account.ID, storedName, nil); err != nil {
 				log.Printf("server-central: erro ao limpar avatar_url: %v", err)
 				http.Error(w, "erro ao remover avatar", http.StatusInternalServerError)
 				return
@@ -167,15 +167,20 @@ func handleGetAvatar(files *storage.AvatarStore) http.Handler {
 	})
 }
 
+// currentOrFallbackDisplayName devolve o display_name a regravar junto com o
+// avatar novo. Sem perfil ainda, grava o "sub" como marcador de "sem nome
+// escolhido": displayNameSQL descarta esse valor e mostra o nome do
+// Authentik (accounts.profile_name), que continua acompanhando mudanças de
+// nome no Authentik.
 func currentOrFallbackDisplayName(r *http.Request, profiles *store.ProfileStore, account store.Account) (string, error) {
-	profile, err := profiles.GetByAccountID(r.Context(), account.ID)
+	name, err := profiles.StoredDisplayName(r.Context(), account.ID)
 	if errors.Is(err, store.ErrNotFound) {
 		return account.OIDCSubject, nil
 	}
 	if err != nil {
 		return "", fmt.Errorf("buscar perfil: %w", err)
 	}
-	return profile.DisplayName, nil
+	return name, nil
 }
 
 func respondMe(w http.ResponseWriter, r *http.Request, profiles *store.ProfileStore, account store.Account) {

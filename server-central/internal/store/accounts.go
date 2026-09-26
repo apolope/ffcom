@@ -22,15 +22,19 @@ type AccountStore struct {
 
 // GetOrCreateBySubject busca a conta vinculada a um "sub" do Authentik,
 // criando-a no primeiro login se ainda não existir.
-func (s *AccountStore) GetOrCreateBySubject(ctx context.Context, oidcSubject string) (Account, error) {
+//
+// profileName (nome do perfil do Authentik, do token) é gravado junto; nil
+// mantém o que já estava gravado.
+func (s *AccountStore) GetOrCreateBySubject(ctx context.Context, oidcSubject string, profileName *string) (Account, error) {
 	const query = `
-		INSERT INTO accounts (oidc_subject)
-		VALUES ($1)
-		ON CONFLICT (oidc_subject) DO UPDATE SET oidc_subject = EXCLUDED.oidc_subject
+		INSERT INTO accounts (oidc_subject, profile_name)
+		VALUES ($1, $2)
+		ON CONFLICT (oidc_subject) DO UPDATE
+		SET profile_name = COALESCE(EXCLUDED.profile_name, accounts.profile_name)
 		RETURNING id, oidc_subject, created_at, e2e_public_key, presence_status
 	`
 	var a Account
-	err := s.pool.QueryRow(ctx, query, oidcSubject).Scan(&a.ID, &a.OIDCSubject, &a.CreatedAt, &a.E2EPublicKey, &a.PresenceStatus)
+	err := s.pool.QueryRow(ctx, query, oidcSubject, profileName).Scan(&a.ID, &a.OIDCSubject, &a.CreatedAt, &a.E2EPublicKey, &a.PresenceStatus)
 	if err != nil {
 		return Account{}, fmt.Errorf("accounts: get or create por subject: %w", err)
 	}
@@ -119,7 +123,7 @@ func (s *AccountStore) GetManyBySubjects(ctx context.Context, subjects []string)
 		return nil, nil
 	}
 	const query = `
-		SELECT a.id, a.oidc_subject, p.display_name, p.avatar_url
+		SELECT a.id, a.oidc_subject, ` + displayNameSQL + `, p.avatar_url
 		FROM accounts a
 		LEFT JOIN profiles p ON p.account_id = a.id
 		WHERE a.oidc_subject = ANY($1)

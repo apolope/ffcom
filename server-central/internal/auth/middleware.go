@@ -14,6 +14,7 @@ const (
 	accountContextKey contextKey = iota
 	subjectContextKey
 	sessionContextKey
+	profileNameContextKey
 )
 
 // Middleware exige um Bearer token válido em cada requisição e garante (via
@@ -28,6 +29,7 @@ func Middleware(verifier *Verifier, accounts *store.AccountStore) func(http.Hand
 			// token para descobrir de quem é a requisição; não verifica de
 			// novo.
 			subject, ok := r.Context().Value(subjectContextKey).(string)
+			profileName, _ := r.Context().Value(profileNameContextKey).(*string)
 			if !ok {
 				rawToken, hasToken := bearerToken(r)
 				if !hasToken {
@@ -41,9 +43,10 @@ func Middleware(verifier *Verifier, accounts *store.AccountStore) func(http.Hand
 					return
 				}
 				subject = claims.Subject
+				profileName = claims.ProfileName()
 			}
 
-			account, err := accounts.GetOrCreateBySubject(r.Context(), subject)
+			account, err := accounts.GetOrCreateBySubject(r.Context(), subject, profileName)
 			if err != nil {
 				http.Error(w, "erro ao resolver conta", http.StatusInternalServerError)
 				return
@@ -74,6 +77,7 @@ func IdentifyRequest(verifier *Verifier, r *http.Request) (*http.Request, string
 	}
 	ctx := context.WithValue(r.Context(), subjectContextKey, claims.Subject)
 	ctx = context.WithValue(ctx, sessionContextKey, claims.SessionID)
+	ctx = context.WithValue(ctx, profileNameContextKey, claims.ProfileName())
 	return r.WithContext(ctx), claims.Subject, claims.SessionID, true
 }
 

@@ -7,6 +7,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 )
@@ -44,6 +45,22 @@ type Claims struct {
 	// docs/rate-limits.md). Pode vir vazio (token emitido sem sessão), e aí
 	// o rate limit cai para o balde só do usuário.
 	SessionID string `json:"sid"`
+	// Name e PreferredUsername vêm do scope profile. ProfileName escolhe o
+	// nome exibido de quem não preencheu um no perfil do FFCom.
+	Name              string `json:"name"`
+	PreferredUsername string `json:"preferred_username"`
+}
+
+// ProfileName devolve o nome do perfil do Authentik (name, ou
+// preferred_username sem ele), ou nil se o token não trouxer nenhum dos dois.
+// Mesmo critério do client ao gravar o nome em server-channel.
+func (c Claims) ProfileName() *string {
+	for _, name := range []string{c.Name, c.PreferredUsername} {
+		if name = strings.TrimSpace(name); name != "" {
+			return &name
+		}
+	}
+	return nil
 }
 
 // Verify valida rawToken e devolve as claims relevantes.

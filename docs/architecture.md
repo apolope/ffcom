@@ -720,6 +720,18 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** aparecer abuso com várias sessões de login da mesma conta; um teto adicional por `sub`, mais alto que o por dispositivo, resolveria.
 
+## Decisão: nome do Authentik no server-central
+
+**Contexto:** no teste do pedido de amizade em produção (2026-09-26), o aviso e a tela de Pedidos mostraram um hash de 64 caracteres no lugar do nome. O server-central só conhecia o nome pela tabela `profiles`, que nenhuma rota preenche com um nome escolhido: o upload de avatar cria a linha e, sem nome disponível, grava o `sub` do Authentik em `display_name` (`currentOrFallbackDisplayName`). O mesmo valor aparecia na lista de amigos, nas DMs e no lookup de contas usado pela lista de membros.
+
+**Decisão:** `auth.Claims` passou a ler `name` e `preferred_username` do access token (scope `profile`), e `Claims.ProfileName()` escolhe o nome com o mesmo critério do client ao gravar o `profile_name` em server-channel. A migration `0007_account_profile_name` acrescenta `accounts.profile_name`, que o upsert de `auth.Middleware` (`GetOrCreateBySubject`) atualiza a cada requisição autenticada; token sem nome mantém o que já estava gravado. O upsert já regravava a linha a cada requisição, então não há escrita extra. As consultas de nome (`ProfileStore.GetByAccountID`/`GetManyByAccountIDs` e `AccountStore.GetManyBySubjects`) resolvem o nome com `COALESCE(NULLIF(p.display_name, a.oidc_subject), a.profile_name, p.display_name)`: o nome escolhido no FFCom, se houver; senão o do Authentik. O `NULLIF` descarta os perfis antigos que gravaram o `sub` como nome, sem precisar de migration de dados. Conta sem perfil e com nome do Authentik passa a aparecer nessas consultas, com avatar nulo.
+
+**Rotas de avatar:** leem o `display_name` cru (`ProfileStore.StoredDisplayName`) para regravar junto com o avatar, e continuam gravando o `sub` como marcador de "sem nome escolhido". Regravar o nome já resolvido congelaria o nome do Authentik como se a pessoa o tivesse escolhido, e ele deixaria de acompanhar mudanças feitas no Authentik.
+
+**Consequência:** o nome de uma conta só fica conhecido depois que ela faz ao menos uma requisição autenticada com o server-central já atualizado. Até lá, o client continua mostrando o fallback (id).
+
+**Verificado (2026-09-26):** `go build`, `go vet` e `go test` do server-central; migration e consultas executadas no Postgres local dentro de uma transação desfeita (perfil criado só pelo avatar passa a mostrar o nome do Authentik, upsert sem nome mantém o anterior, conta sem perfil e sem nome fica de fora).
+
 ## Decisão: kick/ban de membro — remoção lógica (`removed_at`), banimento por `oidc_subject`
 
 **Contexto:** implementar o item de TODO "Kick/ban de membro" — até aqui não havia nenhuma forma de remover um membro problemático de um `server-channel`, só o sistema de bits de permissão sem bit dedicado a isso.
