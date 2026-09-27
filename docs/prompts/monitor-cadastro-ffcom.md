@@ -26,8 +26,8 @@ O FFCom (`D:\Dev\ffcom`) passou a mandar pedidos de cadastro ao grupo "Rede" do 
 
 **Configuração nova** (no `.env` do monitor, fora do git):
 
-- `FFCOM_SIGNUP_DECISION_URL=http://ffcom-central-app:8090` (o container `ffcom-central-app` está na rede overlay `a3s-services`, a mesma do monitor; a porta 8090 é o listener interno do FFCom, que o NPM não encaminha. Confirme a resolução do nome a partir do container do monitor.)
-- `FFCOM_SIGNUP_DECISION_SECRET=<o mesmo valor de SIGNUP_DECISION_SECRET em /opt/ffcom/envs/ffcom-central.env>` (vou gerar com `openssl rand -hex 32` e colocar nos dois `.env`).
+- `FFCOM_SIGNUP_DECISION_URL=http://ffcom-central-app:8090` (o container `ffcom-central-app` está na rede overlay `a3s-services`, a mesma do monitor; a porta 8090 é o listener interno do FFCom, que o NPM não encaminha. Já conferido em 2026-09-27: `docker exec a3s-network-monitor curl http://ffcom-central-app:8090/internal/signup-requests/<id>/decision` resolve o nome e responde.)
+- `FFCOM_SIGNUP_DECISION_SECRET=<o mesmo valor de SIGNUP_DECISION_SECRET em /opt/ffcom/envs/ffcom-central.env>` (já gerado e gravado no env do FFCom, no mesmo host; copie de lá sem imprimir no log). O cadastro já está ligado no FFCom e os pedidos já chegam ao tópico "FFCom" (`message_thread_id` 2448); só falta este repasse para os botões funcionarem.
 
 Sem `FFCOM_SIGNUP_DECISION_URL` configurado, o prefixo deve responder o clique com "Cadastro do FFCom não configurado" e não quebrar nada.
 
