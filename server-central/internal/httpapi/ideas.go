@@ -426,6 +426,28 @@ func handleVoteIdea(db *store.Store, cfg IdeasConfig) http.Handler {
 	})
 }
 
+// DELETE /api/ideas/{id} — ação do admin: apaga a ideia de vez, com os
+// votos. Diferente de recusar, devolve ao autor a sugestão do dia se a
+// ideia for de hoje.
+func handleDeleteIdea(db *store.Store, cfg IdeasConfig) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !auth.InGroupFromContext(r.Context(), cfg.AdminGroup) {
+			http.Error(w, "só administradores excluem ideias", http.StatusForbidden)
+			return
+		}
+		if err := db.Ideas.Delete(r.Context(), r.PathValue("id")); err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				http.Error(w, "ideia não encontrada", http.StatusNotFound)
+				return
+			}
+			log.Printf("ideias: %v", err)
+			http.Error(w, "erro ao excluir", http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+}
+
 // PATCH /api/ideas/{id} {status, implementedVersion} — ação do admin:
 // aprovar (open), planejar, marcar como implementada ou recusar.
 func handleModerateIdea(db *store.Store, cfg IdeasConfig) http.Handler {

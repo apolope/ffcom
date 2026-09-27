@@ -264,6 +264,20 @@ func (s *IdeaStore) SetStatus(ctx context.Context, id, status string, version *s
 	return nil
 }
 
+// Delete apaga a ideia de vez, com os votos e os pedidos ao relay dela
+// (ON DELETE CASCADE). Ação de moderação; diferente de SetStatus(rejected),
+// devolve ao autor a sugestão do dia, porque a linha deixa de existir.
+func (s *IdeaStore) Delete(ctx context.Context, id string) error {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM ideas WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("ideas: apagar: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // Vote grava o voto de accountID (1 like, -1 dislike, 0 tira o voto).
 func (s *IdeaStore) Vote(ctx context.Context, ideaID, accountID string, value int) error {
 	var err error

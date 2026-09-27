@@ -67,6 +67,7 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, avatarFiles *storage.Av
 	mux.Handle("GET /api/ideas/assist/{id}", protected(handleGetAssist(db, ideasCfg)))
 	mux.Handle("PUT /api/ideas/{id}/vote", protected(handleVoteIdea(db, ideasCfg)))
 	mux.Handle("PATCH /api/ideas/{id}", protected(handleModerateIdea(db, ideasCfg)))
+	mux.Handle("DELETE /api/ideas/{id}", protected(handleDeleteIdea(db, ideasCfg)))
 
 	limiter := newRateLimiter(rateLimitRPM, rateLimitBurst)
 	identify := func(r *http.Request) (*http.Request, string, string, bool) { return auth.IdentifyRequest(verifier, r) }

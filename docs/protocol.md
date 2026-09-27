@@ -62,6 +62,7 @@ Base URL: `VITE_SERVER_CENTRAL_URL` no client (`http://localhost:8081` em dev).
 | POST | `/api/ideas/assist` | Bearer | `{text}` (10 a 1000 caracteres) | `202` `{id, status: "pending", wandLeft}` — gasta um uso da varinha | `400` tamanho; `409` `{error, id}` já há um pedido em andamento; `429` sem usos hoje; `502` relay fora do ar (uso devolvido); `503` varinha desligada |
 | GET | `/api/ideas/assist/{id}` | Bearer | — | `{id, status: "pending"\|"done"\|"failed", wandLeft, result?: {offensive, notSuggestion, hint?, title, text, similar: [Idea]}}` — `notSuggestion` com `hint`: o texto não propõe nada a mudar, e o site mostra a dica sem trocar o texto | `404` inexistente ou de outra conta |
 | PUT | `/api/ideas/{id}/vote` | Bearer | `{value: 1\|-1\|0}` (like, dislike, tirar o voto) | `Idea` atualizada | `400`; `403` na própria ideia; `404`; `409` ideia fora de votação |
+| DELETE | `/api/ideas/{id}` | Bearer + grupo admin | — | `204` — apaga a ideia e os votos; se a ideia for de hoje, o autor pode enviar outra (diferente de `rejected`) | `403` sem o grupo; `404` |
 | PATCH | `/api/ideas/{id}` | Bearer + grupo admin | `{status: "open"\|"planned"\|"implemented"\|"rejected"\|"review", implementedVersion?}` — versão no formato do CHANGELOG (`client v0.15.0`), obrigatória para `implemented` | `Idea` atualizada | `400`; `403` sem o grupo; `404` |
 
 `FriendRequest`: `{id, accountId, displayName?, avatarUrl?, createdAt}` — `accountId`/`displayName`/`avatarUrl` são sempre do **outro** lado do pedido, do ponto de vista de quem recebe a resposta ou o frame.

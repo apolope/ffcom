@@ -98,6 +98,7 @@ func TestIdeasEndToEnd(t *testing.T) {
 	mux.Handle("GET /api/ideas/assist/{id}", handleGetAssist(db, cfg))
 	mux.Handle("PUT /api/ideas/{id}/vote", handleVoteIdea(db, cfg))
 	mux.Handle("PATCH /api/ideas/{id}", handleModerateIdea(db, cfg))
+	mux.Handle("DELETE /api/ideas/{id}", handleDeleteIdea(db, cfg))
 
 	suffix := fmt.Sprintf("%s-%d", t.Name(), time.Now().UnixNano())
 	newAccount := func(subject, name string) store.Account {
@@ -492,6 +493,24 @@ func TestIdeasEndToEnd(t *testing.T) {
 	decode(call(nil, "GET", "/api/ideas", nil), &ranking)
 	if contains(ranking, bobIdea.ID) != nil {
 		t.Fatal("implementada não deveria ficar no ranking")
+	}
+
+	// --- Exclusão pelo admin: some de vez, com os votos, e libera o dia do
+	// autor.
+	if r := call(&bob, "DELETE", "/api/ideas/"+aliceIdea.ID, nil); r.Code != http.StatusForbidden {
+		t.Fatalf("excluir sem ser admin: %d", r.Code)
+	}
+	if r := call(&admin, "DELETE", "/api/ideas/"+aliceIdea.ID, nil, "ffcom-admins"); r.Code != http.StatusNoContent {
+		t.Fatalf("excluir: %d %s", r.Code, r.Body.String())
+	}
+	if _, err := db.Ideas.Get(ctx, aliceIdea.ID, ""); err != store.ErrNotFound {
+		t.Fatalf("ideia excluída ainda existe: %v", err)
+	}
+	if r := call(&admin, "DELETE", "/api/ideas/"+aliceIdea.ID, nil, "ffcom-admins"); r.Code != http.StatusNotFound {
+		t.Fatalf("excluir de novo: %d", r.Code)
+	}
+	if me = getMe(alice); me.SuggestedToday {
+		t.Fatalf("excluir deveria liberar o dia do autor: %+v", me)
 	}
 
 	// --- Prazo: o sweeper fecha o pedido sem callback e devolve o uso; o
