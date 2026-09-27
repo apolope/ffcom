@@ -26,7 +26,10 @@ import (
 // de aprovar e reprovar, e o clique volta pelo a3s-network-monitor (dono do
 // webhook do bot) até o listener interno. Aprovado, o usuário é criado no
 // Authentik, entra no grupo ffcom-users e recebe o e-mail de definir senha.
-// Reprovado, nada é enviado à pessoa. Ver docs/architecture.md, "Decisão:
+// Reprovado, nada é enviado à pessoa. Quem já tem conta no Authentik (a
+// instância é compartilhada com outros projetos) marca isso no formulário
+// e não informa nome de usuário nem apelido: a aprovação acha a conta pelo
+// e-mail e só a põe no grupo. Ver docs/architecture.md, "Decisão:
 // cadastro com aprovação pelo Telegram".
 
 // SignupConfig liga os pedidos de cadastro. Sem Telegram ou Authentik a
@@ -68,6 +71,35 @@ var (
 	signupUsernamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{2,29}$`)
 	uuidPattern           = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 )
+
+// reservedUsernames são nomes que ninguém pede pelo formulário, por
+// parecerem da equipe, do sistema ou de outro serviço da infra. A
+// comparação ignora ponto, hífen e sublinhado ("ad.min" também cai). O
+// site/cadastro.js tem uma cópia só para avisar antes do envio; vale a
+// daqui.
+var reservedUsernames = map[string]bool{
+	"a3s": true, "a3sitsolutions": true, "abuse": true, "admin": true, "administrador": true,
+	"administrator": true, "ajuda": true, "akadmin": true, "api": true, "authentik": true,
+	"bot": true, "contato": true, "dono": true, "equipe": true, "ffcom": true, "help": true,
+	"info": true, "mod": true, "moderacao": true, "moderador": true, "moderator": true,
+	"noreply": true, "null": true, "oficial": true, "official": true, "owner": true,
+	"postmaster": true, "root": true, "security": true, "seguranca": true, "sistema": true,
+	"staff": true, "suporte": true, "support": true, "system": true, "telegram": true,
+	"undefined": true, "webmaster": true, "www": true,
+}
+
+// usernameProblem devolve por que username (já em minúsculas) não pode ser
+// pedido, ou "" se o formato é aceito. Não confere se está em uso.
+func usernameProblem(username string) string {
+	if !signupUsernamePattern.MatchString(username) {
+		return "o nome de usuário precisa ter de 3 a 30 caracteres: letras minúsculas sem acento, números, ponto, hífen ou sublinhado, começando por letra ou número"
+	}
+	bare := strings.NewReplacer(".", "", "-", "", "_", "").Replace(username)
+	if reservedUsernames[bare] {
+		return "esse nome de usuário é reservado; escolha outro"
+	}
+	return ""
+}
 
 // cleanLine tira espaços das pontas, junta espaços repetidos e recusa
 // caracteres de controle (quebra de linha inclusive), devolvendo o texto e
@@ -127,6 +159,9 @@ type signupBody struct {
 	Email    string `json:"email"`
 	Nickname string `json:"nickname"`
 	Reason   string `json:"reason"`
+	// ExistingAccount é a caixa "já tenho conta": nome de usuário e apelido
+	// são ignorados, porque a conta já tem os dela.
+	ExistingAccount bool `json:"existingAccount"`
 	// Website é um campo escondido no formulário: gente não vê e não
 	// preenche, robô de formulário preenche.
 	Website string `json:"website"`
@@ -140,15 +175,20 @@ func (b signupBody) validate() (store.NewSignup, string) {
 	if n.FullName, ok = cleanLine(b.FullName, 2, 80); !ok {
 		return n, "o nome precisa ter entre 2 e 80 caracteres"
 	}
-	n.Username = strings.ToLower(strings.TrimSpace(b.Username))
-	if !signupUsernamePattern.MatchString(n.Username) {
-		return n, "o nome de usuário precisa ter de 3 a 30 caracteres: letras minúsculas sem acento, números, ponto, hífen ou sublinhado, começando por letra ou número"
+	n.ExistingAccount = b.ExistingAccount
+	if !n.ExistingAccount {
+		n.Username = strings.ToLower(strings.TrimSpace(b.Username))
+		if problem := usernameProblem(n.Username); problem != "" {
+			return n, problem
+		}
 	}
 	if n.Email, ok = validEmail(b.Email); !ok {
 		return n, "e-mail inválido"
 	}
-	if n.Nickname, ok = cleanLine(b.Nickname, 2, 32); !ok {
-		return n, "o apelido precisa ter entre 2 e 32 caracteres"
+	if !n.ExistingAccount {
+		if n.Nickname, ok = cleanLine(b.Nickname, 2, 32); !ok {
+			return n, "o apelido precisa ter entre 2 e 32 caracteres"
+		}
 	}
 	if n.Reason, ok = cleanText(b.Reason, 10, 500); !ok {
 		return n, "conte em 10 a 500 caracteres por que quer entrar no FFCom"
@@ -216,15 +256,20 @@ func handleCreateSignup(db *store.Store, cfg SignupConfig) http.Handler {
 		}
 		// O nome de usuário é público nos apps da instância, então conferir
 		// aqui não expõe nada e poupa a pessoa de esperar uma aprovação que
-		// falharia. O e-mail só é conferido na aprovação, para o formulário
-		// não servir de consulta de quem tem conta. Authentik fora do ar não
-		// bloqueia o pedido: a aprovação confere de novo.
-		if u, err := cfg.Authentik.FindUser(ctx, "username", n.Username); err != nil {
-			log.Printf("cadastro: conferir usuário no authentik: %v", err)
-		} else if u != nil {
-			http.Error(w, "esse nome de usuário já está em uso; escolha outro", http.StatusConflict)
-			return
+		// falharia. Authentik fora do ar não bloqueia o pedido: a aprovação
+		// confere de novo.
+		if !n.ExistingAccount {
+			if u, err := cfg.Authentik.FindUsername(ctx, n.Username); err != nil {
+				log.Printf("cadastro: conferir usuário no authentik: %v", err)
+			} else if u != nil {
+				http.Error(w, "esse nome de usuário já está em uso; escolha outro", http.StatusConflict)
+				return
+			}
 		}
+		// O e-mail também é conferido, mas o resultado só vai para a
+		// mensagem de quem aprova: a resposta é a mesma havendo conta ou
+		// não, para o formulário não servir de consulta de quem tem conta.
+		n.EmailAccounts = s.emailAccounts(ctx, n.Email)
 
 		req, err := s.signups.Create(ctx, n)
 		if errors.Is(err, store.ErrConflict) {
@@ -239,6 +284,76 @@ func handleCreateSignup(db *store.Store, cfg SignupConfig) http.Handler {
 		// Falha no Telegram não perde o pedido: o notificador tenta de novo.
 		s.notify(ctx, req)
 		writeJSON(w, http.StatusCreated, map[string]string{"status": store.SignupPending})
+	})
+}
+
+// emailAccounts lista, para a mensagem do Telegram, as contas do Authentik
+// com o e-mail email ("" se nenhuma, nil se não deu para conferir).
+func (s *signupService) emailAccounts(ctx context.Context, email string) *string {
+	users, err := s.cfg.Authentik.FindByEmail(ctx, email)
+	if err != nil {
+		log.Printf("cadastro: conferir e-mail no authentik: %v", err)
+		return nil
+	}
+	names := make([]string, 0, len(users))
+	for _, u := range users {
+		names = append(names, u.Username)
+	}
+	joined := strings.Join(names, ", ")
+	return &joined
+}
+
+// handleUsernameAvailable responde se um nome de usuário pode ser pedido,
+// para o formulário avisar enquanto a pessoa digita:
+//
+//	GET /api/signup-requests/username-available?username=maria
+//	{"available": false, "message": "esse nome de usuário já está em uso; escolha outro"}
+//
+// Público como o envio, e não revela nada que o envio não revele (o nome
+// de usuário é público nos apps da instância). Além do limite geral por
+// IP, tem um próprio, para a rota não virar varredura de nomes. O envio
+// confere tudo de novo, então esta rota é só conforto.
+func handleUsernameAvailable(db *store.Store, cfg SignupConfig) http.Handler {
+	s := newSignupService(db, cfg)
+	limiter := newRateLimiter(30, 10)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !cfg.enabled() {
+			http.Error(w, "cadastro indisponível no momento", http.StatusServiceUnavailable)
+			return
+		}
+		if !limiter.allow(clientIP(r)) {
+			w.Header().Set("Retry-After", "5")
+			http.Error(w, "muitas consultas; espere um pouco", http.StatusTooManyRequests)
+			return
+		}
+		username := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("username")))
+		answer := func(available bool, message string) {
+			writeJSON(w, http.StatusOK, map[string]any{"available": available, "message": message})
+		}
+		if problem := usernameProblem(username); problem != "" {
+			answer(false, problem)
+			return
+		}
+		ctx := r.Context()
+		if existing, err := s.signups.OpenOrApprovedFor(ctx, "", username); err == nil {
+			answer(false, conflictMessage(existing, store.NewSignup{Username: username}))
+			return
+		} else if !errors.Is(err, store.ErrNotFound) {
+			log.Printf("cadastro: %v", err)
+			http.Error(w, "erro ao conferir o nome", http.StatusInternalServerError)
+			return
+		}
+		u, err := cfg.Authentik.FindUsername(ctx, username)
+		if err != nil {
+			log.Printf("cadastro: conferir usuário no authentik: %v", err)
+			http.Error(w, "não deu para conferir agora", http.StatusServiceUnavailable)
+			return
+		}
+		if u != nil {
+			answer(false, "esse nome de usuário já está em uso; escolha outro")
+			return
+		}
+		answer(true, "")
 	})
 }
 
@@ -277,14 +392,51 @@ func signupButtons(id string) []telegram.Button {
 func signupMessage(req store.SignupRequest) string {
 	e := telegram.Escape
 	var b strings.Builder
-	b.WriteString("<b>FFCom · pedido de cadastro</b>\n\n")
+	if req.ExistingAccount {
+		b.WriteString("<b>FFCom · pedido de acesso (já tem conta)</b>\n\n")
+	} else {
+		b.WriteString("<b>FFCom · pedido de cadastro</b>\n\n")
+	}
 	fmt.Fprintf(&b, "<b>Nome:</b> %s\n", e(req.FullName))
-	fmt.Fprintf(&b, "<b>Usuário:</b> <code>%s</code>\n", e(req.Username))
+	if !req.ExistingAccount {
+		fmt.Fprintf(&b, "<b>Usuário:</b> <code>%s</code>\n", e(req.Username))
+	}
 	fmt.Fprintf(&b, "<b>E-mail:</b> %s\n", e(req.Email))
-	fmt.Fprintf(&b, "<b>Apelido:</b> %s\n", e(req.Nickname))
+	if !req.ExistingAccount {
+		fmt.Fprintf(&b, "<b>Apelido:</b> %s\n", e(req.Nickname))
+	}
 	fmt.Fprintf(&b, "<b>Motivo:</b>\n<i>%s</i>\n\n", e(req.Reason))
+	if note := emailAccountsNote(req); note != "" {
+		b.WriteString(note + "\n\n")
+	}
 	fmt.Fprintf(&b, "Recebido em %s", req.CreatedAt.In(brasilia).Format("02/01/2006 15:04"))
 	return b.String()
+}
+
+// emailAccountsNote conta a quem aprova o que a aprovação vai fazer com as
+// contas do Authentik que já usam o e-mail do pedido, conferidas no envio.
+// Importa sobretudo quando a pessoa não marcou "já tenho conta": aprovar
+// põe no grupo a conta de quem é dono do e-mail, sem criar a pedida.
+func emailAccountsNote(req store.SignupRequest) string {
+	if req.EmailAccounts == nil {
+		return ""
+	}
+	var accounts []string
+	if *req.EmailAccounts != "" {
+		accounts = strings.Split(*req.EmailAccounts, ", ")
+	}
+	e := telegram.Escape
+	switch {
+	case len(accounts) == 0 && req.ExistingAccount:
+		return "⚠️ Diz já ter conta, mas nenhuma conta do Authentik usa este e-mail: aprovar vai falhar."
+	case len(accounts) == 0:
+		return ""
+	case len(accounts) > 1:
+		return fmt.Sprintf("⚠️ Este e-mail está em %d contas do Authentik (<code>%s</code>): aprovar vai parar; ponha a certa em ffcom-users pela UI.", len(accounts), e(*req.EmailAccounts))
+	case req.ExistingAccount:
+		return fmt.Sprintf("🔗 Conta existente: <code>%s</code>. Aprovar só adiciona ao grupo ffcom-users.", e(accounts[0]))
+	}
+	return fmt.Sprintf("🔗 Este e-mail já é da conta <code>%s</code> no Authentik. Aprovar adiciona essa conta ao grupo ffcom-users, sem criar o usuário pedido.", e(accounts[0]))
 }
 
 // decidedMessage é o pedido com a decisão no fim, sem botões.
@@ -297,7 +449,13 @@ func decidedMessage(req store.SignupRequest, at time.Time) string {
 	var b strings.Builder
 	b.WriteString(signupMessage(req))
 	b.WriteString("\n\n")
-	if req.Status == store.SignupApproved {
+	if req.Status == store.SignupApproved && req.LinkedExisting {
+		account := ""
+		if req.AuthentikUsername != nil {
+			account = " <code>" + telegram.Escape(*req.AuthentikUsername) + "</code>"
+		}
+		fmt.Fprintf(&b, "✅ <b>Aprovado</b> por %s em %s. Conta existente%s adicionada ao grupo ffcom-users; ela já tem senha, então nenhum e-mail foi enviado.", telegram.Escape(by), when, account)
+	} else if req.Status == store.SignupApproved {
 		fmt.Fprintf(&b, "✅ <b>Aprovado</b> por %s em %s. Conta criada no Authentik, no grupo ffcom-users.", telegram.Escape(by), when)
 		if req.Failure != nil {
 			fmt.Fprintf(&b, "\n⚠️ %s", telegram.Escape(*req.Failure))
@@ -368,7 +526,7 @@ func (s *signupService) approve(ctx context.Context, id, by string) (bool, strin
 		return false, "Erro ao ler o pedido; tente de novo"
 	}
 
-	user, err := s.createUser(ctx, req)
+	user, linked, err := s.resolveUser(ctx, req)
 	if err == nil {
 		err = s.addToGroup(ctx, user.PK)
 	}
@@ -382,13 +540,24 @@ func (s *signupService) approve(ctx context.Context, id, by string) (bool, strin
 		return false, "Não aprovado: " + reason
 	}
 
+	if linked {
+		// Conta que já existia: tem senha, então não há e-mail a mandar.
+		done, err := s.signups.FinishApproval(ctx, id, user.PK, user.Username, true, nil)
+		if err != nil {
+			log.Printf("cadastro: concluir pedido %s: %v", id, err)
+			return false, "Conta no grupo, mas o pedido não foi atualizado; confira os logs"
+		}
+		s.updateMessage(ctx, done)
+		return true, "Aprovado; conta existente " + user.Username + " adicionada ao grupo"
+	}
+
 	var warning *string
 	if err := s.cfg.Authentik.SendRecoveryEmail(ctx, user.PK, s.cfg.RecoveryEmailStage, s.cfg.RecoveryTokenDuration); err != nil {
 		log.Printf("cadastro: e-mail de senha do pedido %s: %v", id, err)
 		w := "O e-mail de definir senha não saiu; envie pela UI do Authentik (usuário > Enviar link de recuperação)."
 		warning = &w
 	}
-	done, err := s.signups.FinishApproval(ctx, id, user.PK, warning)
+	done, err := s.signups.FinishApproval(ctx, id, user.PK, user.Username, false, warning)
 	if err != nil {
 		log.Printf("cadastro: concluir pedido %s: %v", id, err)
 		return false, "Conta criada, mas o pedido não foi atualizado; confira os logs"
@@ -400,31 +569,66 @@ func (s *signupService) approve(ctx context.Context, id, by string) (bool, strin
 	return true, "Aprovado; e-mail de senha enviado"
 }
 
-// createUser cria o usuário do pedido, ou reaproveita o que uma aprovação
-// anterior do mesmo pedido já criou (o processo pode ter caído entre criar
-// e concluir).
-func (s *signupService) createUser(ctx context.Context, req store.SignupRequest) (authentik.User, error) {
-	ours := func(u *authentik.User) bool {
-		return u != nil && u.Attributes["ffcom_signup_request"] == req.ID
+// errApprovalBlocked marca as falhas de aprovação que dependem de alguém
+// resolver no Authentik (conta desativada, e-mail em várias contas), cujo
+// motivo vai inteiro para a mensagem.
+var errApprovalBlocked = errors.New("aprovação bloqueada")
+
+// resolveUser acha a conta do Authentik que o pedido deve pôr no grupo e
+// diz se ela já existia (linked). A ordem importa:
+//
+//  1. Uma conta com o atributo deste pedido é reaproveitada: uma aprovação
+//     anterior a criou e o processo caiu antes de concluir.
+//  2. Havendo uma conta com o e-mail do pedido, é ela, marcada a caixa "já
+//     tenho conta" ou não; criar outra com o mesmo e-mail duplicaria a
+//     pessoa na instância. Quem aprova vê na mensagem, desde o envio, que
+//     é isso que vai acontecer (ver emailAccountsNote).
+//  3. Mais de uma conta com o e-mail: não há como escolher com segurança.
+//  4. Nenhuma: cria a pedida, se a pessoa não disse que já tinha conta.
+func (s *signupService) resolveUser(ctx context.Context, req store.SignupRequest) (authentik.User, bool, error) {
+	ours := func(u authentik.User) bool {
+		return u.Attributes["ffcom_signup_request"] == req.ID
 	}
-	byUsername, err := s.cfg.Authentik.FindUser(ctx, "username", req.Username)
+	byEmail, err := s.cfg.Authentik.FindByEmail(ctx, req.Email)
 	if err != nil {
-		return authentik.User{}, err
+		return authentik.User{}, false, err
 	}
-	if ours(byUsername) {
-		return *byUsername, nil
+	for _, u := range byEmail {
+		if ours(u) {
+			return u, false, nil
+		}
+	}
+	switch {
+	case len(byEmail) > 1:
+		names := make([]string, 0, len(byEmail))
+		for _, u := range byEmail {
+			names = append(names, u.Username)
+		}
+		return authentik.User{}, false, fmt.Errorf("%w: o e-mail está em %d contas do Authentik (%s); ponha a certa em ffcom-users pela UI e reprove", errApprovalBlocked, len(byEmail), strings.Join(names, ", "))
+	case len(byEmail) == 1:
+		u := byEmail[0]
+		if u.IsServiceAccount() {
+			return authentik.User{}, false, fmt.Errorf("%w: o e-mail é da conta de serviço %s", errApprovalBlocked, u.Username)
+		}
+		if !u.IsActive {
+			return authentik.User{}, false, fmt.Errorf("%w: a conta %s está desativada no Authentik", errApprovalBlocked, u.Username)
+		}
+		return u, true, nil
+	case req.ExistingAccount:
+		return authentik.User{}, false, fmt.Errorf("%w: nenhuma conta do Authentik usa este e-mail", errApprovalBlocked)
+	}
+
+	byUsername, err := s.cfg.Authentik.FindUsername(ctx, req.Username)
+	if err != nil {
+		return authentik.User{}, false, err
+	}
+	if byUsername != nil && ours(*byUsername) {
+		return *byUsername, false, nil
 	}
 	if byUsername != nil {
-		return authentik.User{}, fmt.Errorf("%w: nome de usuário %s já existe no Authentik", authentik.ErrUserExists, req.Username)
+		return authentik.User{}, false, fmt.Errorf("%w: nome de usuário %s já existe no Authentik", authentik.ErrUserExists, byUsername.Username)
 	}
-	byEmail, err := s.cfg.Authentik.FindUser(ctx, "email", req.Email)
-	if err != nil {
-		return authentik.User{}, err
-	}
-	if byEmail != nil {
-		return authentik.User{}, fmt.Errorf("%w: o e-mail já é do usuário %s no Authentik", authentik.ErrUserExists, byEmail.Username)
-	}
-	return s.cfg.Authentik.CreateUser(ctx, authentik.NewUser{
+	user, err := s.cfg.Authentik.CreateUser(ctx, authentik.NewUser{
 		Username: req.Username,
 		// O nome do Authentik é o que o FFCom exibe em todo lugar (servidores,
 		// amigos, ideias), então vai o apelido; o nome completo fica nos
@@ -436,6 +640,7 @@ func (s *signupService) createUser(ctx context.Context, req store.SignupRequest)
 			"ffcom_full_name":      req.FullName,
 		},
 	})
+	return user, false, err
 }
 
 func (s *signupService) addToGroup(ctx context.Context, userPK int64) error {
@@ -449,9 +654,11 @@ func (s *signupService) addToGroup(ctx context.Context, userPK int64) error {
 // approvalFailure resume o erro da aprovação para o Telegram (o aviso do
 // clique aceita até 200 caracteres).
 func approvalFailure(err error) string {
-	if errors.Is(err, authentik.ErrUserExists) {
-		msg := strings.TrimPrefix(err.Error(), authentik.ErrUserExists.Error()+": ")
-		return truncateRunes(msg, 150)
+	for _, known := range []error{authentik.ErrUserExists, errApprovalBlocked} {
+		if errors.Is(err, known) {
+			msg := strings.TrimPrefix(err.Error(), known.Error()+": ")
+			return truncateRunes(msg, 150)
+		}
 	}
 	return "falha ao falar com o Authentik; tente de novo em instantes"
 }

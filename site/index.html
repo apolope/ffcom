@@ -262,6 +262,7 @@
             <p><a class="link-seta" href="#hospedar">Como hospedar o seu</a></p>
           </div>
           <p class="participar-passos">Depois da aprovação, chega um e-mail para você escolher a senha. Se o pedido não for aprovado, nenhum e-mail é enviado.</p>
+          <p class="participar-passos">Já tem conta em outro serviço da infra A3S? Marque a opção no formulário: aprovado o pedido, você entra no FFCom com o mesmo usuário e senha, sem e-mail novo.</p>
         </div>
         <form class="composer cadastro" id="cadastro" novalidate>
           <noscript><p>Ative o JavaScript para pedir sua conta.</p></noscript>
@@ -269,17 +270,23 @@
             <span class="composer-rot">Nome completo</span>
             <input name="fullName" autocomplete="name" required minlength="2" maxlength="80">
           </label>
-          <label class="campo">
+          <label class="campo-check">
+            <input type="checkbox" name="existingAccount" aria-describedby="cadastro-conta-dica">
+            <span>Já tenho conta na infra A3S</span>
+          </label>
+          <small class="campo-check-dica" id="cadastro-conta-dica">Marque se você já entra em outro serviço da A3S. Aí não precisa escolher usuário nem apelido: a sua conta só ganha acesso ao FFCom.</small>
+          <label class="campo" data-conta-nova>
             <span class="composer-rot">Nome de usuário</span>
             <input name="username" autocomplete="username" required minlength="3" maxlength="30" pattern="[a-z0-9][a-z0-9._\-]{2,29}" autocapitalize="none" spellcheck="false" aria-describedby="cadastro-usuario-dica">
             <small id="cadastro-usuario-dica">Para entrar. Letras minúsculas sem acento, números, ponto, hífen ou sublinhado.</small>
+            <small class="campo-status" id="cadastro-usuario-status" aria-live="polite"></small>
           </label>
           <label class="campo">
             <span class="composer-rot">E-mail</span>
             <input name="email" type="email" autocomplete="email" required maxlength="254" aria-describedby="cadastro-email-dica">
-            <small id="cadastro-email-dica">O link para escolher a senha chega aqui.</small>
+            <small id="cadastro-email-dica" data-nova="O link para escolher a senha chega aqui." data-existente="O e-mail da sua conta na infra A3S.">O link para escolher a senha chega aqui.</small>
           </label>
-          <label class="campo">
+          <label class="campo" data-conta-nova>
             <span class="composer-rot">Apelido</span>
             <input name="nickname" autocomplete="nickname" required minlength="2" maxlength="32" aria-describedby="cadastro-apelido-dica">
             <small id="cadastro-apelido-dica">Como as pessoas vão ver você no FFCom.</small>

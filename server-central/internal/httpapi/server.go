@@ -72,6 +72,7 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, avatarFiles *storage.Av
 
 	// Público: quem pede cadastro ainda não tem conta.
 	mux.Handle("POST /api/signup-requests", handleCreateSignup(db, signupCfg))
+	mux.Handle("GET /api/signup-requests/username-available", handleUsernameAvailable(db, signupCfg))
 
 	limiter := newRateLimiter(rateLimitRPM, rateLimitBurst)
 	identify := func(r *http.Request) (*http.Request, string, string, bool) { return auth.IdentifyRequest(verifier, r) }

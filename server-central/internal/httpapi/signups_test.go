@@ -35,11 +35,23 @@ func TestSignupValidate(t *testing.T) {
 		{FullName: "Maria\nX", Username: "maria", Email: "m@x.com", Nickname: "Mari", Reason: "motivo suficiente"},
 		{FullName: "Maria", Username: "maria", Email: "m@x.com", Nickname: "M", Reason: "motivo suficiente"},
 		{FullName: "Maria", Username: "maria", Email: "m@x.com", Nickname: "Mari", Reason: "curto"},
+		{FullName: "Maria", Username: "admin", Email: "m@x.com", Nickname: "Mari", Reason: "motivo suficiente"},
+		{FullName: "Maria", Username: "Ad.Min", Email: "m@x.com", Nickname: "Mari", Reason: "motivo suficiente"},
+		{FullName: "Maria", Username: "ak_admin", Email: "m@x.com", Nickname: "Mari", Reason: "motivo suficiente"},
+		{FullName: "Maria", Email: "m@x.com", Reason: "motivo suficiente"},
 	}
 	for i, b := range bad {
 		if _, problem := b.validate(); problem == "" {
 			t.Errorf("caso %d deveria ser recusado: %+v", i, b)
 		}
+	}
+
+	// Quem já tem conta não informa usuário nem apelido; se vierem, são
+	// descartados.
+	existing := signupBody{FullName: "Maria", Username: "admin", Email: "m@x.com", Nickname: "x", Reason: "motivo suficiente", ExistingAccount: true}
+	n, problem = existing.validate()
+	if problem != "" || n.Username != "" || n.Nickname != "" || !n.ExistingAccount {
+		t.Fatalf("pedido de quem já tem conta: %q %+v", problem, n)
 	}
 }
 
@@ -108,10 +120,12 @@ func (f *fakeAuthentik) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/v3")
 	switch {
 	case r.Method == http.MethodGet && path == "/core/users/":
+		// Como a busca livre do Authentik: trecho, sem diferenciar
+		// maiúsculas, em nome de usuário, nome ou e-mail.
+		term := strings.ToLower(r.URL.Query().Get("search"))
 		var results []authentik.User
 		for _, u := range f.users {
-			if (r.URL.Query().Has("username") && u.Username == r.URL.Query().Get("username")) ||
-				(r.URL.Query().Has("email") && u.Email == r.URL.Query().Get("email")) {
+			if term != "" && (strings.Contains(strings.ToLower(u.Username), term) || strings.Contains(strings.ToLower(u.Email), term)) {
 				results = append(results, u)
 			}
 		}
@@ -126,7 +140,7 @@ func (f *fakeAuthentik) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Attributes map[string]any `json:"attributes"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		u := authentik.User{PK: int64(len(f.users) + 1), Username: body.Username, Email: body.Email, Attributes: body.Attributes}
+		u := authentik.User{PK: int64(len(f.users) + 1), Username: body.Username, Email: body.Email, IsActive: true, Type: "internal", Attributes: body.Attributes}
 		u.Attributes["name"] = body.Name
 		f.users = append(f.users, u)
 		w.WriteHeader(http.StatusCreated)
@@ -180,23 +194,35 @@ func TestSignupEndToEnd(t *testing.T) {
 	}
 	public := http.NewServeMux()
 	public.Handle("POST /api/signup-requests", handleCreateSignup(db, cfg))
+	public.Handle("GET /api/signup-requests/username-available", handleUsernameAvailable(db, cfg))
 	internal := NewInternalHandler(db, IdeasConfig{}, cfg)
 
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano()%1_000_000_000)
 	// IP único por execução, para o limite por IP não contar pedidos de
 	// execuções anteriores no mesmo banco.
 	ip := "a-" + suffix
-	signup := func(username, email, website string) *httptest.ResponseRecorder {
+	post := func(body map[string]any) *httptest.ResponseRecorder {
 		t.Helper()
-		raw, _ := json.Marshal(map[string]string{
-			"fullName": "Maria da Silva", "username": username, "email": email,
-			"nickname": "Mari", "reason": "Um amigo me chamou para o servidor", "website": website,
-		})
+		raw, _ := json.Marshal(body)
 		req := httptest.NewRequest(http.MethodPost, "/api/signup-requests", bytes.NewReader(raw))
 		req.Header.Set("X-Forwarded-For", ip)
 		rec := httptest.NewRecorder()
 		public.ServeHTTP(rec, req)
 		return rec
+	}
+	signup := func(username, email, website string) *httptest.ResponseRecorder {
+		t.Helper()
+		return post(map[string]any{
+			"fullName": "Maria da Silva", "username": username, "email": email,
+			"nickname": "Mari", "reason": "Um amigo me chamou para o servidor", "website": website,
+		})
+	}
+	signupExisting := func(email string) *httptest.ResponseRecorder {
+		t.Helper()
+		return post(map[string]any{
+			"fullName": "Bia Souza", "email": email, "existingAccount": true,
+			"reason": "Já uso outro serviço da infra e quero o FFCom",
+		})
 	}
 	decide := func(id, decision, secret string) (int, map[string]any) {
 		t.Helper()
@@ -328,29 +354,91 @@ func TestSignupEndToEnd(t *testing.T) {
 		t.Fatalf("pedido C: %+v %v", req, err)
 	}
 
-	// E-mail que já é de outra conta no Authentik (instância compartilhada):
-	// a aprovação para, o pedido volta a pendente e a mensagem mostra o
-	// motivo mantendo os botões.
+	// E-mail que já é de outra conta no Authentik (instância compartilhada),
+	// sem a pessoa marcar "já tenho conta": quem aprova é avisado desde o
+	// envio, e a aprovação põe essa conta no grupo em vez de criar a pedida,
+	// sem e-mail de senha (a conta já tem uma).
 	ip = "c-" + suffix
 	ak.failEmail = false
-	ak.users = append(ak.users, authentik.User{PK: 99, Username: "outro-projeto" + suffix, Email: "bia" + suffix + "@exemplo.com"})
+	ak.users = append(ak.users, authentik.User{PK: 99, Username: "Outro-Projeto" + suffix, Email: "Bia" + suffix + "@Exemplo.com", IsActive: true, Type: "internal"})
 	if rec := signup("bia"+suffix, "bia"+suffix+"@exemplo.com", ""); rec.Code != http.StatusCreated {
 		t.Fatalf("cadastro D: %d %s", rec.Code, rec.Body.String())
 	}
-	_, data = lastSent()
+	text, data = lastSent()
+	if !strings.Contains(text, "Outro-Projeto"+suffix) || !strings.Contains(text, "sem criar o usuário pedido") {
+		t.Fatalf("mensagem D não avisa da conta existente: %s", text)
+	}
 	idD := idFrom(data[0])
-	if _, out := decide(idD, "approve", "segredo"); out["ok"] != false || !strings.Contains(out["message"].(string), "outro-projeto") {
+	usersBefore, recoveryBefore := len(ak.users), len(ak.recovery)
+	if _, out := decide(idD, "approve", "segredo"); out["ok"] != true || !strings.Contains(out["message"].(string), "Outro-Projeto") {
 		t.Fatalf("aprovar com e-mail de outra conta: %v", out)
 	}
+	if len(ak.users) != usersBefore || !ak.members[99] || len(ak.recovery) != recoveryBefore {
+		t.Fatalf("vincular conta existente: %d usuários, grupo %v, %d e-mails", len(ak.users), ak.members, len(ak.recovery))
+	}
 	last := tg.edited[len(tg.edited)-1]
+	if last["reply_markup"] != nil || !strings.Contains(last["text"].(string), "Conta existente") {
+		t.Fatalf("mensagem de conta vinculada: %v", last)
+	}
+	if req, _ := db.Signups.Get(t.Context(), idD); req.Status != store.SignupApproved || !req.LinkedExisting || req.AuthentikUsername == nil || *req.AuthentikUsername != "Outro-Projeto"+suffix {
+		t.Fatalf("pedido D: %+v", req)
+	}
+
+	// Nome de usuário que só difere em maiúsculas de um que existe no
+	// Authentik também é recusado.
+	if rec := signup("outro-projeto"+suffix, "op"+suffix+"@exemplo.com", ""); rec.Code != http.StatusConflict {
+		t.Fatalf("usuário existente com outra caixa: %d %s", rec.Code, rec.Body.String())
+	}
+
+	// "Já tenho conta": sem usuário nem apelido; a aprovação só põe no grupo.
+	ip = "d-" + suffix
+	ak.users = append(ak.users, authentik.User{PK: 98, Username: "caio" + suffix, Email: "caio" + suffix + "@exemplo.com", IsActive: true, Type: "internal"})
+	if rec := signupExisting("caio" + suffix + "@exemplo.com"); rec.Code != http.StatusCreated {
+		t.Fatalf("pedido de quem tem conta: %d %s", rec.Code, rec.Body.String())
+	}
+	text, data = lastSent()
+	if !strings.Contains(text, "já tem conta") || !strings.Contains(text, "Conta existente: <code>caio"+suffix) || strings.Contains(text, "Usuário:") {
+		t.Fatalf("mensagem de quem tem conta: %s", text)
+	}
+	if _, out := decide(idFrom(data[0]), "approve", "segredo"); out["ok"] != true || !ak.members[98] {
+		t.Fatalf("aprovar quem tem conta: %v %v", out, ak.members)
+	}
+
+	// Diz ter conta, mas o e-mail não é de nenhuma: avisado no envio, e a
+	// aprovação para sem criar nada.
+	if rec := signupExisting("ninguem" + suffix + "@exemplo.com"); rec.Code != http.StatusCreated {
+		t.Fatalf("pedido sem conta: %d %s", rec.Code, rec.Body.String())
+	}
+	text, data = lastSent()
+	if !strings.Contains(text, "nenhuma conta do Authentik usa este e-mail") {
+		t.Fatalf("mensagem sem conta: %s", text)
+	}
+	usersBefore = len(ak.users)
+	idE := idFrom(data[0])
+	if _, out := decide(idE, "approve", "segredo"); out["ok"] != false || !strings.Contains(out["message"].(string), "nenhuma conta") || len(ak.users) != usersBefore {
+		t.Fatalf("aprovar sem conta: %v", out)
+	}
+	last = tg.edited[len(tg.edited)-1]
 	if last["reply_markup"] == nil || !strings.Contains(last["text"].(string), "Não aprovado") {
 		t.Fatalf("mensagem de falha: %v", last)
 	}
-	if req, _ := db.Signups.Get(t.Context(), idD); req.Status != store.SignupPending {
-		t.Fatalf("pedido D deveria voltar a pendente: %s", req.Status)
+	if req, _ := db.Signups.Get(t.Context(), idE); req.Status != store.SignupPending {
+		t.Fatalf("pedido E deveria voltar a pendente: %s", req.Status)
 	}
-	if _, out := decide(idD, "reject", "segredo"); out["ok"] != true {
+	if _, out := decide(idE, "reject", "segredo"); out["ok"] != true {
 		t.Fatalf("reprovar depois da falha: %v", out)
+	}
+
+	// E-mail em duas contas: não dá para escolher, a aprovação para.
+	ak.users = append(ak.users,
+		authentik.User{PK: 96, Username: "dup1" + suffix, Email: "dup" + suffix + "@exemplo.com", IsActive: true, Type: "internal"},
+		authentik.User{PK: 97, Username: "dup2" + suffix, Email: "dup" + suffix + "@exemplo.com", IsActive: true, Type: "internal"})
+	if rec := signupExisting("dup" + suffix + "@exemplo.com"); rec.Code != http.StatusCreated {
+		t.Fatalf("pedido com e-mail duplicado: %d %s", rec.Code, rec.Body.String())
+	}
+	_, data = lastSent()
+	if _, out := decide(idFrom(data[0]), "approve", "segredo"); out["ok"] != false || !strings.Contains(out["message"].(string), "2 contas") || ak.members[96] || ak.members[97] {
+		t.Fatalf("aprovar com e-mail em duas contas: %v", out)
 	}
 
 	// Telegram fora do ar: o pedido fica gravado sem mensagem, para o
@@ -370,5 +458,36 @@ func TestSignupEndToEnd(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("pedido sem mensagem não aparece para o notificador")
+	}
+
+	// Disponibilidade, para o formulário avisar enquanto a pessoa digita.
+	available := func(username string) (bool, string) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/api/signup-requests/username-available?username="+username, nil)
+		req.Header.Set("X-Forwarded-For", "e-"+suffix)
+		rec := httptest.NewRecorder()
+		public.ServeHTTP(rec, req)
+		var out struct {
+			Available bool   `json:"available"`
+			Message   string `json:"message"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatalf("disponibilidade de %s: %d %s", username, rec.Code, rec.Body.String())
+		}
+		return out.Available, out.Message
+	}
+	for username, want := range map[string]string{
+		"livre" + suffix:                       "",
+		"Livre" + suffix:                       "",
+		"ad-min":                               "reservado",
+		"x":                                    "de 3 a 30",
+		"outro-projeto" + suffix:               "em uso",
+		"ana" + suffix:                         "em análise",
+		strings.ToUpper(userA[:1]) + userA[1:]: "aprovada",
+	} {
+		ok, message := available(username)
+		if ok != (want == "") || !strings.Contains(message, want) {
+			t.Errorf("disponibilidade de %s: %v %q, esperava %q", username, ok, message, want)
+		}
 	}
 }

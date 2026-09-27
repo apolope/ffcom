@@ -358,6 +358,14 @@ code {
 .campo input:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
 .campo textarea { min-height: 100px; }
 .campo small { display: block; margin-top: 6px; color: var(--muted); font-size: 0.85rem; }
+.campo-check { display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--text-h); cursor: pointer; }
+.campo-check input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+.campo-check input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.campo-check-dica { display: block; margin-top: -10px; color: var(--muted); font-size: 0.85rem; }
+.campo[hidden] { display: none; }
+.campo .campo-status:empty { display: none; }
+.campo .campo-status.ok { color: color-mix(in srgb, #2b8a3e 75%, var(--text-h)); }
+.campo .campo-status.erro { color: color-mix(in srgb, #da373c 80%, var(--text-h)); }
 .campo-isca { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
 .cadastro .composer-barra { margin-top: 0; }
 .cadastro .ideia-msg { margin: 0; }

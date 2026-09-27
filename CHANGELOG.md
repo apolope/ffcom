@@ -15,6 +15,15 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## site v0.5.0 · 2026-09-27
+- Quem já tem conta em outro serviço da infra A3S marca "Já tenho conta" no formulário e pede só o acesso, sem escolher usuário nem apelido; aprovado, entra no FFCom com o usuário e a senha de sempre.
+- O formulário avisa enquanto você digita se o nome de usuário já está em uso ou é reservado.
+
+## central v0.11.0 · 2026-09-27
+- Pedido de quem já tem conta no Authentik: a aprovação só dá acesso ao FFCom à conta existente, sem criar outra nem mandar e-mail de senha. A mensagem de aprovação avisa, desde o envio, quando o e-mail do pedido já é de alguma conta.
+- Nomes de usuário são conferidos sem diferenciar maiúsculas, e nomes como `admin`, `root` e `suporte` ficam reservados.
+- Nova rota pública `GET /api/signup-requests/username-available` para o formulário conferir o nome enquanto a pessoa digita.
+
 ## site v0.4.0 · 2026-09-27
 - Nova seção "Participe" para pedir conta na instância oficial: nome, usuário, e-mail, apelido e o motivo. Antes e depois do envio, a página avisa que sem um server-channel próprio ou um convite só dá para usar as mensagens diretas.
 - O FFCom agora é publicado sob a licença AGPL-3.0, com link para ela no rodapé e na seção "Onde estamos".

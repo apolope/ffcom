@@ -45,7 +45,26 @@ type User struct {
 	PK         int64          `json:"pk"`
 	Username   string         `json:"username"`
 	Email      string         `json:"email"`
+	IsActive   bool           `json:"is_active"`
+	Type       string         `json:"type"`
+	Groups     []string       `json:"groups"`
 	Attributes map[string]any `json:"attributes"`
+}
+
+// IsServiceAccount diz se a conta é de serviço (token de API, outpost),
+// que não é de pessoa e não deve ganhar acesso ao FFCom.
+func (u User) IsServiceAccount() bool {
+	return u.Type == "service_account" || u.Type == "internal_service_account"
+}
+
+// InGroup diz se o usuário já está no grupo groupUUID.
+func (u User) InGroup(groupUUID string) bool {
+	for _, g := range u.Groups {
+		if g == groupUUID {
+			return true
+		}
+	}
+	return false
 }
 
 // NewUser são os dados de um usuário a criar.
@@ -58,24 +77,53 @@ type NewUser struct {
 	Attributes map[string]any
 }
 
-// FindUser procura um usuário pelo campo field ("username" ou "email").
-// Devolve nil sem erro se não houver.
-func (c *Client) FindUser(ctx context.Context, field, value string) (*User, error) {
-	var page struct {
-		Results []User `json:"results"`
-	}
-	q := url.Values{field: {value}}
-	if err := c.do(ctx, http.MethodGet, "/core/users/?"+q.Encode(), nil, &page); err != nil {
+// FindUsername procura o usuário com o nome de usuário username sem
+// diferenciar maiúsculas. O Authentik só barra nome repetido idêntico
+// (unicidade do Django), então uma conta "Joao" criada pela UI conviveria
+// com um "joao" novo, e as duas se confundiriam no FFCom. Devolve nil sem
+// erro se não houver.
+func (c *Client) FindUsername(ctx context.Context, username string) (*User, error) {
+	users, err := c.search(ctx, username)
+	if err != nil {
 		return nil, err
 	}
-	for _, u := range page.Results {
-		// O filtro do Authentik é exato, mas e-mail não é único lá; confere
-		// sem diferenciar maiúsculas para não criar duplicado.
-		if (field == "username" && u.Username == value) || (field == "email" && strings.EqualFold(u.Email, value)) {
+	for _, u := range users {
+		if strings.EqualFold(u.Username, username) {
 			return &u, nil
 		}
 	}
 	return nil, nil
+}
+
+// FindByEmail devolve todos os usuários com o e-mail email, sem
+// diferenciar maiúsculas. No Authentik o e-mail não é único: a mesma pessoa
+// pode ter mais de uma conta.
+func (c *Client) FindByEmail(ctx context.Context, email string) ([]User, error) {
+	users, err := c.search(ctx, email)
+	if err != nil {
+		return nil, err
+	}
+	var out []User
+	for _, u := range users {
+		if strings.EqualFold(u.Email, email) {
+			out = append(out, u)
+		}
+	}
+	return out, nil
+}
+
+// search usa a busca livre da lista de usuários, que ignora maiúsculas
+// (os filtros por campo, como ?username=, são exatos). Ela também casa
+// trechos de nome e atributos, então quem chama filtra o resultado.
+func (c *Client) search(ctx context.Context, term string) ([]User, error) {
+	var page struct {
+		Results []User `json:"results"`
+	}
+	q := url.Values{"search": {term}, "page_size": {"100"}}
+	if err := c.do(ctx, http.MethodGet, "/core/users/?"+q.Encode(), nil, &page); err != nil {
+		return nil, err
+	}
+	return page.Results, nil
 }
 
 // GroupUUID devolve o id do grupo name.

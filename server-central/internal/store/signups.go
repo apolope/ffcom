@@ -27,12 +27,19 @@ const signupApprovalStale = 5 * time.Minute
 
 // SignupRequest é um pedido de cadastro feito pela home page.
 type SignupRequest struct {
-	ID                string
-	FullName          string
-	Username          string
-	Email             string
-	Nickname          string
-	Reason            string
+	ID       string
+	FullName string
+	// Username e Nickname ficam vazios quando ExistingAccount: a pessoa já
+	// tem conta no Authentik e a aprovação só a põe no grupo.
+	Username        string
+	Email           string
+	Nickname        string
+	Reason          string
+	ExistingAccount bool
+	// EmailAccounts são as contas do Authentik com o e-mail do pedido,
+	// conferidas no envio (ver migration 0012); nil se não deu para
+	// conferir.
+	EmailAccounts     *string
 	Status            string
 	ClientIP          string
 	TelegramMessageID *int64
@@ -40,32 +47,39 @@ type SignupRequest struct {
 	DecidedAt         *time.Time
 	Failure           *string
 	AuthentikUserPK   *int64
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	AuthentikUsername *string
+	// LinkedExisting diz que a aprovação usou uma conta que já existia.
+	LinkedExisting bool
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 // NewSignup são os campos que a pessoa preenche no formulário, já
 // validados e normalizados pelo handler.
 type NewSignup struct {
-	FullName string
-	Username string
-	Email    string
-	Nickname string
-	Reason   string
-	ClientIP string
+	FullName        string
+	Username        string
+	Email           string
+	Nickname        string
+	Reason          string
+	ExistingAccount bool
+	EmailAccounts   *string
+	ClientIP        string
 }
 
 type SignupStore struct {
 	pool *pgxpool.Pool
 }
 
-const signupColumns = `id, full_name, username, email, nickname, reason, status, client_ip,
-	telegram_message_id, decided_by, decided_at, failure, authentik_user_pk, created_at, updated_at`
+const signupColumns = `id, full_name, coalesce(username, ''), email, coalesce(nickname, ''), reason,
+	existing_account, email_accounts, status, client_ip, telegram_message_id, decided_by, decided_at,
+	failure, authentik_user_pk, authentik_username, linked_existing, created_at, updated_at`
 
 func scanSignup(row pgx.Row) (SignupRequest, error) {
 	var s SignupRequest
-	err := row.Scan(&s.ID, &s.FullName, &s.Username, &s.Email, &s.Nickname, &s.Reason, &s.Status, &s.ClientIP,
-		&s.TelegramMessageID, &s.DecidedBy, &s.DecidedAt, &s.Failure, &s.AuthentikUserPK, &s.CreatedAt, &s.UpdatedAt)
+	err := row.Scan(&s.ID, &s.FullName, &s.Username, &s.Email, &s.Nickname, &s.Reason,
+		&s.ExistingAccount, &s.EmailAccounts, &s.Status, &s.ClientIP, &s.TelegramMessageID, &s.DecidedBy, &s.DecidedAt,
+		&s.Failure, &s.AuthentikUserPK, &s.AuthentikUsername, &s.LinkedExisting, &s.CreatedAt, &s.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SignupRequest{}, ErrNotFound
 	}
@@ -76,10 +90,11 @@ func scanSignup(row pgx.Row) (SignupRequest, error) {
 // aberto com o mesmo e-mail ou nome de usuário.
 func (s *SignupStore) Create(ctx context.Context, n NewSignup) (SignupRequest, error) {
 	query := `
-		INSERT INTO signup_requests (full_name, username, email, nickname, reason, client_ip)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO signup_requests (full_name, username, email, nickname, reason, existing_account, email_accounts, client_ip)
+		VALUES ($1, NULLIF($2, ''), $3, NULLIF($4, ''), $5, $6, $7, $8)
 		RETURNING ` + signupColumns
-	req, err := scanSignup(s.pool.QueryRow(ctx, query, n.FullName, n.Username, n.Email, n.Nickname, n.Reason, n.ClientIP))
+	req, err := scanSignup(s.pool.QueryRow(ctx, query, n.FullName, n.Username, n.Email, n.Nickname, n.Reason,
+		n.ExistingAccount, n.EmailAccounts, n.ClientIP))
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 		return SignupRequest{}, ErrConflict
@@ -101,7 +116,8 @@ func (s *SignupStore) Get(ctx context.Context, id string) (SignupRequest, error)
 
 // OpenOrApprovedFor devolve o pedido em aberto ou aprovado mais recente com
 // o e-mail ou o nome de usuário informados (ErrNotFound se não houver).
-// Reprovados não contam: a pessoa pode pedir de novo.
+// Reprovados não contam: a pessoa pode pedir de novo. username vazio (quem
+// já tem conta) só confere o e-mail.
 func (s *SignupStore) OpenOrApprovedFor(ctx context.Context, email, username string) (SignupRequest, error) {
 	query := `SELECT ` + signupColumns + ` FROM signup_requests
 		WHERE (email = $1 OR username = $2) AND status <> 'rejected'
@@ -188,16 +204,18 @@ func (s *SignupStore) ReleaseApproval(ctx context.Context, id, failure string) e
 	return nil
 }
 
-// FinishApproval marca o pedido como aprovado, com o usuário criado no
-// Authentik. warning guarda o que não saiu como esperado sem desfazer a
-// aprovação (ex. o e-mail de senha falhou), ou nil.
-func (s *SignupStore) FinishApproval(ctx context.Context, id string, authentikUserPK int64, warning *string) (SignupRequest, error) {
+// FinishApproval marca o pedido como aprovado, com o usuário do Authentik
+// criado ou, se linkedExisting, o que já existia e só entrou no grupo.
+// warning guarda o que não saiu como esperado sem desfazer a aprovação (ex.
+// o e-mail de senha falhou), ou nil.
+func (s *SignupStore) FinishApproval(ctx context.Context, id string, authentikUserPK int64, authentikUsername string, linkedExisting bool, warning *string) (SignupRequest, error) {
 	query := `
 		UPDATE signup_requests
-		SET status = 'approved', authentik_user_pk = $2, failure = $3, decided_at = now(), updated_at = now()
+		SET status = 'approved', authentik_user_pk = $2, authentik_username = $3, linked_existing = $4,
+			failure = $5, decided_at = now(), updated_at = now()
 		WHERE id = $1 AND status = 'approving'
 		RETURNING ` + signupColumns
-	req, err := scanSignup(s.pool.QueryRow(ctx, query, id, authentikUserPK, warning))
+	req, err := scanSignup(s.pool.QueryRow(ctx, query, id, authentikUserPK, authentikUsername, linkedExisting, warning))
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return SignupRequest{}, fmt.Errorf("signups: concluir aprovação: %w", err)
 	}
