@@ -21,8 +21,9 @@ import (
 // chamar esta instância de uma origem diferente.
 //
 // ideasCfg configura as sugestões de melhoria da home (ver
-// internal/httpapi/ideas.go).
-func NewRouter(verifier *auth.Verifier, db *store.Store, avatarFiles *storage.AvatarStore, avatarMaxBytes int64, allowedOrigins []string, version string, rateLimitRPM, rateLimitBurst int, requireTLS bool, ideasCfg IdeasConfig) http.Handler {
+// internal/httpapi/ideas.go) e signupCfg os pedidos de cadastro (ver
+// internal/httpapi/signups.go).
+func NewRouter(verifier *auth.Verifier, db *store.Store, avatarFiles *storage.AvatarStore, avatarMaxBytes int64, allowedOrigins []string, version string, rateLimitRPM, rateLimitBurst int, requireTLS bool, ideasCfg IdeasConfig, signupCfg SignupConfig) http.Handler {
 	mux := http.NewServeMux()
 	hub := realtime.NewHub()
 
@@ -68,6 +69,9 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, avatarFiles *storage.Av
 	mux.Handle("PUT /api/ideas/{id}/vote", protected(handleVoteIdea(db, ideasCfg)))
 	mux.Handle("PATCH /api/ideas/{id}", protected(handleModerateIdea(db, ideasCfg)))
 	mux.Handle("DELETE /api/ideas/{id}", protected(handleDeleteIdea(db, ideasCfg)))
+
+	// Público: quem pede cadastro ainda não tem conta.
+	mux.Handle("POST /api/signup-requests", handleCreateSignup(db, signupCfg))
 
 	limiter := newRateLimiter(rateLimitRPM, rateLimitBurst)
 	identify := func(r *http.Request) (*http.Request, string, string, bool) { return auth.IdentifyRequest(verifier, r) }

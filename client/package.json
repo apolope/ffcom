@@ -6,6 +6,7 @@
   "type": "module",
   "main": "dist-electron/main.js",
   "author": "Apolonio Serafim",
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "dev": "vite",
     "dev:electron": "vite --mode electron",

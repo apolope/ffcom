@@ -10,6 +10,7 @@
 //	ffcom-runtime [run]
 //	ffcom-runtime install-seed -version X.Y.Z|X.Y|latest [-platform linux/amd64] [-dest /opt/ffcom/seed]
 //	ffcom-runtime --version
+//	ffcom-runtime --licenses
 //
 // A versão deste binário (-ldflags "-X main.version=1.0.0") é a do contrato
 // do container (runtime), não a do serviço: é ela que se compara com o
@@ -59,6 +60,13 @@ var version = "dev"
 //go:embed release.pub
 var embeddedPubKey []byte
 
+// thirdPartyNotices são as licenças dos módulos de terceiros que entram
+// neste binário (só a stdlib do Go), impressas por --licenses. Gerado por
+// scripts/go-third-party-notices.sh; o CI recusa o arquivo desatualizado.
+//
+//go:embed THIRD_PARTY_NOTICES.txt
+var thirdPartyNotices string
+
 // devRuntimeVersion é a versão de runtime assumida pelo build "dev" com
 // FFCOM_RUNTIME_DEV=1.
 const devRuntimeVersion = "999.0.0"
@@ -67,6 +75,7 @@ const usage = `uso:
   ffcom-runtime [run]
   ffcom-runtime install-seed -version X.Y.Z|X.Y|latest [-platform os/arch] [-dest /opt/ffcom/seed]
   ffcom-runtime --version
+  ffcom-runtime --licenses
 `
 
 func main() {
@@ -83,6 +92,9 @@ func realMain(args []string, stdout, stderr io.Writer) int {
 	switch cmd {
 	case "--version", "-version":
 		fmt.Fprintln(stdout, version)
+		return 0
+	case "--licenses", "-licenses":
+		fmt.Fprint(stdout, thirdPartyNotices)
 		return 0
 	case "-h", "--help", "help":
 		fmt.Fprint(stdout, usage)

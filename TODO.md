@@ -34,7 +34,8 @@ Todas as decisões abaixo foram tomadas — ver `docs/architecture.md` para o de
 - [x] FFCom cadastrado como consumidor em `a3s-network/docs/services/a3s-claude-relay.md` (commit `2e416bd` no a3s-network, 2026-09-26). O relay aceita uma chave só, compartilhada com o `a3s-network-monitor`: trocar a `CLAUDE_RELAY_API_KEY` exige trocar nos dois
 - [x] Sugestões testadas em produção pelo Apolonio (2026-09-26): login com a aba de moderação (claim `groups` num token real), varinha, envio e votos funcionando; logs sem falha, relay respondendo em ~4 s por pedido. Não exercitados ainda com gente de verdade: o descarte de ideia ofensiva na varinha e a fila de moderação
 - [ ] Ícone do app desktop (Electron/`electron-builder`) com a marca nova; hoje o empacotamento sai sem ícone customizado
-- [ ] Escolher e adicionar uma licença (`LICENSE`): o repositório é público, mas sem licença ninguém tem permissão legal de usar, modificar ou redistribuir o código, o que contradiz o convite da home para hospedar o próprio servidor
+- [x] Licença: `AGPL-3.0-or-later` em `LICENSE` (texto oficial de gnu.org), citada no README, no `CONTRIBUTING.md` (contribuição sob a mesma licença, sem CLA), no `client/package.json` e na home (seção "Onde estamos" e rodapé). Ver `docs/architecture.md`, "Decisão: licença AGPL-3.0"
+- [x] Avisos de licença de terceiros nos artefatos distribuídos: `THIRD_PARTY_NOTICES.txt` embutido nos binários Go (`--licenses`, gerado por `scripts/go-third-party-notices.sh`, conferido no CI) e `third-party-licenses.txt` gerado no build do client, com links no menu do avatar. Verificado com `go vet`/`go test`/`--licenses`, `npm run build`/`lint` e o nginx do client servindo o arquivo em UTF-8; o menu em si não foi aberto num browser logado
 
 ## Primeira implantação de teste (infra `a3s-network`, `SVRUBS24IPS0101`)
 
@@ -84,6 +85,8 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [x] Grupo do FFCom no Authentik: `ffcom-users` + `PolicyBinding` na Application `ffcom` (`abs-3d-printer` commit `a38392f`), só membros do grupo logam no FFCom. O grupo foi criado antes do binding já com todas as contas que tinham login (`apolonio.serafim`, `jorgebigj`, `ivaldoneto19`, `teste-ffcom01`, `teste-ffcom02`; `akadmin` de fora de propósito). Novos membros entram pela UI do Authentik. Ver "Decisão: acesso ao FFCom restrito ao grupo `ffcom-users` do Authentik"
 - [ ] Adicionar `app://ffcom` a `CORS_ALLOWED_ORIGINS` nos `.env` reais de `server-central`/`server-channel` (`/opt/ffcom/envs/`, fora do git) quando o build Electron empacotado for distribuído de verdade — sem isso, o app desktop instalado não consegue chamar as APIs (ver `docs/architecture.md`, "Decisão: callback OIDC no Electron empacotado")
 - [x] Cadastro/login de conta via Authentik
+- [x] Pedido de cadastro pela home com aprovação no Telegram: `POST /api/signup-requests` (público), mensagem com botões no tópico do FFCom no grupo "Rede", decisão repassada pelo `a3s-network-monitor` ao listener interno, usuário criado no Authentik com o apelido como nome, no grupo `ffcom-users`, e e-mail de definir senha. Ver "Decisão: cadastro com aprovação pelo Telegram"
+- [ ] Ligar o cadastro em produção: conta de serviço + token no Authentik, uuid do stage de e-mail de recuperação, tópico "FFCom" no grupo, variáveis `TELEGRAM_*`/`AUTHENTIK_*`/`SIGNUP_*` em `/opt/ffcom/envs/ffcom-central.env` e o repasse de `ffcom-signup:` no `a3s-network-monitor` (prompt em `docs/prompts/monitor-cadastro-ffcom.md`)
 - [x] Endpoint/gateway de presença (quem está online)
 - [x] Status de presença escolhido (online, ocupado, ausente, invisível) com ausente automático após 10 min ocioso: `accounts.presence_status` (migration `0005`), `PUT /api/me/status`, frame `presence.idle`, `status` no `presence.update`; e `POST /api/accounts/lookup` para ligar membros de `server-channel` à conta pelo `oidcSubject`. Ver "Decisão: status de presença e avatar nas listas de membros"
 - [x] Implementar DMs: `server-central` como gateway de mensagens (armazenamento em Postgres + entrega via WebSocket)
@@ -122,7 +125,7 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
   - [x] Pacote ghcr.io/apolope/ffcom-channel público (`:1`, `:1.0.0` e `:latest` baixam sem login)
   - [ ] Ligar linux/arm64 no workflow da imagem depois de conferir o buildx do runner
   - [x] Primeira troca real na instância de teste: `channel-v0.7.1` aplicada por SIGHUP, `/healthz` em 0.7.1
-  - [ ] Publicar `client-v*` com a reconexão do WebSocket (commit 775baa0 ainda não está em nenhuma tag de client)
+  - [x] Publicar `client-v*` com a reconexão do WebSocket: o commit 775baa0 entrou em `client-v0.14.0`
 - [ ] Testar a permissão de convidar num browser real, depois do deploy de `channel-v*`/`client-v*`: `teste-ffcom02` sem bit não vê "Convidar"; ligar "Criar convites" na @everyone e conferir que ele gera convite, mas `GET`/`DELETE /api/invites` continuam `403` para ele; role antiga com só "Gerenciar convites" continua criando
 
 ## client

@@ -120,6 +120,18 @@ export function StatusMenu({ anchor, identity, chosen, onChoose, onEditAvatar, o
       >
         Alterar avatar
       </button>
+      <hr />
+      {/* Aviso de licença: o código é AGPL e o bundle leva código de
+          terceiros (arquivo gerado no build por
+          vite-plugin-third-party-licenses.ts). */}
+      <p className="status-menu-legal">
+        <a href="https://github.com/apolope/ffcom" target="_blank" rel="noreferrer">
+          Código-fonte (AGPL-3.0)
+        </a>
+        <a href={`${import.meta.env.BASE_URL}third-party-licenses.txt`} target="_blank" rel="noreferrer">
+          Licenças de terceiros
+        </a>
+      </p>
     </div>
   )
 }

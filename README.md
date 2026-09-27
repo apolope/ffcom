@@ -54,3 +54,7 @@ Alternativa self-hosted ao Discord: organização em servidores, categorias e ca
 ## Status
 
 Implantação de teste no ar desde 2026-09-21 (`app.ffcom.a3sitsolutions.com.br`, infra do `a3s-network`), com login OIDC, chat de texto, voz/vídeo, forum, roles/permissões, convites e DMs funcionando ponta a ponta. Restam principalmente testes com múltiplos usuários reais e a decisão do domínio de produção definitivo (`.com` vs `.com.br`) — ver `TODO.md` para o detalhe.
+
+## Licença
+
+O FFCom é distribuído sob a [GNU Affero General Public License v3.0](LICENSE) ou qualquer versão posterior (`AGPL-3.0-or-later`). Você pode usar, estudar, modificar e hospedar o código à vontade; se rodar uma versão **modificada** para outras pessoas usarem pela rede (um `server-channel` alterado, por exemplo), precisa oferecer a elas o código-fonte dessa versão. Hospedar o código como está publicado aqui não exige nada além de manter o aviso de licença.

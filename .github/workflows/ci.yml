@@ -20,6 +20,13 @@ jobs:
       - name: go test
         working-directory: server-central
         run: go test ./...
+      - name: licenças de terceiros atualizadas
+        run: |
+          bash scripts/go-third-party-notices.sh server-central .
+          git diff --exit-code -- 'server-central/**THIRD_PARTY_NOTICES.txt' || {
+            echo "::error::THIRD_PARTY_NOTICES.txt desatualizado; rode o scripts/go-third-party-notices.sh acima e faça commit do resultado"
+            exit 1
+          }
 
   test-channel:
     name: server-channel (vet + test)
@@ -35,6 +42,14 @@ jobs:
       - name: go test
         working-directory: server-channel
         run: go test ./...
+      - name: licenças de terceiros atualizadas
+        run: |
+          bash scripts/go-third-party-notices.sh server-channel .
+          bash scripts/go-third-party-notices.sh server-channel ./cmd/ffcom-runtime
+          git diff --exit-code -- 'server-channel/**THIRD_PARTY_NOTICES.txt' || {
+            echo "::error::THIRD_PARTY_NOTICES.txt desatualizado; rode o scripts/go-third-party-notices.sh acima e faça commit do resultado"
+            exit 1
+          }
 
   lint-build-client:
     name: client (lint + build)

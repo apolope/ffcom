@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	_ "embed"
+	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -10,10 +13,12 @@ import (
 	"time"
 
 	"a3sitsolutions.com/ffcom/server-central/internal/auth"
+	"a3sitsolutions.com/ffcom/server-central/internal/authentik"
 	"a3sitsolutions.com/ffcom/server-central/internal/httpapi"
 	"a3sitsolutions.com/ffcom/server-central/internal/relay"
 	"a3sitsolutions.com/ffcom/server-central/internal/storage"
 	"a3sitsolutions.com/ffcom/server-central/internal/store"
+	"a3sitsolutions.com/ffcom/server-central/internal/telegram"
 )
 
 // version é sobrescrito em tempo de build via ldflags (-X main.version=...,
@@ -21,7 +26,21 @@ import (
 // dos binários"). "dev" fora de um build versionado (ex. go run local).
 var version = "dev"
 
+// thirdPartyNotices são as licenças dos módulos de terceiros que entram
+// neste binário, impressas por --licenses. Gerado por
+// scripts/go-third-party-notices.sh; o CI recusa o arquivo desatualizado.
+//
+//go:embed THIRD_PARTY_NOTICES.txt
+var thirdPartyNotices string
+
 func main() {
+	showLicenses := flag.Bool("licenses", false, "imprime as licenças de terceiros e sai")
+	flag.Parse()
+	if *showLicenses {
+		fmt.Print(thirdPartyNotices)
+		return
+	}
+
 	databaseURL := requireEnv("DATABASE_URL")
 	issuerURL := requireEnv("OIDC_ISSUER_URL")
 	// A porta interna do container é sempre 8080 (ver Dockerfile e
@@ -64,26 +83,36 @@ func main() {
 	rateLimitBurst := envInt("RATE_LIMIT_BURST", 60)
 	requireTLS := envBool("REQUIRE_TLS", false)
 	ideasCfg := ideasConfigFromEnv()
-	router := httpapi.NewRouter(verifier, db, avatarFiles, avatarMaxBytes, parseAllowedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS")), version, rateLimitRPM, rateLimitBurst, requireTLS, ideasCfg)
+	signupCfg := signupConfigFromEnv()
+	router := httpapi.NewRouter(verifier, db, avatarFiles, avatarMaxBytes, parseAllowedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS")), version, rateLimitRPM, rateLimitBurst, requireTLS, ideasCfg, signupCfg)
 
-	// Varinha e checagem das sugestões da home via a3s-claude-relay: o relay
-	// devolve o resultado por webhook num listener interno próprio, numa
-	// porta que o proxy público não encaminha (ver docs/architecture.md,
-	// "Decisão: sugestões de melhoria com varinha do Claude").
-	if ideasCfg.Relay != nil {
-		callbackPort := os.Getenv("CLAUDE_CALLBACK_PORT")
-		if callbackPort == "" {
-			callbackPort = "8090"
+	// Listener interno, numa porta que o proxy público não encaminha: o
+	// a3s-claude-relay devolve por ali o resultado da varinha e da checagem
+	// das sugestões (ver docs/architecture.md, "Decisão: sugestões de
+	// melhoria com varinha do Claude"), e o a3s-network-monitor repassa os
+	// cliques de aprovar/reprovar cadastro (ver "Decisão: cadastro com
+	// aprovação pelo Telegram").
+	if ideasCfg.Relay != nil || signupCfg.Telegram != nil {
+		internalPort := os.Getenv("CLAUDE_CALLBACK_PORT")
+		if internalPort == "" {
+			internalPort = "8090"
 		}
 		go func() {
-			log.Printf("server-central: callback do relay ouvindo em :%s", callbackPort)
-			if err := http.ListenAndServe(":"+callbackPort, httpapi.NewCallbackHandler(db, ideasCfg)); err != nil {
-				log.Fatalf("server-central: callback do relay: %v", err)
+			log.Printf("server-central: listener interno ouvindo em :%s", internalPort)
+			if err := http.ListenAndServe(":"+internalPort, httpapi.NewInternalHandler(db, ideasCfg, signupCfg)); err != nil {
+				log.Fatalf("server-central: listener interno: %v", err)
 			}
 		}()
+	}
+	if ideasCfg.Relay != nil {
 		go httpapi.RunIdeasSweeper(ctx, db, ideasCfg, 30*time.Second)
 	} else {
 		log.Printf("server-central: CLAUDE_RELAY_URL vazio; varinha desligada e sugestões vão direto para moderação")
+	}
+	if signupCfg.Telegram != nil {
+		go httpapi.RunSignupNotifier(ctx, db, signupCfg, time.Minute)
+	} else {
+		log.Printf("server-central: TELEGRAM_BOT_TOKEN vazio; cadastro pela home desligado")
 	}
 
 	log.Printf("server-central: versão %s, ouvindo em :%s (OIDC issuer: %s)", version, port, issuerURL)
@@ -112,6 +141,38 @@ func ideasConfigFromEnv() httpapi.IdeasConfig {
 		cfg.CallbackSecret = requireEnv("CLAUDE_CALLBACK_SECRET")
 		cfg.CallbackBaseURL = requireEnv("CLAUDE_CALLBACK_BASE_URL")
 	}
+	return cfg
+}
+
+// signupConfigFromEnv lê a configuração dos pedidos de cadastro da home.
+// Sem TELEGRAM_BOT_TOKEN o cadastro fica desligado (a rota responde 503);
+// com ele, o chat, o token do Authentik, o stage do e-mail de senha e o
+// segredo das decisões são obrigatórios.
+func signupConfigFromEnv() httpapi.SignupConfig {
+	cfg := httpapi.SignupConfig{
+		UsersGroup:            os.Getenv("SIGNUP_USERS_GROUP"),
+		RecoveryTokenDuration: os.Getenv("SIGNUP_RECOVERY_TOKEN_DURATION"),
+		MaxPerIPPerDay:        envInt("SIGNUP_MAX_PER_IP_PER_DAY", 3),
+		MaxPerHour:            envInt("SIGNUP_MAX_PER_HOUR", 20),
+	}
+	if cfg.UsersGroup == "" {
+		cfg.UsersGroup = "ffcom-users"
+	}
+	if cfg.RecoveryTokenDuration == "" {
+		cfg.RecoveryTokenDuration = "days=3"
+	}
+	token := os.Getenv("TELEGRAM_BOT_TOKEN")
+	if token == "" {
+		return cfg
+	}
+	threadID, err := strconv.ParseInt(os.Getenv("TELEGRAM_THREAD_ID"), 10, 64)
+	if err != nil && os.Getenv("TELEGRAM_THREAD_ID") != "" {
+		log.Fatalf("server-central: TELEGRAM_THREAD_ID inválido")
+	}
+	cfg.Telegram = telegram.New(token, requireEnv("TELEGRAM_CHAT_ID"), threadID)
+	cfg.Authentik = authentik.New(requireEnv("AUTHENTIK_URL"), requireEnv("AUTHENTIK_API_TOKEN"))
+	cfg.RecoveryEmailStage = requireEnv("AUTHENTIK_RECOVERY_EMAIL_STAGE")
+	cfg.DecisionSecret = requireEnv("SIGNUP_DECISION_SECRET")
 	return cfg
 }
 

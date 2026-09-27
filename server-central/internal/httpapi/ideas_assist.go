@@ -388,12 +388,34 @@ func RunIdeasSweeper(ctx context.Context, db *store.Store, cfg IdeasConfig, inte
 	}
 }
 
-// NewCallbackHandler é o listener interno que recebe os resultados do
-// relay (POST /claude-callback?secret=...&job=...). Roda numa porta
-// separada, alcançável só pela rede Docker, nunca pelo proxy público.
+// NewCallbackHandler é o listener interno só com o callback do relay (ver
+// NewInternalHandler).
 func NewCallbackHandler(db *store.Store, cfg IdeasConfig) http.Handler {
-	a := &ideaAssistant{cfg: cfg, ideas: db.Ideas}
 	mux := http.NewServeMux()
+	registerClaudeCallback(mux, db, cfg)
+	return mux
+}
+
+// NewInternalHandler é o listener interno: roda numa porta separada,
+// alcançável só pela rede Docker, nunca pelo proxy público. Recebe os
+// resultados do a3s-claude-relay (com a varinha ligada) e as decisões dos
+// pedidos de cadastro repassadas pelo a3s-network-monitor (com o cadastro
+// ligado).
+func NewInternalHandler(db *store.Store, ideasCfg IdeasConfig, signupCfg SignupConfig) http.Handler {
+	mux := http.NewServeMux()
+	if ideasCfg.Relay != nil {
+		registerClaudeCallback(mux, db, ideasCfg)
+	}
+	if signupCfg.enabled() {
+		registerSignupDecision(mux, db, signupCfg)
+	}
+	return mux
+}
+
+// registerClaudeCallback monta a rota que recebe os resultados do relay
+// (POST /claude-callback?secret=...&job=...).
+func registerClaudeCallback(mux *http.ServeMux, db *store.Store, cfg IdeasConfig) {
+	a := &ideaAssistant{cfg: cfg, ideas: db.Ideas}
 	mux.HandleFunc("POST /claude-callback", func(w http.ResponseWriter, r *http.Request) {
 		secret := r.URL.Query().Get("secret")
 		if cfg.CallbackSecret == "" || subtle.ConstantTimeCompare([]byte(secret), []byte(cfg.CallbackSecret)) != 1 {
@@ -414,5 +436,4 @@ func NewCallbackHandler(db *store.Store, cfg IdeasConfig) http.Handler {
 		w.WriteHeader(http.StatusOK)
 		go a.handleCallback(context.Background(), jobID, cb)
 	})
-	return mux
 }

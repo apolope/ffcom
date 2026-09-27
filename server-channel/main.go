@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"flag"
 	"fmt"
 	"log"
@@ -26,6 +27,13 @@ import (
 // dos binários"). "dev" fora de um build versionado (ex. go run local).
 var version = "dev"
 
+// thirdPartyNotices são as licenças dos módulos de terceiros que entram
+// neste binário, impressas por --licenses. Gerado por
+// scripts/go-third-party-notices.sh; o CI recusa o arquivo desatualizado.
+//
+//go:embed THIRD_PARTY_NOTICES.txt
+var thirdPartyNotices string
+
 // shutdownTimeout é quanto o graceful shutdown espera as requisições REST
 // em andamento terminarem. Fica abaixo dos 30s que o lançador ffcom-runtime
 // espera depois do SIGTERM antes de matar o processo (ver
@@ -37,9 +45,14 @@ func main() {
 	// ambiente: o lançador usa para conferir o binário baixado antes de
 	// trocar de versão.
 	showVersion := flag.Bool("version", false, "imprime a versão e sai")
+	showLicenses := flag.Bool("licenses", false, "imprime as licenças de terceiros e sai")
 	flag.Parse()
 	if *showVersion {
 		fmt.Println(version)
+		return
+	}
+	if *showLicenses {
+		fmt.Print(thirdPartyNotices)
 		return
 	}
 

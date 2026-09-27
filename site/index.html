@@ -30,6 +30,7 @@
         <a href="#recursos">Recursos</a>
         <a href="#como-funciona">Como funciona</a>
         <a href="#hospedar">Hospedar</a>
+        <a href="#participar">Participar</a>
         <a href="#ideias">Ideias</a>
         <a href="#versoes">Versões</a>
       </nav>
@@ -244,10 +245,55 @@
     <section class="secao status">
       <div class="wrap">
         <h2>Onde estamos</h2>
-        <p>O FFCom está em testes com usuários reais na instância oficial, e o acesso ainda é por convite. O código é público no GitHub, e o que falta fazer está no <a href="https://github.com/apolope/ffcom/blob/main/TODO.md">TODO do projeto</a>. As decisões técnicas, com as alternativas consideradas e o motivo de cada escolha, ficam em <a href="https://github.com/apolope/ffcom/blob/main/docs/architecture.md">docs/architecture.md</a>.</p>
+        <p>O FFCom está em testes com usuários reais na instância oficial, e cada conta nova passa por aprovação: <a href="#participar">peça a sua aqui</a>. O código é público no GitHub, sob a licença <a href="https://github.com/apolope/ffcom/blob/main/LICENSE">AGPL-3.0</a>, e o que falta fazer está no <a href="https://github.com/apolope/ffcom/blob/main/TODO.md">TODO do projeto</a>. As decisões técnicas, com as alternativas consideradas e o motivo de cada escolha, ficam em <a href="https://github.com/apolope/ffcom/blob/main/docs/architecture.md">docs/architecture.md</a>.</p>
         <div class="acoes">
           <a class="btn" href="https://github.com/apolope/ffcom">Ver o código no GitHub</a>
         </div>
+      </div>
+    </section>
+    <section id="participar" class="secao" data-central="https://central.ffcom.a3sitsolutions.com.br">
+      <div class="wrap duas-col participar">
+        <div>
+          <h2>Participe</h2>
+          <p class="lead">Peça sua conta na instância oficial do FFCom. Cada pedido é lido por uma pessoa antes de ser aprovado.</p>
+          <div class="aviso-servidor" role="note">
+            <h3>Tenha um server-channel</h3>
+            <p>A conta sozinha dá acesso às <strong>mensagens diretas</strong> com amigos. Canais de texto, voz, vídeo e fórum vivem nos servidores de comunidade (<code>server-channel</code>): para usar o FFCom por inteiro, você precisa do seu próprio ou de um convite para o servidor de alguém.</p>
+            <p><a class="link-seta" href="#hospedar">Como hospedar o seu</a></p>
+          </div>
+          <p class="participar-passos">Depois da aprovação, chega um e-mail para você escolher a senha. Se o pedido não for aprovado, nenhum e-mail é enviado.</p>
+        </div>
+        <form class="composer cadastro" id="cadastro" novalidate>
+          <noscript><p>Ative o JavaScript para pedir sua conta.</p></noscript>
+          <label class="campo">
+            <span class="composer-rot">Nome completo</span>
+            <input name="fullName" autocomplete="name" required minlength="2" maxlength="80">
+          </label>
+          <label class="campo">
+            <span class="composer-rot">Nome de usuário</span>
+            <input name="username" autocomplete="username" required minlength="3" maxlength="30" pattern="[a-z0-9][a-z0-9._\-]{2,29}" autocapitalize="none" spellcheck="false" aria-describedby="cadastro-usuario-dica">
+            <small id="cadastro-usuario-dica">Para entrar. Letras minúsculas sem acento, números, ponto, hífen ou sublinhado.</small>
+          </label>
+          <label class="campo">
+            <span class="composer-rot">E-mail</span>
+            <input name="email" type="email" autocomplete="email" required maxlength="254" aria-describedby="cadastro-email-dica">
+            <small id="cadastro-email-dica">O link para escolher a senha chega aqui.</small>
+          </label>
+          <label class="campo">
+            <span class="composer-rot">Apelido</span>
+            <input name="nickname" autocomplete="nickname" required minlength="2" maxlength="32" aria-describedby="cadastro-apelido-dica">
+            <small id="cadastro-apelido-dica">Como as pessoas vão ver você no FFCom.</small>
+          </label>
+          <label class="campo">
+            <span class="composer-rot">Por que quer entrar?</span>
+            <textarea name="reason" required minlength="10" maxlength="500" rows="4" placeholder="Quem te indicou, qual comunidade você quer montar ou participar..."></textarea>
+          </label>
+          <label class="campo-isca" aria-hidden="true">Site <input name="website" tabindex="-1" autocomplete="off"></label>
+          <div class="composer-barra">
+            <button type="submit" class="btn">Pedir minha conta</button>
+          </div>
+          <div id="cadastro-msg" aria-live="polite"></div>
+        </form>
       </div>
     </section>
     <section id="ideias" class="secao secao-alt" data-central="https://central.ffcom.a3sitsolutions.com.br">
@@ -288,7 +334,9 @@
       <p class="ovo" title="gg">Em jogo online, <b>ff</b> é o voto para desistir da partida. Também conhecido como o dia em que a turma deu FF e foi montar a própria casa.</p>
       <p class="rodape-links">
         <a href="https://app.ffcom.a3sitsolutions.com.br/">Entrar</a>
+        <a href="#participar">Participar</a>
         <a href="https://github.com/apolope/ffcom">GitHub</a>
+        <a href="https://github.com/apolope/ffcom/blob/main/LICENSE">Licença</a>
         <a href="https://github.com/apolope/ffcom/blob/main/docs/architecture.md">Arquitetura</a>
         <a href="#ideias">Ideias</a>
         <a href="#versoes">Versões</a>
@@ -298,5 +346,6 @@
   <script src="/main.js" defer></script>
   <script src="/assets/vendor/oidc-client-ts.min.js" defer></script>
   <script src="/ideias.js" defer></script>
+  <script src="/cadastro.js" defer></script>
 </body>
 </html>

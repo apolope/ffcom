@@ -163,3 +163,23 @@ Ao fechar um item do `TODO.md`:
 Isso mantém `docs/architecture.md` como fonte viva em vez de exigir
 reconstruir contexto de conversas ou commits antigos a cada retomada do
 projeto.
+
+## Licença das contribuições
+
+O projeto é `AGPL-3.0-or-later` (ver [`LICENSE`](LICENSE)). Ao abrir um pull
+request, você concorda que a sua contribuição é licenciada nos mesmos termos.
+Não há CLA: ninguém, nem o mantenedor, recebe direito de relicenciar o seu
+código de outra forma.
+
+Os binários levam o aviso de licença das dependências de terceiros. Ao mudar
+dependências Go (`go.mod`), regenere e faça commit do `THIRD_PARTY_NOTICES.txt`
+(o CI recusa o arquivo desatualizado):
+
+```sh
+bash scripts/go-third-party-notices.sh server-central .
+bash scripts/go-third-party-notices.sh server-channel .
+bash scripts/go-third-party-notices.sh server-channel ./cmd/ffcom-runtime
+```
+
+No client não há o que fazer: o `third-party-licenses.txt` é gerado a cada
+build a partir do `package-lock.json`.

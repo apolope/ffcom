@@ -15,6 +15,14 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## site v0.4.0 · 2026-09-27
+- Nova seção "Participe" para pedir conta na instância oficial: nome, usuário, e-mail, apelido e o motivo. Antes e depois do envio, a página avisa que sem um server-channel próprio ou um convite só dá para usar as mensagens diretas.
+- O FFCom agora é publicado sob a licença AGPL-3.0, com link para ela no rodapé e na seção "Onde estamos".
+
+## central v0.10.0 · 2026-09-27
+- Pedidos de cadastro pela home: cada pedido chega ao grupo da equipe no Telegram com botões de aprovar e reprovar. Aprovado, a conta é criada já com acesso ao FFCom, o apelido escolhido vira o nome exibido, e chega um e-mail para escolher a senha.
+- O binário traz as licenças dos componentes de terceiros, que `--licenses` imprime.
+
 ## site v0.3.0 · 2026-09-27
 - Moderadores podem excluir ideias em qualquer aba, com confirmação no segundo clique, e devolver uma ideia implementada ao ranking.
 

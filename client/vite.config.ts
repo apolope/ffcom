@@ -2,11 +2,13 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import electron from 'vite-plugin-electron/simple'
 import { VitePWA } from 'vite-plugin-pwa'
+import { thirdPartyLicenses } from './vite-plugin-third-party-licenses.ts'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
+    thirdPartyLicenses(),
     mode === 'electron' &&
       electron({
         main: {
@@ -57,7 +59,10 @@ export default defineConfig(({ mode }) => ({
           // servir HTML do cache: precisam sempre bater no backend/estado
           // vivo. O WebSocket (chat, presença, voz) não passa pelo fetch
           // handler do service worker, então nem precisa de exclusão.
-          navigateFallbackDenylist: [/^\/api\//, /^\/auth\//],
+          // O aviso de licenças de terceiros (vite-plugin-third-party-licenses.ts)
+          // abre numa aba nova, que é uma navegação: sem a exclusão, o
+          // service worker responderia com a SPA em vez do arquivo.
+          navigateFallbackDenylist: [/^\/api\//, /^\/auth\//, /^\/third-party-licenses\.txt$/],
         },
     }),
   ],

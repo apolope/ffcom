@@ -338,6 +338,30 @@ code {
 .campo-mini { min-height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text-h); font: 0.85rem ui-monospace, Consolas, monospace; width: 150px; }
 .ideias-regras { margin-top: 28px; color: var(--muted); font-size: 0.88rem; max-width: 760px; }
 
+/* Participar (pedido de cadastro) */
+.participar { align-items: start; }
+.aviso-servidor {
+  margin: 24px 0; padding: 18px 20px; border-radius: 14px;
+  border: 1px solid var(--accent-fill); background: color-mix(in srgb, var(--accent-fill) 10%, var(--surface));
+}
+.aviso-servidor h3 { margin: 0 0 6px; font-size: 1.05rem; }
+.aviso-servidor p { margin: 0 0 8px; }
+.aviso-servidor p:last-child { margin: 0; }
+.participar-passos { color: var(--muted); font-size: 0.95rem; }
+.cadastro { margin-bottom: 0; display: grid; gap: 16px; }
+.campo { display: block; }
+.campo .composer-rot { margin-bottom: 6px; }
+.campo input {
+  width: 100%; min-height: 44px; font: inherit; color: var(--text-h); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 12px; padding: 8px 14px;
+}
+.campo input:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+.campo textarea { min-height: 100px; }
+.campo small { display: block; margin-top: 6px; color: var(--muted); font-size: 0.85rem; }
+.campo-isca { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.cadastro .composer-barra { margin-top: 0; }
+.cadastro .ideia-msg { margin: 0; }
+
 /* Histórico de versões */
 .versoes-atuais { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 28px; }
 .versao-atual {

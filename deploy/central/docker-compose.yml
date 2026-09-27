@@ -66,6 +66,22 @@ services:
       IDEAS_ADMIN_GROUP: ${IDEAS_ADMIN_GROUP:-}
       IDEAS_WAND_PER_DAY: ${IDEAS_WAND_PER_DAY:-}
       IDEAS_OFFENSIVE_PENALTY: ${IDEAS_OFFENSIVE_PENALTY:-}
+      # Pedidos de cadastro da home, aprovados pelo Telegram. Sem
+      # TELEGRAM_BOT_TOKEN o cadastro fica desligado. O a3s-network-monitor
+      # repassa os cliques ao listener interno (porta 8090, a mesma do
+      # callback do relay). Ver docs/architecture.md, "Decisão: cadastro com
+      # aprovação pelo Telegram".
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      TELEGRAM_THREAD_ID: ${TELEGRAM_THREAD_ID:-}
+      AUTHENTIK_URL: ${AUTHENTIK_URL:-}
+      AUTHENTIK_API_TOKEN: ${AUTHENTIK_API_TOKEN:-}
+      AUTHENTIK_RECOVERY_EMAIL_STAGE: ${AUTHENTIK_RECOVERY_EMAIL_STAGE:-}
+      SIGNUP_DECISION_SECRET: ${SIGNUP_DECISION_SECRET:-}
+      SIGNUP_USERS_GROUP: ${SIGNUP_USERS_GROUP:-}
+      SIGNUP_RECOVERY_TOKEN_DURATION: ${SIGNUP_RECOVERY_TOKEN_DURATION:-}
+      SIGNUP_MAX_PER_IP_PER_DAY: ${SIGNUP_MAX_PER_IP_PER_DAY:-}
+      SIGNUP_MAX_PER_HOUR: ${SIGNUP_MAX_PER_HOUR:-}
     volumes:
       - ffcom_central_avatars:/data/avatars
     networks:
