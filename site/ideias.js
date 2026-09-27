@@ -12,8 +12,23 @@
   const MAX = 1000;
   const MIN = 10;
 
+  const AUTHENTIK = 'https://authentik.abs.a3sitsolutions.com.br/application/o';
   const um = new window.oidc.UserManager({
-    authority: 'https://authentik.abs.a3sitsolutions.com.br/application/o/ffcom/',
+    authority: `${AUTHENTIK}/ffcom/`,
+    // Endpoints fixos em vez do documento de descoberta: o .well-known do
+    // Authentik não devolvia Access-Control-Allow-Origin para esta origem
+    // (só o endpoint de token), e o login quebrava antes do redirect. Com
+    // metadata o navegador não busca a descoberta; os valores são os do
+    // .well-known do provider ffcom e só mudam se o provider mudar de slug.
+    metadata: {
+      issuer: `${AUTHENTIK}/ffcom/`,
+      authorization_endpoint: `${AUTHENTIK}/authorize/`,
+      token_endpoint: `${AUTHENTIK}/token/`,
+      userinfo_endpoint: `${AUTHENTIK}/userinfo/`,
+      end_session_endpoint: `${AUTHENTIK}/ffcom/end-session/`,
+      jwks_uri: `${AUTHENTIK}/ffcom/jwks/`,
+      revocation_endpoint: `${AUTHENTIK}/revoke/`,
+    },
     client_id: 'ffcom',
     redirect_uri: `${location.origin}/`,
     post_logout_redirect_uri: `${location.origin}/`,
