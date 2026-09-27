@@ -15,6 +15,12 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## site v0.3.0 · 2026-09-27
+- Moderadores podem excluir ideias em qualquer aba, com confirmação no segundo clique, e devolver uma ideia implementada ao ranking.
+
+## central v0.9.0 · 2026-09-27
+- Moderadores podem excluir uma ideia de vez, com os votos. Diferente de recusar, a exclusão devolve ao autor a sugestão do dia, se a ideia for de hoje.
+
 ## site v0.2.2 · 2026-09-26
 - Quando o texto não é uma sugestão de melhoria, a varinha mostra o que falta sem trocar o texto, e um envio descartado volta para o campo com a explicação, para reescrever.
 

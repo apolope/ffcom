@@ -333,6 +333,8 @@ code {
 .admin-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
 .btn-mini { min-height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text-h); font: inherit; font-size: 0.85rem; cursor: pointer; }
 .btn-mini:hover { border-color: var(--accent-fill); }
+.btn-perigo { color: #da373c; border-color: color-mix(in srgb, #da373c 50%, var(--border)); }
+.btn-perigo:hover, .btn-perigo[data-armado] { background: #da373c; border-color: #da373c; color: #fff; }
 .campo-mini { min-height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text-h); font: 0.85rem ui-monospace, Consolas, monospace; width: 150px; }
 .ideias-regras { margin-top: 28px; color: var(--muted); font-size: 0.88rem; max-width: 760px; }
 

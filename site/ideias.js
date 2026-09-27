@@ -334,6 +334,19 @@
     }
   };
 
+  const excluir = async (ideia) => {
+    try {
+      await api(`/api/ideas/${ideia.id}`, { method: 'DELETE' });
+      estado.ideias = estado.ideias.filter((i) => i.id !== ideia.id);
+      estado.parecidas = estado.parecidas.filter((i) => i.id !== ideia.id);
+      el.aviso.textContent = '';
+      renderLista();
+      renderComposer();
+    } catch (e) {
+      el.aviso.textContent = e.message;
+    }
+  };
+
   const moderar = async (ideia, status, versao) => {
     try {
       await api(`/api/ideas/${ideia.id}`, { method: 'PATCH', body: { status, implementedVersion: versao } });
@@ -388,7 +401,26 @@
       const idCampo = `versao-${ideia.id}`;
       const campo = h('input', { id: idCampo, class: 'campo-mini', placeholder: 'client v0.15.0', 'aria-label': 'Versão em que foi implementada' });
       acoes.append(campo, botao('Implementada', 'implemented', () => campo.value.trim()), botao('Recusar', 'rejected'));
+    } else if (ideia.status === 'implemented') {
+      acoes.append(botao('Voltar ao ranking', 'open'));
     }
+    // Excluir em dois cliques: o primeiro só arma o botão.
+    const apagar = h('button', {
+      type: 'button',
+      class: 'btn-mini btn-perigo',
+      title: 'Apaga a ideia e os votos de vez. Diferente de Recusar, devolve ao autor a sugestão do dia.',
+      onclick: () => {
+        if (apagar.dataset.armado) return excluir(ideia);
+        apagar.dataset.armado = '1';
+        apagar.textContent = 'Confirmar exclusão';
+        setTimeout(() => {
+          if (!apagar.isConnected) return;
+          delete apagar.dataset.armado;
+          apagar.textContent = 'Excluir';
+        }, 5000);
+      },
+    }, 'Excluir');
+    acoes.append(apagar);
     return acoes;
   };
 
