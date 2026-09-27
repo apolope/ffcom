@@ -55,6 +55,7 @@
     parecidas: [],
     anterior: null, // texto antes da varinha, para desfazer
     mensagem: null, // { tipo: 'ok'|'erro'|'info', texto }
+    enviada: null, // { id, texto } da última sugestão enviada, até a checagem terminar
   };
 
   // ---------- utilidades
@@ -228,6 +229,9 @@
       if (r.status === 'failed') {
         estado.anterior = null;
         estado.mensagem = { tipo: 'info', texto: 'A varinha não conseguiu responder agora. Seu uso foi devolvido e o texto ficou como estava.' };
+      } else if (r.result.notSuggestion) {
+        estado.anterior = null;
+        estado.mensagem = { tipo: 'info', texto: `Isso ainda não parece uma sugestão de melhoria. ${r.result.hint}` };
       } else if (r.result.offensive) {
         estado.anterior = null;
         if (campo) campo.value = '';
@@ -263,7 +267,8 @@
     const campo = document.getElementById('ideia-texto');
     estado.mensagem = null;
     try {
-      await api('/api/ideas', { method: 'POST', body: { text: campo.value.trim() } });
+      const criada = await api('/api/ideas', { method: 'POST', body: { text: campo.value.trim() } });
+      estado.enviada = { id: criada.id, texto: campo.value };
       rascunho.limpar();
       estado.parecidas = [];
       estado.anterior = null;
@@ -283,8 +288,21 @@
       await espera(3000);
       if (document.hidden) continue;
       await carregarMe();
+      const descartada = estado.me?.lastDiscarded;
+      if (descartada && estado.enviada && descartada.id === estado.enviada.id) {
+        // Não era uma sugestão: o dia não foi gasto, o texto volta ao campo.
+        rascunho.gravar(estado.enviada.texto);
+        estado.enviada = null;
+        estado.mensagem = {
+          tipo: 'erro',
+          texto: `Não publicamos porque o texto não parece uma sugestão de melhoria. ${descartada.feedback ?? ''} Você pode reescrever e enviar de novo.`,
+        };
+        render();
+        return;
+      }
       const s = estado.me?.todayIdea?.status;
       if (s && s !== 'checking') {
+        estado.enviada = null;
         estado.mensagem = s === 'review'
           ? { tipo: 'info', texto: 'Sua sugestão vai passar por um moderador antes de aparecer na lista.' }
           : { tipo: 'ok', texto: 'Sua sugestão foi publicada. Agora é torcer pelos votos.' };
@@ -334,6 +352,7 @@
     planned: 'Planejada',
     implemented: 'Implementada',
     rejected: 'Recusada',
+    discarded: 'Descartada',
   };
   const MOTIVO = {
     conteudo_ofensivo: 'a verificação apontou conteúdo ofensivo',
@@ -537,7 +556,10 @@
       render();
       acompanharVarinha(estado.me.pendingAssist);
     }
-    if (estado.me?.todayIdea?.status === 'checking') acompanharEnvio();
+    if (estado.me?.todayIdea?.status === 'checking') {
+      estado.enviada = { id: estado.me.todayIdea.id, texto: estado.me.todayIdea.body };
+      acompanharEnvio();
+    }
   };
 
   iniciar().catch((e) => {

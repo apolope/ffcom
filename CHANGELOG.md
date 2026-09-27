@@ -15,6 +15,13 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## site v0.2.2 · 2026-09-26
+- Quando o texto não é uma sugestão de melhoria, a varinha mostra o que falta sem trocar o texto, e um envio descartado volta para o campo com a explicação, para reescrever.
+
+## central v0.8.0 · 2026-09-26
+- A varinha e a checagem final passam a conferir se o texto é mesmo uma sugestão de melhoria. Opinião genérica ("aplicativo ruim"), teste ou pergunta sem proposta não é publicada: a pessoa recebe uma dica do que faltou e pode reescrever, sem perder a sugestão do dia (até 3 descartes por dia).
+- Reclamação sobre um problema concreto (ex. áudio cortando) continua valendo e vira o pedido de resolvê-lo.
+
 ## site v0.2.1 · 2026-09-26
 - Corrige o botão "Entrar para sugerir", que não levava ao login: a página deixa de buscar a configuração do Authentik pelo navegador, que era bloqueada.
 
