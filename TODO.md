@@ -32,7 +32,7 @@ Todas as decisões abaixo foram tomadas — ver `docs/architecture.md` para o de
 - [x] Blueprint do Authentik aplicado (abs-3d-printer `b0650dc`, 2026-09-26): redirect URIs da home, scope `ffcom-groups` e grupo `ffcom-admins`, com apolonio.serafim no grupo. O `.well-known` do provider não devolve CORS para a origem da home (o endpoint de token devolve), então `site/ideias.js` usa os endpoints fixos em `metadata` em vez da descoberta
 - [x] `/opt/ffcom/envs/ffcom-central.env` com as variáveis do relay e a home em `CORS_ALLOWED_ORIGINS` (backup do anterior ao lado); `central-v0.7.0` e `site-v0.2.1` no ar, com relay, callback interno e CORS conferidos em produção
 - [x] FFCom cadastrado como consumidor em `a3s-network/docs/services/a3s-claude-relay.md` (commit `2e416bd` no a3s-network, 2026-09-26). O relay aceita uma chave só, compartilhada com o `a3s-network-monitor`: trocar a `CLAUDE_RELAY_API_KEY` exige trocar nos dois
-- [ ] Testar as sugestões ponta a ponta em produção com duas contas (varinha, ideia parecida, ofensiva, voto, moderação) depois de `central-v0.7.0` e `site-v0.2.0`
+- [x] Sugestões testadas em produção pelo Apolonio (2026-09-26): login com a aba de moderação (claim `groups` num token real), varinha, envio e votos funcionando; logs sem falha, relay respondendo em ~4 s por pedido. Não exercitados ainda com gente de verdade: o descarte de ideia ofensiva na varinha e a fila de moderação
 - [ ] Ícone do app desktop (Electron/`electron-builder`) com a marca nova; hoje o empacotamento sai sem ícone customizado
 - [ ] Escolher e adicionar uma licença (`LICENSE`): o repositório é público, mas sem licença ninguém tem permissão legal de usar, modificar ou redistribuir o código, o que contradiz o convite da home para hospedar o próprio servidor
 
