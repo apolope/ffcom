@@ -228,7 +228,7 @@ func TestIdeasEndToEnd(t *testing.T) {
 	if r := call(&alice, "POST", "/api/ideas/assist", map[string]string{"text": "outro texto qualquer aqui"}); r.Code != http.StatusConflict {
 		t.Fatalf("segundo pedido simultâneo: %d", r.Code)
 	}
-	relayResponde("success", `{"ofensiva": false, "titulo": "Tema escuro", "texto": "Adicionar um tema escuro ao app.", "parecidas": []}`)
+	relayResponde("success", `{"ofensiva": false, "sugestao": true, "titulo": "Tema escuro", "texto": "Adicionar um tema escuro ao app.", "parecidas": []}`)
 	esperaPedido(assist.ID)
 	decode(call(&alice, "GET", "/api/ideas/assist/"+assist.ID, nil), &assist)
 	if assist.Status != store.AssistDone || assist.Result == nil || assist.Result.Text != "Adicionar um tema escuro ao app." || assist.WandLeft != 2 {
@@ -294,7 +294,7 @@ func TestIdeasEndToEnd(t *testing.T) {
 	if prompt, _ := fake.last(); !strings.Contains(prompt, "Não reescreva") {
 		t.Fatal("checagem deveria usar o prompt de checagem")
 	}
-	relayResponde("success", `{"ofensiva": false, "titulo": "Reações com emoji", "texto": "Reações com emoji nas mensagens, por favor"}`)
+	relayResponde("success", `{"ofensiva": false, "sugestao": true, "titulo": "Reações com emoji", "texto": "Reações com emoji nas mensagens, por favor"}`)
 	if idea := esperaIdeia(bobIdea.ID); idea.Status != store.IdeaOpen || idea.Title != "Reações com emoji" || !strings.HasSuffix(idea.Body, "por favor") {
 		t.Fatalf("ideia depois da checagem: %+v", idea)
 	}
@@ -308,6 +308,53 @@ func TestIdeasEndToEnd(t *testing.T) {
 	// A checagem não gasta varinha.
 	if me.WandLeft != 3 {
 		t.Fatalf("checagem gastou varinha: %+v", me)
+	}
+
+	// --- Texto que não é sugestão: a varinha só devolve a dica, gastando o
+	// uso normal e sem penalidade.
+	daniel := newAccount("daniel", "Daniel Rocha")
+	decode(call(&daniel, "POST", "/api/ideas/assist", map[string]string{"text": "aplicativo muito ruim"}), &assist)
+	relayResponde("success", `{"ofensiva": false, "sugestao": false, "motivo": "Diga o que você gostaria que mudasse.", "titulo": "", "texto": "", "parecidas": []}`)
+	esperaPedido(assist.ID)
+	decode(call(&daniel, "GET", "/api/ideas/assist/"+assist.ID, nil), &assist)
+	if !assist.Result.NotSuggestion || assist.Result.Offensive || assist.Result.Hint != "Diga o que você gostaria que mudasse." || assist.WandLeft != 2 {
+		t.Fatalf("varinha com texto que não é sugestão: %+v", assist.Result)
+	}
+	if me = getMe(daniel); me.WandPenalty != 0 {
+		t.Fatalf("não-sugestão não deveria penalizar: %+v", me)
+	}
+
+	// --- No envio, é descartada, não gasta o dia e devolve a dica.
+	var danielIdea ideaResponse
+	decode(call(&daniel, "POST", "/api/ideas", map[string]string{"text": "aplicativo muito ruim"}), &danielIdea)
+	relayResponde("success", `{"ofensiva": false, "sugestao": false, "motivo": "Conte o que te incomoda para virar uma sugestão.", "titulo": "", "texto": ""}`)
+	if idea := esperaIdeia(danielIdea.ID); idea.Status != store.IdeaDiscarded || idea.Feedback == nil {
+		t.Fatalf("ideia que não é sugestão: %+v", idea)
+	}
+	me = getMe(daniel)
+	if me.SuggestedToday || me.LastDiscarded == nil || me.LastDiscarded.ID != danielIdea.ID ||
+		me.LastDiscarded.Feedback == nil || *me.LastDiscarded.Feedback != "Conte o que te incomoda para virar uma sugestão." || me.DiscardsLeft != 2 {
+		t.Fatalf("me depois do descarte: %+v", me)
+	}
+	var publicas []ideaResponse
+	decode(call(nil, "GET", "/api/ideas", nil), &publicas)
+	for _, i := range publicas {
+		if i.ID == danielIdea.ID {
+			t.Fatal("descartada não pode aparecer no ranking")
+		}
+	}
+	// Mais dois descartes esgotam a cota; o próximo envio é recusado.
+	for i := range 2 {
+		var d ideaResponse
+		decode(call(&daniel, "POST", "/api/ideas", map[string]string{"text": fmt.Sprintf("teste de texto %d", i)}), &d)
+		relayResponde("success", `{"ofensiva": false, "sugestao": false, "motivo": "", "titulo": "", "texto": ""}`)
+		esperaIdeia(d.ID)
+	}
+	if r := call(&daniel, "POST", "/api/ideas", map[string]string{"text": "agora uma sugestão de verdade"}); r.Code != http.StatusTooManyRequests {
+		t.Fatalf("depois de 3 descartes: %d", r.Code)
+	}
+	if me = getMe(daniel); me.DiscardsLeft != 0 || me.LastDiscarded == nil || me.LastDiscarded.Feedback == nil || *me.LastDiscarded.Feedback != defaultHint {
+		t.Fatalf("cota de descartes: %+v", me)
 	}
 
 	// --- Sugestão ofensiva na checagem final: vai para moderação.
@@ -423,7 +470,7 @@ func TestIdeasEndToEnd(t *testing.T) {
 	if number == 0 {
 		t.Fatalf("a ideia do bob deveria estar no prompt:\n%s", prompt)
 	}
-	relayResponde("success", fmt.Sprintf(`{"ofensiva": false, "titulo": "Emoji", "texto": "Reações com emoji.", "parecidas": [%d]}`, number))
+	relayResponde("success", fmt.Sprintf(`{"ofensiva": false, "sugestao": true, "titulo": "Emoji", "texto": "Reações com emoji.", "parecidas": [%d]}`, number))
 	esperaPedido(assist.ID)
 	decode(call(&carol, "GET", "/api/ideas/assist/"+assist.ID, nil), &assist)
 	if len(assist.Result.Similar) != 1 || assist.Result.Similar[0].ID != bobIdea.ID || assist.Result.Similar[0].MyVote != 0 {

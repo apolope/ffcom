@@ -12,7 +12,7 @@ func TestParseVerdict(t *testing.T) {
 	candidates := []string{"id-1", "id-2", "id-3", "id-4"}
 
 	t.Run("ok com parecidas e texto em volta", func(t *testing.T) {
-		raw := "Claro, segue:\n```json\n{\"ofensiva\": false, \"titulo\": \"  Tema   escuro \", \"texto\": \" Ter tema escuro no app. \", \"parecidas\": [2, 2, 9, 0, 1, 3, 4]}\n```"
+		raw := "Claro, segue:\n```json\n{\"ofensiva\": false, \"sugestao\": true, \"titulo\": \"  Tema   escuro \", \"texto\": \" Ter tema escuro no app. \", \"parecidas\": [2, 2, 9, 0, 1, 3, 4]}\n```"
 		v, err := parseVerdict(raw, candidates)
 		if err != nil {
 			t.Fatal(err)
@@ -33,8 +33,19 @@ func TestParseVerdict(t *testing.T) {
 		}
 	})
 
+	t.Run("não é sugestão traz a dica", func(t *testing.T) {
+		v, err := parseVerdict(`{"ofensiva": false, "sugestao": false, "motivo": "  Diga o que   mudar. ", "titulo": "x", "texto": "y", "parecidas": [1]}`, candidates)
+		if err != nil || !v.NotSuggestion || v.Offensive || v.Hint != "Diga o que mudar." || v.Text != "" || len(v.Similar) != 0 {
+			t.Fatalf("v=%+v err=%v", v, err)
+		}
+		v, err = parseVerdict(`{"ofensiva": false, "sugestao": false, "motivo": ""}`, nil)
+		if err != nil || v.Hint != defaultHint {
+			t.Fatalf("dica padrão: v=%+v err=%v", v, err)
+		}
+	})
+
 	t.Run("título longo é cortado", func(t *testing.T) {
-		v, err := parseVerdict(`{"ofensiva": false, "titulo": "`+strings.Repeat("á", 80)+`", "texto": "abc"}`, nil)
+		v, err := parseVerdict(`{"ofensiva": false, "sugestao": true, "titulo": "`+strings.Repeat("á", 80)+`", "texto": "abc"}`, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -44,11 +55,12 @@ func TestParseVerdict(t *testing.T) {
 	})
 
 	for name, raw := range map[string]string{
-		"sem JSON":         "não consigo ajudar com isso",
-		"JSON quebrado":    `{"ofensiva": false, "texto": }`,
-		"sem ofensiva":     `{"titulo": "a", "texto": "b"}`,
-		"texto vazio":      `{"ofensiva": false, "titulo": "a", "texto": "  "}`,
-		"texto muito longo": `{"ofensiva": false, "titulo": "a", "texto": "` + strings.Repeat("a", ideaMaxChars+1) + `"}`,
+		"sem JSON":          "não consigo ajudar com isso",
+		"JSON quebrado":     `{"ofensiva": false, "texto": }`,
+		"sem ofensiva":      `{"titulo": "a", "texto": "b"}`,
+		"sem sugestao":      `{"ofensiva": false, "titulo": "a", "texto": "b"}`,
+		"texto vazio":       `{"ofensiva": false, "sugestao": true, "titulo": "a", "texto": "  "}`,
+		"texto muito longo": `{"ofensiva": false, "sugestao": true, "titulo": "a", "texto": "` + strings.Repeat("a", ideaMaxChars+1) + `"}`,
 	} {
 		t.Run("recusa "+name, func(t *testing.T) {
 			if _, err := parseVerdict(raw, candidates); err == nil {
@@ -97,13 +109,13 @@ func TestWebhookURL(t *testing.T) {
 
 func TestVersionPattern(t *testing.T) {
 	for v, want := range map[string]bool{
-		"client v0.15.0":        true,
-		"channel-image v1.0.0":  true,
-		"site v0.1.0":           true,
-		"client 0.15.0":         false,
-		"app v1.0.0":            false,
-		"client v1.0":           false,
-		"client v1.0.0 extra":   false,
+		"client v0.15.0":       true,
+		"channel-image v1.0.0": true,
+		"site v0.1.0":          true,
+		"client 0.15.0":        false,
+		"app v1.0.0":           false,
+		"client v1.0":          false,
+		"client v1.0.0 extra":  false,
 	} {
 		if versionPattern.MatchString(v) != want {
 			t.Errorf("%q: esperava %v", v, want)

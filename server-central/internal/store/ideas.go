@@ -20,6 +20,10 @@ const (
 	IdeaPlanned     = "planned"
 	IdeaImplemented = "implemented"
 	IdeaRejected    = "rejected"
+	// IdeaDiscarded: a checagem final concluiu que o texto não é uma
+	// sugestão de melhoria. Não aparece em lista nenhuma e não conta como a
+	// ideia do dia.
+	IdeaDiscarded = "discarded"
 )
 
 // Tipos e status de pedidos ao a3s-claude-relay (tabela idea_assist_jobs).
@@ -49,12 +53,14 @@ type Idea struct {
 	Status             string
 	ReviewReason       *string
 	ImplementedVersion *string
-	SuggestedOn        time.Time
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
-	Likes              int
-	Dislikes           int
-	MyVote             int
+	// Feedback é a dica do Claude do que faltou, em ideia descartada.
+	Feedback    *string
+	SuggestedOn time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	Likes       int
+	Dislikes    int
+	MyVote      int
 }
 
 // Score é a pontuação exibida e usada na ordenação do ranking.
@@ -87,7 +93,7 @@ const ideaSelect = `
 	SELECT i.id, i.account_id,
 	       split_part(btrim(COALESCE(` + displayNameSQL + `, '')), ' ', 1),
 	       i.title, i.body, i.status, i.review_reason, i.implemented_version,
-	       i.suggested_on, i.created_at, i.updated_at,
+	       i.feedback, i.suggested_on, i.created_at, i.updated_at,
 	       COALESCE(v.likes, 0), COALESCE(v.dislikes, 0), COALESCE(mv.value, 0)
 	FROM ideas i
 	JOIN accounts a ON a.id = i.account_id
@@ -151,9 +157,9 @@ func (s *IdeaStore) GetMany(ctx context.Context, ids, statuses []string, viewerI
 }
 
 // ForDay devolve a ideia que accountID enviou no dia day (ErrNotFound se
-// ainda não enviou).
+// ainda não enviou). Descartadas não contam.
 func (s *IdeaStore) ForDay(ctx context.Context, accountID string, day time.Time) (Idea, error) {
-	ideas, err := s.scanMany(ctx, ideaSelect+` WHERE i.account_id = $2 AND i.suggested_on = $3`, accountID, accountID, day)
+	ideas, err := s.scanMany(ctx, ideaSelect+` WHERE i.account_id = $2 AND i.suggested_on = $3 AND i.status <> 'discarded'`, accountID, accountID, day)
 	if err != nil {
 		return Idea{}, err
 	}
@@ -161,6 +167,44 @@ func (s *IdeaStore) ForDay(ctx context.Context, accountID string, day time.Time)
 		return Idea{}, ErrNotFound
 	}
 	return ideas[0], nil
+}
+
+// LastDiscarded devolve a ideia descartada mais recente de accountID no dia
+// (ErrNotFound se não houver), para mostrar a dica do que faltou.
+func (s *IdeaStore) LastDiscarded(ctx context.Context, accountID string, day time.Time) (Idea, error) {
+	ideas, err := s.scanMany(ctx, ideaSelect+` WHERE i.account_id = $2 AND i.suggested_on = $3 AND i.status = 'discarded'
+		ORDER BY i.updated_at DESC LIMIT 1`, accountID, accountID, day)
+	if err != nil {
+		return Idea{}, err
+	}
+	if len(ideas) == 0 {
+		return Idea{}, ErrNotFound
+	}
+	return ideas[0], nil
+}
+
+// CountDiscarded conta as ideias de accountID descartadas no dia.
+func (s *IdeaStore) CountDiscarded(ctx context.Context, accountID string, day time.Time) (int, error) {
+	var n int
+	err := s.pool.QueryRow(ctx,
+		`SELECT count(*) FROM ideas WHERE account_id = $1 AND suggested_on = $2 AND status = 'discarded'`,
+		accountID, day).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("ideas: contar descartadas: %w", err)
+	}
+	return n, nil
+}
+
+// Discard marca como descartada uma ideia ainda em checking (não é uma
+// sugestão de melhoria), com a dica do que faltou.
+func (s *IdeaStore) Discard(ctx context.Context, id, feedback string) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE ideas SET status = 'discarded', feedback = $2, updated_at = now() WHERE id = $1 AND status = 'checking'`,
+		id, feedback)
+	if err != nil {
+		return fmt.Errorf("ideas: descartar: %w", err)
+	}
+	return nil
 }
 
 // Create grava a ideia do dia em status checking. ErrConflict se a pessoa
@@ -377,7 +421,7 @@ func (s *IdeaStore) scanMany(ctx context.Context, query string, args ...any) ([]
 	for rows.Next() {
 		var i Idea
 		if err := rows.Scan(&i.ID, &i.AccountID, &i.AuthorFirstName, &i.Title, &i.Body, &i.Status,
-			&i.ReviewReason, &i.ImplementedVersion, &i.SuggestedOn, &i.CreatedAt, &i.UpdatedAt,
+			&i.ReviewReason, &i.ImplementedVersion, &i.Feedback, &i.SuggestedOn, &i.CreatedAt, &i.UpdatedAt,
 			&i.Likes, &i.Dislikes, &i.MyVote); err != nil {
 			return nil, fmt.Errorf("ideas: ler linha: %w", err)
 		}

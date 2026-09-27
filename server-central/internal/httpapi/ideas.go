@@ -50,6 +50,7 @@ type ideaResponse struct {
 	Mine               bool      `json:"mine"`
 	ImplementedVersion *string   `json:"implementedVersion,omitempty"`
 	ReviewReason       *string   `json:"reviewReason,omitempty"`
+	Feedback           *string   `json:"feedback,omitempty"`
 	CreatedAt          time.Time `json:"createdAt"`
 }
 
@@ -72,6 +73,9 @@ func toIdeaResponse(i store.Idea, viewerID string, isAdmin bool) ideaResponse {
 	}
 	if isAdmin || resp.Mine {
 		resp.ReviewReason = i.ReviewReason
+	}
+	if resp.Mine {
+		resp.Feedback = i.Feedback
 	}
 	return resp
 }
@@ -148,7 +152,11 @@ type ideasMeResponse struct {
 	PendingAssist  *string       `json:"pendingAssist,omitempty"`
 	SuggestedToday bool          `json:"suggestedToday"`
 	TodayIdea      *ideaResponse `json:"todayIdea,omitempty"`
-	IsAdmin        bool          `json:"isAdmin"`
+	// LastDiscarded: a última ideia de hoje descartada por não ser
+	// sugestão, com a dica em feedback (só enquanto não houver ideia do dia).
+	LastDiscarded *ideaResponse `json:"lastDiscarded,omitempty"`
+	DiscardsLeft  int           `json:"discardsLeft"`
+	IsAdmin       bool          `json:"isAdmin"`
 }
 
 func wandLeft(limit, used, penalty int) int {
@@ -188,6 +196,17 @@ func handleIdeasMe(db *store.Store, cfg IdeasConfig) http.Handler {
 		case !errors.Is(err, store.ErrNotFound):
 			log.Printf("ideias: %v", err)
 		}
+		discarded, err := db.Ideas.CountDiscarded(r.Context(), account.ID, day)
+		if err != nil {
+			log.Printf("ideias: %v", err)
+		}
+		resp.DiscardsLeft = max(0, ideaMaxDiscardsPerDay-discarded)
+		if !resp.SuggestedToday {
+			if last, err := db.Ideas.LastDiscarded(r.Context(), account.ID, day); err == nil {
+				lr := toIdeaResponse(last, account.ID, isAdmin)
+				resp.LastDiscarded = &lr
+			}
+		}
 		writeJSON(w, http.StatusOK, resp)
 	})
 }
@@ -200,10 +219,12 @@ type assistResponse struct {
 }
 
 type assistResultJS struct {
-	Offensive bool           `json:"offensive"`
-	Title     string         `json:"title,omitempty"`
-	Text      string         `json:"text,omitempty"`
-	Similar   []ideaResponse `json:"similar"`
+	Offensive     bool           `json:"offensive"`
+	NotSuggestion bool           `json:"notSuggestion"`
+	Hint          string         `json:"hint,omitempty"`
+	Title         string         `json:"title,omitempty"`
+	Text          string         `json:"text,omitempty"`
+	Similar       []ideaResponse `json:"similar"`
 }
 
 // POST /api/ideas/assist {text} — usa a varinha: gasta um uso e manda o
@@ -291,7 +312,7 @@ func handleGetAssist(db *store.Store, cfg IdeasConfig) http.Handler {
 		if job.Status == store.AssistDone {
 			var v assistVerdict
 			if err := json.Unmarshal(job.Result, &v); err == nil {
-				result := &assistResultJS{Offensive: v.Offensive, Title: v.Title, Text: v.Text, Similar: []ideaResponse{}}
+				result := &assistResultJS{Offensive: v.Offensive, NotSuggestion: v.NotSuggestion, Hint: v.Hint, Title: v.Title, Text: v.Text, Similar: []ideaResponse{}}
 				if len(v.Similar) > 0 {
 					similar, err := db.Ideas.GetMany(r.Context(), v.Similar, []string{store.IdeaOpen, store.IdeaPlanned}, account.ID)
 					if err == nil {
@@ -326,6 +347,14 @@ func handleCreateIdea(db *store.Store, cfg IdeasConfig) http.Handler {
 		}
 
 		day := today()
+		discarded, err := db.Ideas.CountDiscarded(r.Context(), account.ID, day)
+		if err != nil {
+			log.Printf("ideias: %v", err)
+		}
+		if discarded >= ideaMaxDiscardsPerDay {
+			http.Error(w, "hoje já foram vários textos que não eram sugestões; tente de novo amanhã", http.StatusTooManyRequests)
+			return
+		}
 		ideaID, err := db.Ideas.Create(r.Context(), account.ID, text, day)
 		if errors.Is(err, store.ErrConflict) {
 			http.Error(w, "você já enviou uma sugestão hoje; amanhã tem outra", http.StatusConflict)
