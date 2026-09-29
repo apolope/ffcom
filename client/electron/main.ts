@@ -1,4 +1,14 @@
-import { app, BrowserWindow, globalShortcut, ipcMain, net, powerMonitor, protocol } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  desktopCapturer,
+  globalShortcut,
+  ipcMain,
+  net,
+  powerMonitor,
+  protocol,
+  session,
+} from 'electron'
 import { existsSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -107,10 +117,67 @@ function registerSystemIdleIpc() {
   ipcMain.handle('ffcom:get-system-idle-seconds', () => powerMonitor.getSystemIdleTime())
 }
 
+// Compartilhamento de tela (ver docs/architecture.md, "Decisão:
+// compartilhamento de tela no Electron"). O Electron não tem o seletor nativo
+// do navegador: sem um handler aqui, o getDisplayMedia do renderer falha. O
+// renderer lista as fontes, a pessoa escolhe no seletor próprio
+// (components/ScreenSharePicker.tsx), a escolha fica guardada e o handler a
+// consome no getDisplayMedia seguinte, uma vez só. Sem escolha guardada, o
+// pedido é recusado.
+interface DisplaySourceChoice {
+  id: string
+  name: string
+  audio: boolean
+}
+let listedSources = new Map<string, string>()
+let displaySourceChoice: DisplaySourceChoice | undefined
+
+function registerDisplayMediaIpc() {
+  ipcMain.handle('ffcom:get-display-sources', async () => {
+    const sources = await desktopCapturer.getSources({
+      types: ['screen', 'window'],
+      thumbnailSize: { width: 320, height: 180 },
+    })
+    listedSources = new Map(sources.map((s) => [s.id, s.name]))
+    return sources.map((s) => ({
+      id: s.id,
+      name: s.name,
+      kind: s.id.startsWith('screen:') ? 'screen' : 'window',
+      thumbnail: s.thumbnail.isEmpty() ? '' : s.thumbnail.toDataURL(),
+    }))
+  })
+  // Só aceita um id da última listagem, para o renderer não pedir uma fonte
+  // que a pessoa não viu no seletor.
+  ipcMain.handle('ffcom:choose-display-source', (_event, id: unknown, audio: unknown) => {
+    const name = typeof id === 'string' ? listedSources.get(id) : undefined
+    if (name === undefined) return false
+    displaySourceChoice = { id: id as string, name, audio: audio === true }
+    return true
+  })
+  session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+    const choice = displaySourceChoice
+    displaySourceChoice = undefined
+    if (!choice) {
+      // Recusa. Tem que ser null: com {} o Electron lança "Video was
+      // requested, but no video stream was provided" aqui no main. O tipo do
+      // callback não inclui null, mas a validação do Electron aceita.
+      callback(null as unknown as Electron.Streams)
+      return
+    }
+    // 'loopback' é o áudio do sistema inteiro, inclusive as vozes da sala que
+    // este app toca (o renderer pede restrictOwnAudio para tirá-las); só
+    // existe no Windows. 'loopbackWithMute' não serve: muta o som do
+    // computador de quem compartilha enquanto captura.
+    const audio = choice.audio && request.audioRequested && process.platform === 'win32'
+    callback({ video: { id: choice.id, name: choice.name }, ...(audio ? { audio: 'loopback' as const } : {}) })
+  })
+}
+
 app.whenReady().then(() => {
   registerAppProtocol()
   registerMuteShortcutIpc()
   registerSystemIdleIpc()
+  registerDisplayMediaIpc()
   createWindow()
 })
 

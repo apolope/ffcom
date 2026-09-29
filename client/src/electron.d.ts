@@ -10,6 +10,23 @@ interface FfcomElectronBridge {
   // Segundos sem teclado nem mouse no sistema inteiro (powerMonitor), para
   // o "ausente" automático (hooks/useIdle.ts).
   getSystemIdleSeconds(): Promise<number>
+  // Telas e janelas que dá para compartilhar, com miniatura (data URL; vazia
+  // quando o sistema não entrega, ex. macOS sem permissão de gravação).
+  getDisplaySources(): Promise<DisplaySource[]>
+  // Guarda a fonte escolhida no seletor para o próximo getDisplayMedia
+  // (setScreenShareEnabled). Resolve false se o id não veio da última
+  // listagem.
+  chooseDisplaySource(id: string, audio: boolean): Promise<boolean>
+  // true no Windows, o único sistema em que o Electron captura o áudio do
+  // computador junto com a tela.
+  canShareSystemAudio: boolean
+}
+
+interface DisplaySource {
+  id: string
+  name: string
+  kind: 'screen' | 'window'
+  thumbnail: string
 }
 
 interface Window {

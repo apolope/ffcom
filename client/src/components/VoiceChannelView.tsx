@@ -13,6 +13,7 @@ import { formatShortcut } from '../lib/shortcut'
 import { getVoicePrefs, setVoicePrefs, type VoicePrefs } from '../lib/voicePrefs'
 import { MuteShortcutSetting } from './MuteShortcutSetting'
 import { ParticipantVolumeControls } from './ParticipantVolumeControls'
+import { ScreenSharePicker } from './ScreenSharePicker'
 import type { Channel } from '../types'
 import './VoiceChannelView.css'
 
@@ -58,6 +59,10 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
     },
     [accountSub],
   )
+  // No app desktop, compartilhar abre o seletor próprio antes (o Electron não
+  // tem o do navegador); parar continua direto.
+  const electronBridge = window.ffcomElectron
+  const [pickingScreen, setPickingScreen] = useState(false)
   // No máximo um painel de volume aberto por vez, pela identity da pessoa.
   const [volumeOpenFor, setVolumeOpenFor] = useState<string>()
   const {
@@ -188,10 +193,19 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
           {cameraError && <p className="message-error voice-media-error">{cameraError}</p>}
           {screenSharing && !screenShareAudio && (
             <p className="voice-media-hint">
-              Compartilhando sem áudio. Para enviar o som, pare e compartilhe de novo marcando "Compartilhar
-              áudio" no seletor (Chrome e Edge; em tela inteira, só no Windows). Firefox e Safari não enviam
-              áudio de tela.
+              {!electronBridge
+                ? 'Compartilhando sem áudio. Para enviar o som, pare e compartilhe de novo marcando "Compartilhar áudio" no seletor (Chrome e Edge; em tela inteira, só no Windows). Firefox e Safari não enviam áudio de tela.'
+                : electronBridge.canShareSystemAudio
+                  ? 'Compartilhando sem áudio. Para enviar o som, pare e compartilhe de novo marcando "Compartilhar áudio do computador" no seletor.'
+                  : 'Compartilhando sem áudio: neste sistema o app desktop não envia o som da tela.'}
             </p>
+          )}
+          {pickingScreen && electronBridge && (
+            <ScreenSharePicker
+              bridge={electronBridge}
+              onShare={toggleScreenShare}
+              onClose={() => setPickingScreen(false)}
+            />
           )}
           <div className="voice-controls">
             {voicePrefs.pushToTalk ? (
@@ -211,7 +225,10 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
             <button type="button" onClick={toggleCamera}>
               {cameraEnabled ? 'Desligar câmera' : 'Ligar câmera'}
             </button>
-            <button type="button" onClick={toggleScreenShare}>
+            <button
+              type="button"
+              onClick={electronBridge && !screenSharing ? () => setPickingScreen(true) : toggleScreenShare}
+            >
               {screenSharing ? 'Parar compartilhamento' : 'Compartilhar tela'}
             </button>
             <button type="button" onClick={leave}>

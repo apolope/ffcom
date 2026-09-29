@@ -7,6 +7,7 @@
   "main": "dist-electron/main.js",
   "author": "Apolonio Serafim",
   "license": "AGPL-3.0-or-later",
+  "desktopName": "FFCom.desktop",
   "scripts": {
     "dev": "vite",
     "dev:electron": "vite --mode electron",
@@ -16,6 +17,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "generate:pwa-assets": "pwa-assets-generator",
+    "generate:electron-icon": "node generate-electron-icon.mjs",
     "package": "npm run build:electron && electron-builder --publish never",
     "package:win": "npm run build:electron && electron-builder --win --publish never",
     "package:mac": "npm run build:electron && electron-builder --mac --publish never",
@@ -54,7 +56,8 @@
       "dist-electron/**"
     ],
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "win": {
       "target": "nsis"
@@ -65,8 +68,7 @@
     },
     "linux": {
       "target": "AppImage",
-      "category": "Network",
-      "desktopName": "FFCom.desktop"
+      "category": "Network"
     }
   }
 }

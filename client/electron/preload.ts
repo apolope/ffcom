@@ -13,4 +13,9 @@ contextBridge.exposeInMainWorld('ffcomElectron', {
     }
   },
   getSystemIdleSeconds: (): Promise<number> => ipcRenderer.invoke('ffcom:get-system-idle-seconds'),
+  getDisplaySources: (): Promise<unknown> => ipcRenderer.invoke('ffcom:get-display-sources'),
+  chooseDisplaySource: (id: string, audio: boolean): Promise<boolean> =>
+    ipcRenderer.invoke('ffcom:choose-display-source', id, audio),
+  // O áudio do sistema ('loopback' no main) só existe no Windows.
+  canShareSystemAudio: process.platform === 'win32',
 })

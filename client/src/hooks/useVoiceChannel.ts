@@ -90,6 +90,16 @@ const SCREEN_SHARE_AUDIO_CONSTRAINTS: AudioCaptureOptions = {
   autoGainControl: false,
 }
 
+// No app desktop o áudio da tela é o loopback do Windows (electron/main.ts),
+// que pega também as vozes da sala tocadas por este app. Ali o
+// restrictOwnAudio funciona: medido no Electron 44, zera o som da própria
+// página e mantém o de outros programas. Ver docs/architecture.md, "Decisão:
+// compartilhamento de tela no Electron".
+const ELECTRON_SCREEN_SHARE_AUDIO_CONSTRAINTS = {
+  ...SCREEN_SHARE_AUDIO_CONSTRAINTS,
+  restrictOwnAudio: true,
+} as AudioCaptureOptions
+
 // Captura com a supressão reforçada (RNNoise) ligada: sem o supressor do
 // navegador nem o voiceIsolation (outro supressor), para não empilhar dois;
 // cancelamento de eco e ganho automático continuam. Ver docs/architecture.md,
@@ -610,7 +620,9 @@ export function useVoiceChannel(
 
   // setScreenShareEnabled(true) abre o seletor nativo do navegador
   // (getDisplayMedia); rejeitar essa promise ao cancelar o seletor não é um
-  // erro real do canal de voz, só a desistência do usuário.
+  // erro real do canal de voz, só a desistência do usuário. No app desktop o
+  // seletor já foi mostrado antes (ScreenSharePicker) e o getDisplayMedia
+  // usa a fonte escolhida lá.
   //
   // Pede o áudio junto (publicado como track ScreenShareAudio, separada do
   // microfone; quem assiste já toca toda track de áudio remota). Só vem se a
@@ -625,7 +637,7 @@ export function useVoiceChannel(
     const next = !room.localParticipant.isScreenShareEnabled
     try {
       await room.localParticipant.setScreenShareEnabled(next, {
-        audio: SCREEN_SHARE_AUDIO_CONSTRAINTS,
+        audio: window.ffcomElectron ? ELECTRON_SCREEN_SHARE_AUDIO_CONSTRAINTS : SCREEN_SHARE_AUDIO_CONSTRAINTS,
         systemAudio: 'include',
       })
       // Diagnóstico do áudio da tela: o que o navegador aplicou de fato

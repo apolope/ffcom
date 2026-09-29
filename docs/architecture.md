@@ -563,7 +563,7 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 **Verificado nesta sessão (2026-09-21):** build completo (`npm run build:electron` + `electron-builder`) e execução do artefato final para Windows (nativo, neste host) e Linux (AppImage, via container `electronuserland/builder:22`, já que builds Linux exigem toolchain nativo — `@electron/rebuild`/gcc/python — não presente por padrão num host Windows). macOS **não verificado**: `electron-builder` exige rodar em host macOS de verdade para o alvo `mac` (assinatura/notarização dependem de ferramentas da Apple — `codesign`/`iconutil` — que não existem em Linux/Windows, nem mesmo via Docker); a config para `mac` está em `package.json` mas fica sem teste real até haver acesso a uma máquina macOS.
 
 **Deliberadamente fora de escopo desta rodada:**
-- **Ícone customizado:** hoje usa o ícone padrão do Electron (só existe `client/public/favicon.svg`, usado no `<link rel="icon">` do web/PWA — `electron-builder` precisa de `.ico`/`.icns`/PNGs em resoluções específicas, não do SVG direto). Ícone segue o padrão do Electron até existir arte própria.
+- *(Resolvido em 2026-09-28, ver "Decisão: compartilhamento de tela no Electron", ponto 4.)* **Ícone customizado:** hoje usa o ícone padrão do Electron (só existe `client/public/favicon.svg`, usado no `<link rel="icon">` do web/PWA — `electron-builder` precisa de `.ico`/`.icns`/PNGs em resoluções específicas, não do SVG direto). Ícone segue o padrão do Electron até existir arte própria.
 - **Assinatura de código:** sem certificado Authenticode (Windows) nem Apple Developer ID (macOS) — instalador Windows vai disparar aviso do SmartScreen, e o app macOS (quando existir) vai exigir bypass do Gatekeeper. Aceitável para uso pessoal/self-host nesta fase; certificados custam dinheiro/processo de verificação, não faz sentido adquirir antes de haver usuários reais fora do autor.
 - **CI/GitHub Releases:** nenhum workflow novo publica os instaladores automaticamente. O workflow `deploy-ffcom-client.yml` existente só builda a imagem Docker (web/PWA) — construir os 3 instaladores desktop em CI exigiria runners macOS (não existe no `a3s-network`, que é só `SVRUBS24IPS0101`, Linux) e ficou fora do escopo deste item. Empacotar continua manual (`npm run package:*`) até haver demanda real de distribuição para terceiros.
 
@@ -1041,7 +1041,7 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 3. **Quem assiste não muda:** o `TrackSubscribed` já anexa toda track de áudio remota, inclusive `ScreenShareAudio`.
 4. **Aviso na UI:** o áudio só vem se a pessoa marcar "Compartilhar áudio" no seletor. Compartilhando sem track `ScreenShareAudio`, `VoiceChannelView` mostra como refazer com som; a lista de participantes mostra 🔊 para quem compartilha com áudio.
 
-**Escopo aceito, limites do navegador:** Chrome e Edge capturam o áudio de uma aba e, só no Windows, o do sistema na tela inteira; janela avulsa não tem áudio; Firefox e Safari não capturam áudio de tela. **Electron fica de fora:** ali não existe seletor nativo, e sem `session.setDisplayMediaRequestHandler` no processo main o próprio compartilhamento de tela falha hoje (item próprio no TODO).
+**Escopo aceito, limites do navegador:** Chrome e Edge capturam o áudio de uma aba e, só no Windows, o do sistema na tela inteira; janela avulsa não tem áudio; Firefox e Safari não capturam áudio de tela. **Electron fica de fora:** ali não existe seletor nativo, e sem `session.setDisplayMediaRequestHandler` no processo main o próprio compartilhamento de tela falha hoje (item próprio no TODO). *(Resolvido em 2026-09-28, ver "Decisão: compartilhamento de tela no Electron"; lá o `restrictOwnAudio` foi medido e funciona.)*
 
 **Razão:** o SDK já resolve captura e publicação; o trabalho real é não estragar o som com filtros de voz e não criar eco.
 
@@ -1583,6 +1583,33 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 - A instância oficial roda o código publicado sem modificação, e a home aponta para o repositório (seção "Onde estamos" e rodapé), o que já atende à seção 13 mesmo quando houver ajuste local.
 
 **Revisitar quando:** aparecer interesse de alguém em embutir parte do código num produto que a AGPL impeça (por exemplo, extrair o `internal/release` como biblioteca: um pacote isolado pode ganhar licença própria mais permissiva), ou antes do primeiro contribuidor externo, se houver dúvida sobre o "or later".
+
+## Decisão: compartilhamento de tela no Electron — seletor próprio com `desktopCapturer`, áudio por loopback com `restrictOwnAudio`
+
+**Contexto:** item de TODO "Compartilhamento de tela no Electron". No app desktop o botão "Compartilhar tela" falhava sempre, nem o vídeo saía: o `getDisplayMedia` do navegador abre um seletor nativo, o Electron não tem esse seletor, e sem `session.setDisplayMediaRequestHandler` no processo main o pedido é recusado.
+
+**Alternativas consideradas:**
+- **`useSystemPicker: true`:** usa o seletor do sistema, mas é experimental e só existe no macOS 15+; Windows e Linux continuariam sem nada. Descartada.
+- **Handler que escolhe sozinho a tela principal:** zero UI, mas compartilha a tela inteira sem perguntar, inclusive o que a pessoa não queria mostrar. Descartada.
+- **Seletor próprio no renderer, a escolha guardada no main e consumida pelo handler:** escolhida. Mantém o caminho do `setScreenShareEnabled` igual ao do web (ver "Decisão: compartilhamento de tela").
+- **Áudio `loopbackWithMute`:** muta o som do computador de quem compartilha durante a captura, então a pessoa deixaria de ouvir a própria chamada e o jogo. Descartada em favor de `loopback`.
+
+**Decisão:**
+1. `electron/main.ts`: `ffcom:get-display-sources` lista telas e janelas com `desktopCapturer.getSources` (miniatura 320x180 como data URL) e lembra os ids listados; `ffcom:choose-display-source` guarda a escolha (id e se vai áudio), aceitando só um id da última listagem; o `setDisplayMediaRequestHandler` consome a escolha uma vez só no `getDisplayMedia` seguinte. Sem escolha guardada, recusa com `callback(null)`: com `callback({})` o Electron 44 lança `Video was requested, but no video stream was provided` no main (o tipo do `.d.ts` não aceita `null`, mas a validação do Electron sim: "must be called with null or a valid object").
+2. `components/ScreenSharePicker.tsx`: diálogo com "Telas" e "Janelas" em miniaturas, clique seleciona e duplo clique compartilha, Enter e Esc. Só no Windows mostra "Compartilhar áudio do computador" (desmarcado por padrão, como o "Compartilhar áudio" do Chrome); nos outros sistemas avisa que vai só a imagem. `VoiceChannelView` abre o seletor quando `window.ffcomElectron` existe e ainda não há compartilhamento; parar continua direto.
+3. **Áudio:** com a caixa marcada, o handler entrega `audio: 'loopback'` (áudio do sistema inteiro, só Windows no Electron). O loopback pega também as vozes da sala que o próprio FFCom toca, e quem está na chamada se ouviria de volta com atraso. No Electron, `toggleScreenShare` pede `restrictOwnAudio: true` junto com os filtros de voz desligados (`ELECTRON_SCREEN_SHARE_AUDIO_CONSTRAINTS` em `hooks/useVoiceChannel.ts`).
+4. **Ícone do app desktop:** `client/build/icon.png` (1024x1024, transparente) gerado de `public/favicon.svg` por `generate-electron-icon.mjs` (`npm run generate:electron-icon`, com o `sharp` que já vem do gerador de ícones do PWA) e versionado, pelo mesmo motivo dos ícones do PWA. `directories.buildResources: "build"` no `package.json`; o `electron-builder` converte o PNG para `.ico`/`.icns`.
+5. **Empacotamento estava quebrado:** o `electron-builder` 26.15.3 recusa `desktopName` dentro de `build.linux` ("configuration.linux should be one of these: null"), inclusive no `package.json` do `main`, então nenhum instalador saía desde a atualização da dependência. `desktopName` foi para o topo do `package.json`, que é onde o Electron e o `electron-builder` 26 o leem.
+
+**Medido no Electron 44.4.3, Windows 11 (2026-09-28), num app de teste com o mesmo handler:** 12 fontes listadas (3 telas) com miniatura; sem escolha o `getDisplayMedia` rejeita com `AbortError` e o main fica limpo; com escolha sem áudio sai só vídeo; com áudio, a track vem com `deviceId: "loopback"` e os três filtros desligados. `restrictOwnAudio` medido pelo nível RMS da track capturada: tom tocado pela própria página 0,213 sem a constraint e 0,000 com ela; tom tocado por outro programa (PowerShell `SoundPlayer`) 0,173 nos dois casos. Ou seja, no Electron a constraint faz o que promete, ao contrário do que se viu no Chrome em `client-v0.5.0` (track muda mesmo com som de outro programa; ver "Decisão: áudio da tela compartilhada"). `npm run build`, `tsc -b`, `npm run lint` sem aviso novo, e `electron-builder --win` gerando o instalador com o ícone da marca no `FFCom.exe`; o app empacotado abre sem erro no main.
+
+**Não verificado:** o fluxo inteiro numa chamada real (exige login e outra pessoa ouvindo), a miniatura e a permissão de gravação de tela no macOS (sem Mac), e o Linux (Wayland exige o portal do sistema; o `desktopCapturer` pode listar só uma fonte genérica).
+
+**Observação de ambiente:** empacotar com saída em `client/release/` neste host falhou com `EPERM` ao renomear `win-unpacked.tmp`, de forma repetível, e passou com a saída em outro disco (`-c.directories.output=...`). É o ambiente (antivírus ou proteção de pasta em `D:\Dev`), não a config.
+
+**Razão:** o seletor próprio é o mínimo que devolve ao app desktop o que o navegador já dá, sem mexer no caminho do LiveKit; e o `restrictOwnAudio`, medido e não pedido às cegas, evita o eco que o loopback traria.
+
+**Revisitar quando:** o `useSystemPicker` sair do experimental ou chegar a Windows; o Electron ganhar captura de áudio fora do Windows; ou alguém pedir para compartilhar só o áudio de uma janela (o loopback é o sistema inteiro).
 
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
