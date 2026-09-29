@@ -1120,6 +1120,8 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Verificado (2026-09-23):** `go vet`, `go test ./...` (inclui `TestHasAnyOfMask`), `npm run lint` sem aviso novo e `npm run build`. Não verificado num browser real nem contra Postgres (sem Docker disponível nesta sessão).
 
+**Correção (2026-09-28, `client-v0.15.0`):** o item 3 acima não era verdade no client: o `ManageRolesDialog` só criava e removia roles, sem editar as existentes, e a @everyone nem aparecia. O `PATCH /api/roles/{id}` já existia no servidor. O diálogo passou a ter "Editar" em cada role, com a @everyone em primeiro (sem "Remover"), reusando os mesmos checkboxes da criação e mandando nome, cor e posição como estavam. Verificado em produção com as contas de teste, junto com o resto desta decisão (ver `TODO.md`).
+
 **Revisitar quando:** aparecer outra permissão que implique uma mais fraca (aí vale ensinar implicações a `Has`/`Grants` de forma geral), ou alguém pedir limite por membro (máximo de convites ativos, validade obrigatória).
 
 ## Decisão: som ao mutar e desmutar — dois bipes num `AudioContext` próprio, depois da troca confirmada
