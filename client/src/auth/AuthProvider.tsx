@@ -6,10 +6,17 @@ import { AUTH_CALLBACK_PATH } from './config'
 
 type AuthStatus = 'loading' | 'signed-out' | 'signed-in'
 
+// Redirecionamento ao Authentik em andamento. O oidc-client-ts busca o
+// discovery antes de navegar, e no logout remove o usuário antes disso: sem
+// este estado a tela de login aparece com o botão ativo por um instante, e
+// clicar nele ali abria um login novo no meio da saída.
+type AuthRedirect = 'signing-in' | 'signing-out'
+
 interface AuthContextValue {
   status: AuthStatus
   user: User | null
   accessToken: string | undefined
+  redirecting: AuthRedirect | undefined
   signIn: () => void
   signOut: () => void
 }
@@ -19,6 +26,7 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('loading')
   const [user, setUser] = useState<User | null>(null)
+  const [redirecting, setRedirecting] = useState<AuthRedirect>()
   const initStarted = useRef(false)
 
   useEffect(() => {
@@ -61,10 +69,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       applyUser(null)
     }
 
+    // Voltar do Authentik pelo histórico pode restaurar a página do cache
+    // (bfcache) com o redirecionamento ainda marcado como em andamento.
+    function onPageShow(e: PageTransitionEvent) {
+      if (e.persisted) setRedirecting(undefined)
+    }
+    window.addEventListener('pageshow', onPageShow)
+
     userManager.events.addUserLoaded(applyUser)
     userManager.events.addUserUnloaded(() => applyUser(null))
     userManager.events.addSilentRenewError(onSilentRenewError)
     return () => {
+      window.removeEventListener('pageshow', onPageShow)
       userManager.events.removeUserLoaded(applyUser)
       userManager.events.removeUserUnloaded(() => applyUser(null))
       userManager.events.removeSilentRenewError(onSilentRenewError)
@@ -76,14 +92,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       status,
       user,
       accessToken: user?.access_token,
+      redirecting,
       signIn: () => {
-        userManager.signinRedirect()
+        if (redirecting) return
+        setRedirecting('signing-in')
+        userManager.signinRedirect().catch((err) => {
+          console.error('ffcom: falha ao abrir o login', err)
+          setRedirecting(undefined)
+        })
       },
       signOut: () => {
-        userManager.signoutRedirect()
+        if (redirecting) return
+        setRedirecting('signing-out')
+        userManager.signoutRedirect().catch((err) => {
+          // O usuário local já foi removido: fica na tela de login.
+          console.error('ffcom: falha ao encerrar a sessão no Authentik', err)
+          setRedirecting(undefined)
+        })
       },
     }),
-    [status, user],
+    [status, user, redirecting],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -53,16 +53,17 @@ import type { Category } from './types'
 import './App.css'
 
 function App() {
-  const { status, user, accessToken, signOut } = useAuth()
+  const { status, user, accessToken, redirecting, signOut } = useAuth()
   // `sub` do OIDC: chave de E2E e cursores de não lida em localStorage são
   // por conta, não por navegador (ver crypto/e2e.ts, lib/unread.ts).
   const accountSub = user?.profile.sub ?? ''
   const { updateReady, applyUpdate } = useAppUpdate()
   // Sem sessão não há chamada de voz para derrubar: aplica a versão nova
-  // sozinha. Logado, só pelo botão do ServerRail.
+  // sozinha, menos no meio do redirecionamento ao Authentik (recarregar ali
+  // cancelaria a saída ou o login). Logado, só pelo botão do ServerRail.
   useEffect(() => {
-    if (updateReady && status === 'signed-out') applyUpdate()
-  }, [updateReady, status, applyUpdate])
+    if (updateReady && status === 'signed-out' && !redirecting) applyUpdate()
+  }, [updateReady, status, redirecting, applyUpdate])
   const {
     profile: myProfile,
     uploadAvatar,
