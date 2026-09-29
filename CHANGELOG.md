@@ -15,6 +15,9 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## client v0.15.1 · 2026-09-28
+- Digitar o link de convite em "Adicionar servidor" não corta mais o código no primeiro caractere; colar o link continua preenchendo o endereço e o código de uma vez.
+
 ## client v0.15.0 · 2026-09-28
 - As roles do servidor agora podem ser editadas depois de criadas: "Editar" em cada role de "Gerenciar membros" mostra as permissões para ligar e desligar, inclusive na **@everyone** (por exemplo, "Criar convites" para todo mundo).
 - Enter no nome cria ou salva a categoria e o canal, sem precisar clicar no botão.

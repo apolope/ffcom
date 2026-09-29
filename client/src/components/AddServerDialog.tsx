@@ -19,7 +19,9 @@ interface AddServerDialogProps {
 // O campo "Endereço" também aceita colar o link gerado por
 // InviteServerDialog (endereço + `?invite=CODE`) — parseInviteLink separa os
 // dois de volta, para quem só tem o link não precisar copiar/colar duas
-// vezes. Ver docs/architecture.md, "Decisão: convite auto-contido".
+// vezes. A separação acontece ao colar, ao sair do campo e no envio, nunca
+// a cada tecla: digitando, `?invite=J` já é um link válido e o resto do
+// código iria parar no fim do endereço. Ver docs/architecture.md, "Decisão: convite auto-contido".
 function parseInviteLink(value: string): { address: string; inviteCode: string } | undefined {
   let url: URL
   try {
@@ -56,27 +58,30 @@ export function AddServerDialog({ onAdd, onClose }: AddServerDialogProps) {
   const [error, setError] = useState<string>()
   const [submitting, setSubmitting] = useState(false)
 
-  function handleAddressChange(value: string) {
-    const parsed = parseInviteLink(value)
-    if (parsed) {
-      setAddress(parsed.address)
-      setInviteCode(parsed.inviteCode)
-      return
-    }
-    setAddress(value)
+  // Devolve o endereço sem o `?invite=` (e preenche o código) quando o
+  // valor é um link de convite; senão devolve o valor como veio.
+  function splitInviteLink(value: string): string {
+    const parsed = parseInviteLink(value.trim())
+    if (!parsed) return value
+    setAddress(parsed.address)
+    setInviteCode(parsed.inviteCode)
+    return parsed.address
   }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError(undefined)
-    const trimmedAddress = address.trim()
+    // Link digitado e enviado com Enter, sem passar pelo onBlur.
+    const parsed = parseInviteLink(address.trim())
+    const trimmedAddress = (parsed?.address ?? address).trim()
+    const code = parsed?.inviteCode ?? inviteCode
     if (!isAddressSecure(trimmedAddress)) {
       setError('Endereço precisa usar https:// (http:// só é aceito para localhost)')
       return
     }
     setSubmitting(true)
     try {
-      await onAdd(trimmedAddress, name.trim(), inviteCode.trim() || undefined)
+      await onAdd(trimmedAddress, name.trim(), code.trim() || undefined)
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'falha ao adicionar servidor')
@@ -97,9 +102,17 @@ export function AddServerDialog({ onAdd, onClose }: AddServerDialogProps) {
           Endereço
           <input
             type="text"
-            placeholder="http://localhost:8080 ou um link de convite"
+            placeholder="https://… ou um link de convite"
             value={address}
-            onChange={(e) => handleAddressChange(e.target.value)}
+            onChange={(e) => setAddress(e.target.value)}
+            onPaste={(e) => {
+              const pasted = e.clipboardData.getData('text')
+              if (parseInviteLink(pasted.trim())) {
+                e.preventDefault()
+                splitInviteLink(pasted)
+              }
+            }}
+            onBlur={() => splitInviteLink(address)}
             required
             autoFocus
           />
