@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 
 // De quanto em quanto tempo perguntar ao servidor se há sw.js novo. Sem
@@ -27,14 +27,30 @@ interface UseAppUpdateResult {
 // updateReady nunca vira true.
 export function useAppUpdate(): UseAppUpdateResult {
   const registrationRef = useRef<ServiceWorkerRegistration | undefined>(undefined)
+  // O needRefresh do vite-plugin-pwa vem do workbox-window, que para de
+  // ouvir "updatefound" depois da primeira atualização vinda de fora do
+  // register() (qualquer uma que chegue mais de 1 min depois de abrir a
+  // página, ou seja, todas as da checagem periódica). Se essa primeira não
+  // chega a "waiting" (instalação que falha no meio de um deploy, rede ruim
+  // no celular), as versões seguintes nunca acendem o botão até a página
+  // ser recarregada. Por isso o worker esperando também é acompanhado aqui,
+  // direto na registration.
+  const [waitingFound, setWaitingFound] = useState(false)
   const {
-    needRefresh: [updateReady],
+    needRefresh: [needRefresh],
     updateServiceWorker,
   } = useRegisterSW({
     onRegisteredSW(_swUrl, registration) {
+      if (!registration) return
       registrationRef.current = registration
+      const sync = () => setWaitingFound(!!registration.waiting)
+      registration.addEventListener('updatefound', () => {
+        registration.installing?.addEventListener('statechange', sync)
+      })
+      sync()
     },
   })
+  const updateReady = needRefresh || waitingFound
 
   useEffect(() => {
     const check = () => {

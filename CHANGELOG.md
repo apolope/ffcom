@@ -15,6 +15,9 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## client v0.17.1 · 2026-09-29
+- O botão verde de atualizar volta a aparecer quando saem duas versões seguidas com o app aberto; antes, se a primeira não terminasse de baixar, as seguintes só apareciam depois de recarregar a página.
+
 ## client v0.17.0 · 2026-09-29
 - **Tela de login com o logo do FFCom**, e "Entrar" leva a uma página de login também com a marca do FFCom, em vez da marca genérica do Authentik. Quem já estava logado entra mais uma vez depois desta versão.
 - A tela de "Saindo…" mostra o logo e um indicador de progresso.
