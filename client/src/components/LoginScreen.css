@@ -38,3 +38,8 @@
   opacity: 0.6;
   cursor: default;
 }
+
+.login-recovery {
+  font-size: 13px;
+  color: var(--text);
+}

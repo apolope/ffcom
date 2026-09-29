@@ -113,6 +113,8 @@ code {
 .btn-ghost:hover { background: var(--surface); color: var(--text-h); }
 .btn-sm { min-height: 44px; padding: 0 16px; }
 .acoes { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+.acoes-nota { margin: 14px 0 0; font-size: 14px; }
+.acoes-nota a { color: var(--muted); }
 
 /* Hero */
 .hero { position: relative; overflow: hidden; padding: 72px 0 88px; isolation: isolate; }

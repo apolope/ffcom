@@ -1,4 +1,5 @@
 import { useAuth } from '../auth/AuthProvider'
+import { AUTH_RECOVERY_URL } from '../auth/config'
 import './LoginScreen.css'
 
 export function LoginScreen() {
@@ -25,6 +26,11 @@ export function LoginScreen() {
         <button type="button" className="login-button" onClick={signIn} disabled={!!redirecting}>
           {redirecting ? 'Abrindo o Authentik…' : 'Entrar com Authentik'}
         </button>
+        {/* Nova aba (no Electron, o navegador do sistema): a tela de login
+            fica aqui para entrar depois de definir a senha. */}
+        <a className="login-recovery" href={AUTH_RECOVERY_URL} target="_blank" rel="noreferrer">
+          Esqueci minha senha
+        </a>
       </div>
     </div>
   )

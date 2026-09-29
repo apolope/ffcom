@@ -1569,6 +1569,14 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Alternativas consideradas:** link de convite do Authentik (flow de enrollment com invitation; exigiria flow novo no blueprint e alguém entregar o link, pois o Authentik não envia convite por e-mail); senha escolhida no formulário (o FFCom passaria a guardar senha); bot separado (mais isolado, mas o Apolonio preferiu o bot existente); o FFCom ouvir o bot por `getUpdates` (quebraria o monitor e seriam dois agentes ouvindo).
 
+**Link de definir senha pela brand do FFCom (2026-09-28):** o `recovery_email` do Authentik monta o link sempre com o fluxo de recuperação da brand da requisição (`_create_recovery_link`, 2026.8), e o stage de e-mail só escolhe assunto e template. Como a única brand era a padrão, quem era aprovado caía no `default-recovery-flow`: confirmação, o e-mail pedido de novo, nova senha, e fim sem login nem volta ao app (a pessoa terminava na biblioteca do Authentik). Agora:
+- **Brand `auth.ffcom.a3sitsolutions.com.br`** (`abs-3d-printer` commit `bc66098`), com `flow_recovery` = `ffcom-recovery-flow`, marca do FFCom e os mesmos fluxos de login e logout da brand padrão. Domínio servido pelo mesmo Authentik: registro A e proxy host id 73 no NPM, certificado wildcard `*.ffcom` id 71 (runbook da rede, fase 9, commit `5e1da64`).
+- **`ffcom-recovery-flow` pula a identificação quando vem de link** (policy `ffcom-recovery-skip-if-restored`). O stage de e-mail não é pulado: ele confere que o token é do mesmo usuário e avança sem reenviar.
+- **`server-central`**: `AUTHENTIK_URL=https://auth.ffcom.a3sitsolutions.com.br`, para a chamada à API cair na brand do FFCom, e `AUTHENTIK_RECOVERY_EMAIL_STAGE` = `ed048547-ed72-488b-a071-c44b0714a536` (`ffcom-recovery-email`, marca FFCom). O `OIDC_ISSUER_URL` continua no `authentik.abs`: o login do app não mudou de domínio. Trocado em `/opt/ffcom/envs/ffcom-central.env` (backup `.bak-20260928-233934`), com o container recriado na mesma imagem.
+- **"Esqueci minha senha"** na tela de login do app e na home, apontando para o mesmo fluxo em `auth.ffcom`. No Electron, links `http(s)` com `target="_blank"` passaram a abrir no navegador do sistema (`setWindowOpenHandler`); antes abriam uma janela solta do app. Isso vale também para "Código-fonte" e "Licenças de terceiros".
+
+**Consequência aceita:** o login que o fluxo faz no fim vale só no domínio `auth.ffcom`, e o app usa o `authentik.abs`. Por isso, depois de definir a senha, a pessoa entra mais uma vez no app, com a senha nova.
+
 **Revisitar quando:** o volume de pedidos justificar captcha; o token do bot for trocado (é compartilhado com o monitor, que também precisa do novo); ou alguém de fora do círculo de confiança entrar no grupo "Rede", porque qualquer membro dele pode aprovar.
 
 ## Decisão: licença AGPL-3.0

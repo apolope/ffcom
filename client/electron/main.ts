@@ -8,6 +8,7 @@ import {
   powerMonitor,
   protocol,
   session,
+  shell,
 } from 'electron'
 import { existsSync, statSync } from 'node:fs'
 import path from 'node:path'
@@ -99,6 +100,18 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
+  })
+
+  // Links com target="_blank" (código-fonte, licenças, "Esqueci minha
+  // senha") abririam uma janela solta do próprio app: http(s) vai para o
+  // navegador do sistema. O resto (a object URL de um anexo, por exemplo)
+  // continua abrindo numa janela do app, como antes.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https://') || url.startsWith('http://')) {
+      void shell.openExternal(url)
+      return { action: 'deny' }
+    }
+    return { action: 'allow' }
   })
 
   if (VITE_DEV_SERVER_URL) {
