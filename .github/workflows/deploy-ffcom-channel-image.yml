@@ -30,13 +30,13 @@ env:
   # Semente: latest = versão mais nova do índice que este runtime aceita no
   # momento do build. Aceita também X.Y ou X.Y.Z.
   CHANNEL_VERSION: latest
-  # Só amd64 por enquanto. O Dockerfile já builda arm64 sem QEMU (nenhum RUN
-  # executa binário da plataforma alvo; o teste local da Fase 3 buildou as
-  # duas). O que não foi conferido é o builder do runner: o driver "docker"
-  # sem containerd image store não faz build multi-plataforma. Para ligar
-  # arm64, troque para "linux/amd64,linux/arm64"; o passo "Builder buildx"
-  # abaixo cria então um builder docker-container, que faz.
-  PLATFORMS: linux/amd64
+  # O Dockerfile builda arm64 sem QEMU (nenhum RUN executa binário da
+  # plataforma alvo). Com mais de uma plataforma, o passo "Builder buildx"
+  # abaixo cria um builder docker-container, porque o driver "docker" sem
+  # containerd image store não faz build multi-plataforma. Conferido no
+  # SVRUBS24IPS0101 (buildx 0.34, 2026-09-28): build das duas com esse tipo
+  # de builder, e lançador e semente da variante arm64 saem aarch64.
+  PLATFORMS: linux/amd64,linux/arm64
 
 jobs:
   lint-dockerfile:

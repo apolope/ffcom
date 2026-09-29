@@ -37,8 +37,10 @@ se atualiza sozinho (ver "Atualizações" abaixo). Nada de Go ou de clone
 compilável é necessário; basta este diretório com o `docker-compose.yml` e o
 `.env`.
 
-A imagem sai hoje só para `linux/amd64`; `arm64` (Raspberry Pi, VPS ARM)
-ainda não tem imagem publicada.
+A imagem publicada até `channel-image-v1.0.0` é só `linux/amd64`. O
+workflow já builda também `linux/arm64` (Raspberry Pi, VPS ARM), que entra
+na próxima tag `channel-image-v*`; o `docker pull` escolhe a variante da
+máquina sozinho.
 
 Para desenvolver no código do `server-channel` (compilar o que está no
 disco em vez de usar a imagem publicada), o caminho é o override
