@@ -279,6 +279,18 @@ export function createRole(
   return postJsonOrThrow(baseUrl, '/api/roles', accessToken, 'POST', role)
 }
 
+// PATCH /api/roles/{id} — substitui nome, cor, permissões e posição de uma
+// role, inclusive a default ("@everyone"). Requer ManageRoles, e o servidor
+// recusa conceder bits que quem edita não tem (permissions.Grants).
+export function updateRole(
+  baseUrl: string,
+  accessToken: string,
+  roleId: string,
+  role: { name: string; color?: string; permissions: number; position: number },
+): Promise<RemoteRole> {
+  return postJsonOrThrow(baseUrl, `/api/roles/${roleId}`, accessToken, 'PATCH', role)
+}
+
 export function deleteRole(baseUrl: string, accessToken: string, roleId: string): Promise<void> {
   return postJsonOrThrow(baseUrl, `/api/roles/${roleId}`, accessToken, 'DELETE')
 }

@@ -35,7 +35,14 @@ export function CategoryDialog({ category, canRename, onSave, onDelete, onClose 
 
   return (
     <div className="dialog-overlay" onClick={onClose}>
-      <div className="dialog-card" onClick={(e) => e.stopPropagation()}>
+      <form
+        className="dialog-card"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (nameEditable && !busy && name.trim()) run(() => onSave(name.trim()))
+        }}
+      >
         <h2>{category ? 'Editar categoria' : 'Nova categoria'}</h2>
         <label>
           Nome
@@ -64,17 +71,12 @@ export function CategoryDialog({ category, canRename, onSave, onDelete, onClose 
             {nameEditable ? 'Cancelar' : 'Fechar'}
           </button>
           {nameEditable && (
-            <button
-              type="submit"
-              className="dialog-submit"
-              onClick={() => run(() => onSave(name.trim()))}
-              disabled={busy || !name.trim()}
-            >
+            <button type="submit" className="dialog-submit" disabled={busy || !name.trim()}>
               {busy ? 'Salvando…' : category ? 'Salvar' : 'Criar'}
             </button>
           )}
         </div>
-      </div>
+      </form>
     </div>
   )
 }
@@ -121,7 +123,16 @@ export function ChannelDialog({
 
   return (
     <div className="dialog-overlay" onClick={onClose}>
-      <div className="dialog-card" onClick={(e) => e.stopPropagation()}>
+      <form
+        className="dialog-card"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (canSave && !busy && name.trim()) {
+            run(() => onSave({ name: name.trim(), type, categoryId: categoryId || undefined }))
+          }
+        }}
+      >
         <h2>{channel ? 'Editar canal' : 'Novo canal'}</h2>
         <label>
           Nome
@@ -173,17 +184,12 @@ export function ChannelDialog({
             {canSave ? 'Cancelar' : 'Fechar'}
           </button>
           {canSave && (
-            <button
-              type="submit"
-              className="dialog-submit"
-              onClick={() => run(() => onSave({ name: name.trim(), type, categoryId: categoryId || undefined }))}
-              disabled={busy || !name.trim()}
-            >
+            <button type="submit" className="dialog-submit" disabled={busy || !name.trim()}>
               {busy ? 'Salvando…' : channel ? 'Salvar' : 'Criar'}
             </button>
           )}
         </div>
-      </div>
+      </form>
     </div>
   )
 }

@@ -15,6 +15,10 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## client v0.15.0 · 2026-09-28
+- As roles do servidor agora podem ser editadas depois de criadas: "Editar" em cada role de "Gerenciar membros" mostra as permissões para ligar e desligar, inclusive na **@everyone** (por exemplo, "Criar convites" para todo mundo).
+- Enter no nome cria ou salva a categoria e o canal, sem precisar clicar no botão.
+
 ## site v0.5.0 · 2026-09-27
 - Quem já tem conta em outro serviço da infra A3S marca "Já tenho conta" no formulário e pede só o acesso, sem escolher usuário nem apelido; aprovado, entra no FFCom com o usuário e a senha de sempre.
 - O formulário avisa enquanto você digita se o nome de usuário já está em uso ou é reservado.

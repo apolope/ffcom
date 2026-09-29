@@ -10,6 +10,7 @@ import {
   kickMember,
   removeRole,
   unbanMember,
+  updateRole,
   type RemoteBan,
   type RemoteMember,
   type RemoteRole,
@@ -25,6 +26,10 @@ interface UseServerMembersResult {
   status: ServerMembersStatus
   error: string | undefined
   createRole: (role: { name: string; color?: string; permissions: number; position: number }) => Promise<void>
+  updateRole: (
+    roleId: string,
+    role: { name: string; color?: string; permissions: number; position: number },
+  ) => Promise<void>
   deleteRole: (roleId: string) => Promise<void>
   assignRole: (memberId: string, roleId: string) => Promise<void>
   removeRole: (memberId: string, roleId: string) => Promise<void>
@@ -122,6 +127,10 @@ export function useServerMembers(
     error,
     createRole: async (role) => {
       await createRole(serverBaseUrl, accessToken, role)
+      await load()
+    },
+    updateRole: async (roleId, role) => {
+      await updateRole(serverBaseUrl, accessToken, roleId, role)
       await load()
     },
     deleteRole: async (roleId) => {

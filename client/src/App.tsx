@@ -197,6 +197,7 @@ function App() {
     roles,
     bans,
     createRole,
+    updateRole,
     deleteRole,
     assignRole,
     removeRole,
@@ -478,6 +479,7 @@ function App() {
               canKick={canKick}
               canBan={canBan}
               onCreateRole={createRole}
+              onUpdateRole={updateRole}
               onDeleteRole={deleteRole}
               onAssignRole={assignRole}
               onRemoveRole={removeRole}

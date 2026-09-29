@@ -15,6 +15,10 @@ interface ManageRolesDialogProps {
   canKick: boolean
   canBan: boolean
   onCreateRole: (role: { name: string; permissions: number; position: number }) => Promise<void>
+  onUpdateRole: (
+    roleId: string,
+    role: { name: string; color?: string; permissions: number; position: number },
+  ) => Promise<void>
   onDeleteRole: (roleId: string) => Promise<void>
   onAssignRole: (memberId: string, roleId: string) => Promise<void>
   onRemoveRole: (memberId: string, roleId: string) => Promise<void>
@@ -43,7 +47,25 @@ const PERMISSION_LABELS: { bit: number; label: string }[] = [
   { bit: PERMISSIONS.Administrator, label: 'Administrador (ignora tudo acima)' },
 ]
 
-// Painel de administração de roles: criar/remover roles do servidor e
+function PermissionCheckboxes({ mask, onToggle }: { mask: number; onToggle: (bit: number) => void }) {
+  return (
+    <div className="permission-checkboxes">
+      {PERMISSION_LABELS.map(({ bit, label }) => (
+        <label key={bit}>
+          <input type="checkbox" checked={(mask & bit) !== 0} onChange={() => onToggle(bit)} />
+          {label}
+        </label>
+      ))}
+    </div>
+  )
+}
+
+function toggleBit(mask: number, bit: number) {
+  return mask & bit ? mask & ~bit : mask | bit
+}
+
+// Painel de administração de roles: criar, editar (inclusive a @everyone,
+// que é a base de todo membro) e remover roles do servidor e
 // atribuí-las a membros (ver docs/architecture.md, "Sistema de
 // permissões/roles por servidor e por canal"). Overwrites por canal ainda
 // não têm UI — só a API existe por enquanto (ver TODO.md).
@@ -56,6 +78,7 @@ export function ManageRolesDialog({
   canKick,
   canBan,
   onCreateRole,
+  onUpdateRole,
   onDeleteRole,
   onAssignRole,
   onRemoveRole,
@@ -69,6 +92,9 @@ export function ManageRolesDialog({
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string>()
   const [actionError, setActionError] = useState<string>()
+  const [editing, setEditing] = useState<{ roleId: string; mask: number }>()
+  const [saving, setSaving] = useState(false)
+  const [editError, setEditError] = useState<string>()
 
   const assignableRoles = roles.filter((r) => !r.isDefault)
 
@@ -97,9 +123,28 @@ export function ManageRolesDialog({
     }
   }
 
-  function togglePermission(bit: number) {
-    setPermMask((prev) => (prev & bit ? prev & ~bit : prev | bit))
+  async function handleSaveEdit(role: Role) {
+    if (!editing) return
+    setEditError(undefined)
+    setSaving(true)
+    try {
+      await onUpdateRole(role.id, {
+        name: role.name,
+        color: role.color,
+        permissions: editing.mask,
+        position: role.position,
+      })
+      setEditing(undefined)
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'falha ao salvar role')
+    } finally {
+      setSaving(false)
+    }
   }
+
+  // @everyone primeiro: é a role que mais se edita (ex. liberar "Criar
+  // convites" para todos) e não aparece na atribuição por membro.
+  const editableRoles = [...roles.filter((r) => r.isDefault), ...assignableRoles]
 
   return (
     <div className="dialog-overlay" onClick={onClose}>
@@ -109,15 +154,52 @@ export function ManageRolesDialog({
         {canManageRoles && (
           <section className="manage-roles-section">
             <h3>Roles</h3>
+            {editError && <p className="dialog-error">{editError}</p>}
             <ul className="role-list">
-              {assignableRoles.map((role) => (
-                <li key={role.id}>
-                  <span style={role.color ? { color: role.color } : undefined}>{role.name}</span>
-                  <button type="button" onClick={() => runAction(() => onDeleteRole(role.id))}>
-                    Remover
-                  </button>
-                </li>
-              ))}
+              {editableRoles.map((role) => {
+                const isEditing = editing?.roleId === role.id
+                return (
+                  <li key={role.id} className={isEditing ? 'role-editing' : undefined}>
+                    <div className="role-row">
+                      <span style={role.color ? { color: role.color } : undefined}>
+                        {role.isDefault ? '@everyone' : role.name}
+                      </span>
+                      <div className="role-row-actions">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditError(undefined)
+                            setEditing(isEditing ? undefined : { roleId: role.id, mask: role.permissions })
+                          }}
+                        >
+                          {isEditing ? 'Cancelar' : 'Editar'}
+                        </button>
+                        {!role.isDefault && (
+                          <button type="button" onClick={() => runAction(() => onDeleteRole(role.id))}>
+                            Remover
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {isEditing && (
+                      <div className="role-edit">
+                        <PermissionCheckboxes
+                          mask={editing.mask}
+                          onToggle={(bit) => setEditing({ roleId: role.id, mask: toggleBit(editing.mask, bit) })}
+                        />
+                        <button
+                          type="button"
+                          className="dialog-submit"
+                          disabled={saving || editing.mask === role.permissions}
+                          onClick={() => handleSaveEdit(role)}
+                        >
+                          {saving ? 'Salvando…' : 'Salvar'}
+                        </button>
+                      </div>
+                    )}
+                  </li>
+                )
+              })}
               {assignableRoles.length === 0 && (
                 <li className="hint">Nenhuma role além de "@everyone" ainda.</li>
               )}
@@ -131,18 +213,7 @@ export function ManageRolesDialog({
                 onChange={(e) => setName(e.target.value)}
                 required
               />
-              <div className="permission-checkboxes">
-                {PERMISSION_LABELS.map(({ bit, label }) => (
-                  <label key={bit}>
-                    <input
-                      type="checkbox"
-                      checked={(permMask & bit) !== 0}
-                      onChange={() => togglePermission(bit)}
-                    />
-                    {label}
-                  </label>
-                ))}
-              </div>
+              <PermissionCheckboxes mask={permMask} onToggle={(bit) => setPermMask((prev) => toggleBit(prev, bit))} />
               {error && <p className="dialog-error">{error}</p>}
               <button type="submit" className="dialog-submit" disabled={creating || !name.trim()}>
                 {creating ? 'Criando…' : 'Criar role'}
