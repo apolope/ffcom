@@ -38,7 +38,8 @@ Base URL: `VITE_SERVER_CENTRAL_URL` no client (`http://localhost:8081` em dev).
 | Método | Rota | Auth | Request | Response | Erros |
 |---|---|---|---|---|---|
 | GET | `/healthz` | não | — | `{status, version}` | — |
-| GET | `/api/me` | Bearer | — | `{accountId, oidcSubject, createdAt, e2ePublicKey, hasE2EKeyBackup, displayName?, avatarUrl?}` — `e2ePublicKey` é base64 ou `null` (nunca omitido) | — |
+| GET | `/api/me` | Bearer | — | `{accountId, oidcSubject, createdAt, e2ePublicKey, hasE2EKeyBackup, status, displayName?, customDisplayName?, avatarUrl?}` — `e2ePublicKey` é base64 ou `null` (nunca omitido); `displayName` é o nome escolhido no FFCom ou, sem ele, o do Authentik, e `customDisplayName` só vem quando há um escolhido | — |
+| PUT | `/api/me/display-name` | Bearer | `{displayName}` — até 64 bytes depois do trim, sem caractere de controle; vazio ou `null` volta ao nome do Authentik | mesmo formato de `GET /api/me` | `400` nome longo, com caractere de controle ou corpo inválido |
 | PUT | `/api/me/e2e-public-key` | Bearer | `{publicKey}` (base64, 32 bytes) | `204` | `400` tamanho inválido; `409` se a conta já tem backup da chave (rota de clients antigos) |
 | GET | `/api/me/e2e-key-backup` | Bearer | — | `{publicKey, backup}` (base64) — backup cifrado com a frase de recuperação, opaco para o servidor | `404` sem backup |
 | PUT | `/api/me/e2e-key-backup` | Bearer | `{publicKey, backup, replace}` — `publicKey` 32 bytes, `backup` até 1024 bytes (base64) | `204` | `400` tamanho inválido; `409` se já houver backup e `replace` for falso |

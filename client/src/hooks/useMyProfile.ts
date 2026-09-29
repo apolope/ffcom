@@ -3,6 +3,7 @@ import { invalidateAvatar } from '../lib/avatarCache'
 import {
   deleteMyAvatar,
   fetchMyProfile,
+  setMyDisplayName,
   setMyStatus,
   uploadMyAvatar,
   type MyProfile,
@@ -13,6 +14,8 @@ interface UseMyProfileResult {
   profile: MyProfile | undefined
   uploadAvatar: (file: File) => Promise<void>
   removeAvatar: () => Promise<void>
+  // Grava o nome de exibição; undefined volta ao nome do Authentik.
+  setDisplayName: (displayName: string | undefined) => Promise<void>
   // Troca o status escolhido. Aplica na hora e desfaz se o servidor recusar.
   setStatus: (status: ChosenStatus) => Promise<void>
 }
@@ -56,6 +59,13 @@ export function useMyProfile(accessToken: string): UseMyProfileResult {
     setProfile(updated)
   }, [accessToken, profile?.avatarUrl])
 
+  const setDisplayName = useCallback(
+    async (displayName: string | undefined) => {
+      setProfile(await setMyDisplayName(accessToken, displayName))
+    },
+    [accessToken],
+  )
+
   const setStatus = useCallback(
     async (status: ChosenStatus) => {
       const previous = profile?.status
@@ -70,5 +80,5 @@ export function useMyProfile(accessToken: string): UseMyProfileResult {
     [accessToken, profile?.status],
   )
 
-  return { profile, uploadAvatar, removeAvatar, setStatus }
+  return { profile, uploadAvatar, removeAvatar, setDisplayName, setStatus }
 }

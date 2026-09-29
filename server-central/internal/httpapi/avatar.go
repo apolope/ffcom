@@ -32,11 +32,10 @@ var allowedAvatarContentTypes = map[string]bool{
 // qualquer avatar anterior. Ver docs/architecture.md, "Decisão: upload de
 // avatar de conta".
 //
-// profiles.display_name é NOT NULL, mas não existe (ainda) endpoint para
-// editá-lo (ver TODO.md) — na primeira vez que uma conta ganha avatar sem
-// nunca ter preenchido perfil, o nome de exibição persistido é o
-// oidcSubject cru, mesmo fallback que o client já aplica no lugar de
-// displayName ausente (ver client/src/hooks/useFriends.ts).
+// profiles.display_name é NOT NULL: na primeira vez que uma conta ganha
+// avatar sem nunca ter escolhido nome (PUT /api/me/display-name), o valor
+// persistido é o oidcSubject cru, marcador de "sem nome escolhido" (ver
+// currentOrFallbackDisplayName).
 func handleUploadAvatar(profiles *store.ProfileStore, files *storage.AvatarStore, avatarMaxBytes int64) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())

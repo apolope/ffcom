@@ -54,6 +54,14 @@ func buildMeResponse(ctx context.Context, profiles *store.ProfileStore, account 
 		resp.DisplayName = &profile.DisplayName
 		resp.AvatarURL = profile.AvatarURL
 	}
+
+	stored, err := profiles.StoredDisplayName(ctx, account.ID)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		return meResponse{}, err
+	}
+	if err == nil && stored != account.OIDCSubject {
+		resp.CustomDisplayName = &stored
+	}
 	return resp, nil
 }
 
@@ -74,5 +82,9 @@ type meResponse struct {
 	// Status escolhido (online, busy, away ou invisible), não o visível.
 	Status      string  `json:"status"`
 	DisplayName *string `json:"displayName,omitempty"`
-	AvatarURL   *string `json:"avatarUrl,omitempty"`
+	// Nome escolhido no FFCom (PUT /api/me/display-name), ausente quando
+	// displayName é o do Authentik. O client preenche o diálogo com ele:
+	// com displayName, salvar sem mexer congelaria o nome do Authentik.
+	CustomDisplayName *string `json:"customDisplayName,omitempty"`
+	AvatarURL         *string `json:"avatarUrl,omitempty"`
 }

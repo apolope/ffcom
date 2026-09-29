@@ -37,6 +37,8 @@ interface ServerRailProps {
   onSelectFriends: () => void
   onAddServer: () => void
   onOpenMyAvatar: () => void
+  // Ausente enquanto o perfil de server-central não carregou.
+  onEditDisplayName?: () => void
   // Ausente fora de um servidor (apelido é por server-channel).
   onEditNickname?: () => void
   onSignOut: () => void
@@ -60,6 +62,7 @@ export function ServerRail({
   onSelectFriends,
   onAddServer,
   onOpenMyAvatar,
+  onEditDisplayName,
   onEditNickname,
   onSignOut,
 }: ServerRailProps) {
@@ -247,6 +250,7 @@ export function ServerRail({
             chosen={chosen}
             onChoose={onSetStatus}
             onEditAvatar={onOpenMyAvatar}
+            onEditDisplayName={onEditDisplayName}
             onEditNickname={onEditNickname}
             onClose={closeMenu}
           />

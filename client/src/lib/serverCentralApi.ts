@@ -30,9 +30,9 @@ async function parseJsonOrThrow<T>(res: Response): Promise<T> {
 
 // Conta autenticada + perfil (GET /api/me em server-central) -- não confundir
 // com hooks/useMe.ts, que é o "me" de um server-channel específico (apelido,
-// permissões). displayName/avatarUrl aqui vêm de profiles, preenchido só
-// depois do primeiro upload de avatar (ver internal/httpapi/avatar.go em
-// server-central, docs/architecture.md "Decisão: upload de avatar de conta").
+// permissões). displayName é o nome escolhido no FFCom ou, sem ele, o do
+// perfil do Authentik (ver docs/architecture.md, "Decisão: nome de
+// exibição da conta"); avatarUrl vem de profiles.
 export interface MyProfile {
   accountId: string
   oidcSubject: string
@@ -47,6 +47,8 @@ export interface MyProfile {
   // server-central anterior ao campo.
   hasE2EKeyBackup?: boolean
   displayName?: string
+  // Nome escolhido no FFCom; ausente quando displayName é o do Authentik.
+  customDisplayName?: string
   avatarUrl?: string
 }
 
@@ -64,6 +66,21 @@ export async function uploadMyAvatar(accessToken: string, file: File): Promise<M
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
     body: form,
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(text || `server-central: ${res.status} ${res.statusText}`)
+  }
+  return res.json() as Promise<MyProfile>
+}
+
+// PUT /api/me/display-name — grava o nome de exibição da conta; undefined
+// volta a usar o nome do perfil do Authentik.
+export async function setMyDisplayName(accessToken: string, displayName: string | undefined): Promise<MyProfile> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/me/display-name`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ displayName: displayName ?? null }),
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')

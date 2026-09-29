@@ -95,6 +95,23 @@ func (s *ProfileStore) GetManyByAccountIDs(ctx context.Context, accountIDs []str
 	return out, nil
 }
 
+// SetDisplayName grava o display_name da conta sem mexer no avatar, criando
+// a linha de profiles se ainda não existir. Para voltar ao nome do
+// Authentik, quem chama passa o "sub" da conta (ver displayNameSQL).
+func (s *ProfileStore) SetDisplayName(ctx context.Context, accountID, displayName string) error {
+	const query = `
+		INSERT INTO profiles (account_id, display_name, updated_at)
+		VALUES ($1, $2, now())
+		ON CONFLICT (account_id) DO UPDATE
+		SET display_name = EXCLUDED.display_name,
+		    updated_at = now()
+	`
+	if _, err := s.pool.Exec(ctx, query, accountID, displayName); err != nil {
+		return fmt.Errorf("profiles: set display_name: %w", err)
+	}
+	return nil
+}
+
 // Upsert cria ou atualiza o perfil de uma conta.
 func (s *ProfileStore) Upsert(ctx context.Context, accountID, displayName string, avatarURL *string) (Profile, error) {
 	const query = `

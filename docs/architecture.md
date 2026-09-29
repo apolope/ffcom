@@ -795,7 +795,7 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Tamanho máximo:** `AVATAR_MAX_MB` (padrão 2 MB, bem menor que os 8 MB de anexo — avatar não precisa do mesmo espaço), aplicado via `http.MaxBytesReader` antes de `ParseMultipartForm`, mesmo mecanismo do upload de anexo.
 
-**Revisitar quando:** a feature de editar `display_name` for implementada de verdade (nesse ponto, o fallback pro `oidcSubject` aqui deixa de ser necessário); ou por demanda de redimensionar/normalizar a imagem no servidor (hoje o arquivo enviado é gravado como está, sem reencode).
+**Revisitar quando:** houver demanda por redimensionar/normalizar a imagem no servidor (hoje o arquivo enviado é gravado como está, sem reencode). O `display_name` provisório ganhou rota de edição em "Decisão: nome de exibição da conta", que reaproveita o `sub` como marcador de "sem nome escolhido".
 
 ## Decisão: indicador de não lida — `lastMessageAt` do servidor + cursor local no client, sem contagem nem WebSocket dedicado
 
@@ -1610,6 +1610,27 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 **Razão:** o seletor próprio é o mínimo que devolve ao app desktop o que o navegador já dá, sem mexer no caminho do LiveKit; e o `restrictOwnAudio`, medido e não pedido às cegas, evita o eco que o loopback traria.
 
 **Revisitar quando:** o `useSystemPicker` sair do experimental ou chegar a Windows; o Electron ganhar captura de áudio fora do Windows; ou alguém pedir para compartilhar só o áudio de uma janela (o loopback é o sistema inteiro).
+
+## Decisão: nome de exibição da conta — global em `server-central`, apelido por servidor continua por cima
+
+**Contexto (2026-09-28):** até aqui o nome de uma pessoa era sempre o do perfil do Authentik (claim `name`, ou `preferred_username`), e só dava para mudar isso servidor a servidor, pelo apelido. Não havia como escolher o nome visto pelos amigos e nas DMs. O banco já estava pronto para isso desde "Decisão: nome do Authentik no server-central": `profiles.display_name` com o `sub` da conta é o marcador de "sem nome escolhido", e `displayNameSQL` cai no `accounts.profile_name` nesse caso. Só faltava a rota.
+
+**Alternativas consideradas:** só o apelido por servidor (o que havia); nome global que substitui o apelido; nome global com o apelido por servidor por cima, como no Discord.
+
+**Decisão:** nome global com apelido por cima. `PUT /api/me/display-name` (`internal/httpapi/display_name.go`) grava o nome com `ProfileStore.SetDisplayName`, que não mexe no avatar; vazio ou `null` grava o `sub` e volta a seguir o nome do Authentik, inclusive quando ele muda lá. `GET /api/me` ganhou `customDisplayName`, presente só quando há um nome escolhido. O client precisa dele para preencher o diálogo: com o `displayName` resolvido, salvar sem mexer congelaria o nome do Authentik como se fosse escolhido.
+
+**Nos servidores:** o client passa a gravar no `profile_name` de cada `server-channel` o nome escolhido, ou o do Authentik quando não há (`App.tsx`, `profileName` para `hooks/useMe.ts`). A regra de `Member.DisplayName()` não muda (apelido, nome do perfil, começo do id), então o `server-channel` não precisou de nada. Trocar o nome regrava na hora o servidor aberto; os outros atualizam quando a pessoa abrir cada um.
+
+**Limites:** até 64 bytes depois do trim, o mesmo do apelido e do `profile_name` em `server-channel`, para o nome sempre caber lá; sem caractere de controle (quebra de linha incluída). O input do diálogo limita em 64 caracteres, então um nome longo com acento ou emoji é recusado pelo servidor com a mensagem dele.
+
+**Consequências aceitas:**
+- Amigos veem o nome novo só quando recarregam a lista (não há frame de perfil alterado no WebSocket de presença), o mesmo escopo já aceito para avatar trocado durante a sessão.
+- O client só grava o nome nos servidores depois que o perfil de `server-central` carrega. Se o `server-central` estiver fora, o nome guardado nos servidores fica como estava até a próxima vez.
+- Qualquer nome é aceito, sem checagem de unicidade nem de conteúdo, como já vale para o apelido.
+
+**Verificado (2026-09-28):** `go vet`, `go build` e `go test` do `server-central`, com `TestDisplayName` rodando contra Postgres 17 num container descartável: definir, o lookup por subject devolvendo o nome novo, avatar preservado, recusa de 65 bytes e de quebra de linha, 64 bytes em acentuados aceito, vazio e `null` voltando ao Authentik, e o nome do Authentik voltando a acompanhar uma mudança feita lá. Client: `tsc -b` e `lint` sem aviso novo. **Não verificado:** num browser logado, nem o reflexo do nome na lista de membros e na sala de voz.
+
+**Revisitar quando:** incomodar o amigo só ver o nome novo depois de recarregar (um frame de perfil alterado para amigos resolve nome e avatar juntos).
 
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 

@@ -33,18 +33,30 @@ interface StatusMenuProps {
   chosen: ChosenStatus
   onChoose: (status: ChosenStatus) => void
   onEditAvatar: () => void
+  // Nome de exibição da conta, em server-central.
+  onEditDisplayName?: () => void
   // Apelido é por server-channel: só vem com um servidor aberto.
   onEditNickname?: () => void
   onClose: () => void
 }
 
 // Menu do próprio avatar no ServerRail: mostra quem está logado (nome,
-// usuário e e-mail do Authentik, apelido no servidor aberto), escolhe o status e abre os
-// diálogos de apelido (do servidor aberto) e de avatar. Posição fixa ao lado do botão, porque o rail rola
-// (overflow-y) e cortaria um menu posicionado dentro dele. Fecha com Esc ou
+// usuário e e-mail do Authentik, apelido no servidor aberto), escolhe o
+// status e abre os diálogos de nome de exibição (da conta), de apelido (do
+// servidor aberto) e de avatar. Posição fixa ao lado do botão, porque o rail
+// rola (overflow-y) e cortaria um menu posicionado dentro dele. Fecha com Esc ou
 // clique fora. Ver docs/architecture.md, "Decisão: status de presença e
 // avatar nas listas de membros".
-export function StatusMenu({ anchor, identity, chosen, onChoose, onEditAvatar, onEditNickname, onClose }: StatusMenuProps) {
+export function StatusMenu({
+  anchor,
+  identity,
+  chosen,
+  onChoose,
+  onEditAvatar,
+  onEditDisplayName,
+  onEditNickname,
+  onClose,
+}: StatusMenuProps) {
   const ref = useRef<HTMLDivElement>(null)
 
   useMenuDismiss(ref, anchor, onClose)
@@ -96,6 +108,19 @@ export function StatusMenu({ anchor, identity, chosen, onChoose, onEditAvatar, o
         </button>
       ))}
       <hr />
+      {onEditDisplayName && (
+        <button
+          type="button"
+          role="menuitem"
+          className="rail-menu-item"
+          onClick={() => {
+            onEditDisplayName()
+            onClose()
+          }}
+        >
+          Alterar nome de exibição
+        </button>
+      )}
       {onEditNickname && (
         <button
           type="button"

@@ -11,6 +11,7 @@ import { FriendsView } from './components/FriendsView'
 import { AddFriendDialog } from './components/AddFriendDialog'
 import { DirectMessageView } from './components/DirectMessageView'
 import { NicknameDialog } from './components/NicknameDialog'
+import { DisplayNameDialog } from './components/DisplayNameDialog'
 import { AvatarDialog } from './components/AvatarDialog'
 import { CategoryDialog, ChannelDialog } from './components/StructureDialogs'
 import { ChannelPermissionsDialog } from './components/ChannelPermissionsDialog'
@@ -62,7 +63,13 @@ function App() {
   useEffect(() => {
     if (updateReady && status === 'signed-out') applyUpdate()
   }, [updateReady, status, applyUpdate])
-  const { profile: myProfile, uploadAvatar, removeAvatar, setStatus: setMyStatus } = useMyProfile(accessToken ?? '')
+  const {
+    profile: myProfile,
+    uploadAvatar,
+    removeAvatar,
+    setDisplayName: setMyDisplayName,
+    setStatus: setMyStatus,
+  } = useMyProfile(accessToken ?? '')
   // Mensagens na tela (components/NotificationStack.tsx); desligadas com o
   // status "Ocupado" escolhido pela própria pessoa.
   const { notifications, notify, dismiss: dismissNotification } = useNotificationCenter(myProfile?.status === 'busy')
@@ -104,6 +111,7 @@ function App() {
   const [showManageRoles, setShowManageRoles] = useState(false)
   const [showAddFriend, setShowAddFriend] = useState(false)
   const [showEditNickname, setShowEditNickname] = useState(false)
+  const [showEditDisplayName, setShowEditDisplayName] = useState(false)
   const [showMyAvatar, setShowMyAvatar] = useState(false)
   const [selectedFriendId, setSelectedFriendId] = useState<string>()
   // Diálogos de estrutura: undefined = fechado; id ausente = criar.
@@ -171,11 +179,15 @@ function App() {
   }, [servers, selectedServerId])
 
   const server = servers.find((s) => s.id === selectedServerId)
-  // Nome do perfil do Authentik, gravado em cada servidor como nome exibido
-  // de quem não escolheu apelido (ver hooks/useMe.ts). A lista de membros
-  // recarrega quando ele é gravado; useServerMembers vem depois porque
-  // depende das permissões de me, daí o ref.
-  const profileName = (user?.profile.name || user?.profile.preferred_username)?.trim() || undefined
+  // Nome gravado em cada servidor como nome exibido de quem não escolheu
+  // apelido (ver hooks/useMe.ts): o nome de exibição da conta, ou o do
+  // perfil do Authentik quando não há um escolhido. Espera o perfil de
+  // server-central carregar, para não gravar o do Authentik e trocar logo
+  // depois. A lista de membros recarrega quando ele é gravado;
+  // useServerMembers vem depois porque depende das permissões de me, daí o
+  // ref.
+  const authentikName = (user?.profile.name || user?.profile.preferred_username)?.trim() || undefined
+  const profileName = myProfile ? (myProfile.customDisplayName ?? authentikName) : undefined
   const refreshMembersRef = useRef<() => Promise<void>>(undefined)
   const onProfileNameSaved = useCallback(() => void refreshMembersRef.current?.(), [])
   const { me, setNickname } = useMe(server?.baseUrl ?? '', accessToken ?? '', profileName, onProfileNameSaved)
@@ -360,7 +372,7 @@ function App() {
             onUpdate={applyUpdate}
             myProfile={myProfile}
             account={{
-              profileName,
+              profileName: authentikName,
               username: user?.profile.preferred_username,
               email: user?.profile.email,
               nickname: showFriends ? undefined : me?.nickname,
@@ -386,6 +398,7 @@ function App() {
             onSelectFriends={() => setShowFriends(true)}
             onAddServer={() => setShowAddServer(true)}
             onOpenMyAvatar={() => setShowMyAvatar(true)}
+            onEditDisplayName={myProfile ? () => setShowEditDisplayName(true) : undefined}
             onEditNickname={!showFriends && server && me ? () => setShowEditNickname(true) : undefined}
             onSignOut={signOut}
           />
@@ -579,6 +592,14 @@ function App() {
                 await refreshMembers()
               }}
               onClose={() => setShowEditNickname(false)}
+            />
+          )}
+          {showEditDisplayName && (
+            <DisplayNameDialog
+              currentName={myProfile?.customDisplayName}
+              authentikName={authentikName}
+              onSave={setMyDisplayName}
+              onClose={() => setShowEditDisplayName(false)}
             />
           )}
           {showMyAvatar && (

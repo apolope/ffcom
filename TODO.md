@@ -95,6 +95,8 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 - [x] Implementar DMs: `server-central` como gateway de mensagens (armazenamento em Postgres + entrega via WebSocket)
 - [x] API para o client listar/adicionar/remover servidores conhecidos (adição manual via IP/DNS ou convite — sem discovery automático)
 - [x] Upload de avatar — `internal/storage.AvatarStore` (disco local, chave fixa por conta), `POST/DELETE /api/me/avatar` + `GET /api/avatars/{id}`; UI em `client/src/components/AvatarDialog.tsx` (botão de conta no rodapé do `ServerRail`) e `UserAvatar.tsx` (usado ali, na lista de amigos e no cabeçalho de DM). Ver `docs/architecture.md`, "Decisão: upload de avatar de conta"
+- [x] Nome de exibição da conta: `PUT /api/me/display-name` grava o nome escolhido no FFCom (vazio volta ao do Authentik), `customDisplayName` no `GET /api/me`, "Alterar nome de exibição" no menu do avatar (`components/DisplayNameDialog.tsx`), e o client grava esse nome como `profile_name` em cada servidor, com o apelido continuando por cima. Ver `docs/architecture.md`, "Decisão: nome de exibição da conta"
+- [ ] Testar o nome de exibição num browser real, depois do deploy de `central-v*` e `client-v*`: escolher um nome no menu do avatar e ver o rail, a lista de membros e a sala de voz (entrando de novo) mudarem num servidor sem apelido; num servidor com apelido, o apelido continua; o amigo vê o nome novo na lista de amigos e na DM depois de recarregar; apagar o nome volta ao do Authentik. Verificado nesta sessão só via `go test` com Postgres real e `tsc`/`lint`
 
 ## server-channel
 
