@@ -10,7 +10,7 @@ Três componentes: `client` (SPA React, web/PWA e Electron), `server-central` (i
 
 ## Autenticação
 
-Os dois servidores validam o mesmo Bearer JWT emitido pela instância central de Authentik do `abs-3d-printer` (`OIDC_ISSUER_URL` idêntica nos dois, `coreos/go-oidc/v3`, `SkipClientIDCheck: true`) — não há chamada de rede entre eles para isso; cada um valida a assinatura/issuer/expiração de forma independente. Ver `docs/architecture.md`, "Decisão: autenticação em server-central" e "Decisão: modelo de dados de server-channel".
+Os dois servidores validam o mesmo Bearer JWT emitido pela instância central de Authentik do `abs-3d-printer` (`OIDC_ISSUER_URL` idêntica nos dois, podendo listar mais de um issuer separado por vírgula porque o mesmo provider responde por `auth.ffcom` e `authentik.abs`; `coreos/go-oidc/v3`, `SkipClientIDCheck: true`) — não há chamada de rede entre eles para isso; cada um valida a assinatura/issuer/expiração de forma independente. Ver `docs/architecture.md`, "Decisão: autenticação em server-central" e "Decisão: modelo de dados de server-channel".
 
 - **`server-central`:** qualquer token válido já basta — a conta local é criada implicitamente (upsert por `sub`) na primeira requisição autenticada (`auth.Middleware`, `AccountStore.GetOrCreateBySubject`).
 - **`server-channel`:** validar o token só dá o "sub" (`auth.VerifyToken`). A maioria das rotas exige também que esse `sub` já seja **membro** daquela instância (`auth.RequireMember`, 403 se não for) — associação feita via `POST /api/join`, que exige convite exceto para o primeiro membro (fundador do self-host). Ver "Decisão: convites obrigatórios para entrar em server-channel".

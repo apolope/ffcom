@@ -15,6 +15,12 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## channel v0.8.0 · 2026-09-29
+- Aceita o login feito pela página do FFCom no Authentik (`auth.ffcom`), além do endereço antigo: `OIDC_ISSUER_URL` pode listar mais de um emissor, separados por vírgula.
+
+## central v0.13.0 · 2026-09-29
+- Aceita o login feito pela página do FFCom no Authentik (`auth.ffcom`), além do endereço antigo: `OIDC_ISSUER_URL` pode listar mais de um emissor, separados por vírgula.
+
 ## client v0.16.0 · 2026-09-28
 - **Nome de exibição:** "Alterar nome de exibição" no menu do seu avatar escolhe o nome que amigos, mensagens diretas e servidores veem; o apelido de cada servidor continua valendo por cima dele. Deixar vazio volta ao nome da sua conta.
 - **No celular**, o chat ocupa a tela inteira: servidores e canais abrem numa gaveta à esquerda (☰ ou arrastando) e a lista de membros numa gaveta à direita.

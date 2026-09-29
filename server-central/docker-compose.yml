@@ -41,7 +41,7 @@ services:
       # issuer/JWKS) -- nao precisa de client_id/secret, so o issuer. Quem
       # tem client_id (publico, PKCE) e' o `client`, que faz o login de
       # verdade contra o Authentik.
-      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:?defina OIDC_ISSUER_URL no .env (https://authentik.abs.a3sitsolutions.com.br/application/o/ffcom/)}
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:?defina OIDC_ISSUER_URL no .env (https://auth.ffcom.a3sitsolutions.com.br/application/o/ffcom/)}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
       # Rate limiting por IP — opcionais, o binário já tem padrão (120 req/min,
       # burst 20) se omitidas. Ver docs/architecture.md, "Decisão: rate

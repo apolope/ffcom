@@ -94,7 +94,7 @@ func main() {
 	}
 	defer db.Close()
 
-	verifier, err := auth.NewVerifier(ctx, issuerURL)
+	verifier, err := auth.NewVerifier(ctx, auth.ParseIssuerURLs(issuerURL))
 	if err != nil {
 		log.Fatalf("server-channel: %v", err)
 	}
