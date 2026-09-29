@@ -310,3 +310,11 @@
 .voice-participant-self {
   opacity: 0.7;
 }
+
+/* Toque não tem hover: o ✎ do canal aberto fica sempre à mostra (nos outros
+   canais tocar já abre o canal). */
+@media (hover: none) {
+  .channel-row:has(.channel-item.active) .channel-edit-button {
+    opacity: 1;
+  }
+}

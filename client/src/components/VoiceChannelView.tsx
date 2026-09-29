@@ -225,12 +225,15 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
             <button type="button" onClick={toggleCamera}>
               {cameraEnabled ? 'Desligar câmera' : 'Ligar câmera'}
             </button>
-            <button
-              type="button"
-              onClick={electronBridge && !screenSharing ? () => setPickingScreen(true) : toggleScreenShare}
-            >
-              {screenSharing ? 'Parar compartilhamento' : 'Compartilhar tela'}
-            </button>
+            {/* Chrome no Android não tem getDisplayMedia: sem ele o botão só daria erro. */}
+            {(electronBridge || screenSharing || !!navigator.mediaDevices?.getDisplayMedia) && (
+              <button
+                type="button"
+                onClick={electronBridge && !screenSharing ? () => setPickingScreen(true) : toggleScreenShare}
+              >
+                {screenSharing ? 'Parar compartilhamento' : 'Compartilhar tela'}
+              </button>
+            )}
             <button type="button" onClick={leave}>
               Sair do canal de voz
             </button>

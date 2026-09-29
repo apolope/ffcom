@@ -6,8 +6,85 @@
 
 .empty-state {
   flex: 1;
+  /* Sem isso o cartão de dentro (ex. o da chave de E2E, 420px) alarga a
+     coluna além da tela no celular. */
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text);
+}
+
+/* Layout móvel (docs/architecture.md, "Decisão: layout móvel com gavetas").
+   No computador .nav-drawer não existe para o layout: rail e barra de canais
+   continuam filhos diretos do flex do .app-shell. */
+.nav-drawer {
+  display: contents;
+}
+
+.app-shell.mobile {
+  position: relative;
+  /* clip e não hidden: as gavetas fechadas ficam fora da tela, e hidden
+     ainda deixaria o foco ou um scrollIntoView rolar a tela de lado. */
+  overflow: clip;
+}
+
+/* Painel principal na tela inteira; servidores + canais à esquerda e membros
+   à direita entram por cima dele. Fechadas, as gavetas ficam fora da tela e
+   invisíveis (sem foco por teclado nem leitor de tela); abertas ficam sem
+   transform, para os menus position: fixed do rail não se prenderem à gaveta. */
+.app-shell.mobile .nav-drawer,
+.app-shell.mobile .member-list {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 20;
+  visibility: hidden;
+  transition:
+    transform 0.2s ease,
+    visibility 0s linear 0.2s;
+}
+
+.app-shell.mobile .nav-drawer {
+  left: 0;
+  display: flex;
+  width: min(312px, calc(100% - 48px));
+  transform: translateX(-100%);
+}
+
+.app-shell.mobile .nav-drawer > .channel-sidebar,
+.app-shell.mobile .nav-drawer > .friends-view {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+.app-shell.mobile .member-list {
+  right: 0;
+  width: min(280px, calc(100% - 48px));
+  transform: translateX(100%);
+}
+
+.app-shell.mobile[data-drawer='nav'] .nav-drawer,
+.app-shell.mobile[data-drawer='members'] .member-list {
+  visibility: visible;
+  transform: none;
+  box-shadow: var(--shadow-popover);
+  transition: transform 0.2s ease;
+}
+
+.drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  background: var(--overlay);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell.mobile .nav-drawer,
+  .app-shell.mobile .member-list,
+  .app-shell.mobile[data-drawer] .nav-drawer,
+  .app-shell.mobile[data-drawer] .member-list {
+    transition: none;
+  }
 }

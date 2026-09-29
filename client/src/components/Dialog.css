@@ -176,3 +176,15 @@
   width: 100%;
   padding: 4px 6px;
 }
+
+/* Celular (MOBILE_QUERY): o cartão cabe na tela com a borda incluída na
+   largura, e rola por dentro quando é mais alto que a tela. */
+@media (max-width: 768px) {
+  .dialog-card {
+    box-sizing: border-box;
+    max-width: calc(100vw - 24px);
+    max-height: calc(100svh - 24px);
+    overflow-y: auto;
+    padding: 20px 16px;
+  }
+}

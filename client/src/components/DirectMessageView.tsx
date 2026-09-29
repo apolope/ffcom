@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useDirectMessages } from '../hooks/useDirectMessages'
 import type { E2EKeyPair } from '../crypto/e2e'
 import type { Friend } from '../types'
+import { MobileNavButton } from './MobileNavButtons'
 import { UserAvatar } from './UserAvatar'
 import './MainPanel.css'
 import './TextChannelView.css'
@@ -38,6 +39,7 @@ export function DirectMessageView({ peer, accessToken, socket, myKeyPair }: Dire
   return (
     <section className="main-panel">
       <header className="channel-header">
+        <MobileNavButton />
         <UserAvatar avatarUrl={peer.avatarUrl} displayName={peer.displayName} size={22} />
         <span className="channel-title">{peer.displayName}</span>
       </header>

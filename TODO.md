@@ -142,6 +142,8 @@ Ver `docs/architecture.md`, "Decisão: primeira implantação de teste" e a corr
 ## client
 
 - [x] Layout base: rail de servidores → categorias → canais → lista de membros (estilo Discord)
+- [x] Layout móvel abaixo de 768px: chat na tela inteira, rail + canais numa gaveta à esquerda (☰ ou arrastar para a direita) e membros numa gaveta à direita (botão no cabeçalho ou arrastar para a esquerda); "Compartilhar tela" some sem `getDisplayMedia` (Chrome no Android). Achado ao testar no Fold7: sem layout por largura o chat ficava com 0px, e o "apertado" que se via era o Chrome em "Site para computador". Verificado no aparelho por CDP com viewport emulada; ver `docs/architecture.md`, "Decisão: layout móvel com gavetas"
+- [ ] Depois do deploy de `client-v*`, no celular com "Site para computador" **desligado** no Chrome (menu ⋮) e no PWA instalado: gavetas pelo toque e pelo gesto, teclado virtual abrindo sem esconder o campo de mensagem, e o "voltar" do Android (hoje sai da página em vez de fechar a gaveta)
 - [x] Login OIDC (Authorization Code + PKCE, `oidc-client-ts`) contra o Authentik central — tela de login antes do shell principal
 - [x] Botão de deslogar (rodapé do `ServerRail`) e fim do vazamento entre contas no mesmo navegador: par de chaves de E2E, flag de publicação e cursores de não lida agora são por `sub` do OIDC; o par antigo só é adotado pela conta cuja chave publicada bate com ele (`GET /api/me` de `server-central` passou a devolver `e2ePublicKey`). Deploy `central-v*` antes de `client-v*`. Ver `docs/architecture.md`, "Decisão: chave de E2E e cursores de não lida por conta"
 - [x] Tela de adicionar servidor via IP/DNS (`client/src/components/AddServerDialog.tsx`, via API de `server-central`; ver `client/src/hooks/useKnownServers.ts`)

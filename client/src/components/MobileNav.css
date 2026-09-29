@@ -1,0 +1,29 @@
+/* Botões do layout móvel nos cabeçalhos (☰ e membros). Só existem abaixo de
+   MOBILE_QUERY; alvo de toque de 40px. */
+.mobile-nav-button {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  margin-left: -8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-h);
+  font: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.mobile-nav-button:active {
+  background: var(--bg-tertiary);
+}
+
+.mobile-members-button {
+  margin-left: auto;
+  margin-right: -8px;
+  font-size: 18px;
+}

@@ -2,6 +2,7 @@ import type { Channel, ChannelType } from '../types'
 import { ForumChannelView } from './ForumChannelView'
 import { TextChannelView } from './TextChannelView'
 import { VoiceChannelView } from './VoiceChannelView'
+import { MobileMembersButton, MobileNavButton } from './MobileNavButtons'
 import './MainPanel.css'
 
 const CHANNEL_ICON: Record<ChannelType, string> = {
@@ -20,6 +21,7 @@ export function MainPanel({ channel, serverBaseUrl, canModerateMessages }: MainP
   return (
     <section className="main-panel">
       <header className="channel-header">
+        <MobileNavButton />
         {channel ? (
           <>
             <span className="channel-icon">{CHANNEL_ICON[channel.type]}</span>
@@ -28,6 +30,7 @@ export function MainPanel({ channel, serverBaseUrl, canModerateMessages }: MainP
         ) : (
           <span className="channel-title">Nenhum canal selecionado</span>
         )}
+        <MobileMembersButton />
       </header>
       <div className="channel-content">
         {!channel && <p className="placeholder">Selecione um canal para começar.</p>}

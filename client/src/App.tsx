@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent as ReactTouchEvent } from 'react'
 import { ServerRail } from './components/ServerRail'
 import { ChannelSidebar } from './components/ChannelSidebar'
 import { MainPanel } from './components/MainPanel'
@@ -16,6 +16,8 @@ import { AvatarDialog } from './components/AvatarDialog'
 import { CategoryDialog, ChannelDialog } from './components/StructureDialogs'
 import { ChannelPermissionsDialog } from './components/ChannelPermissionsDialog'
 import { PresenceContext, visibleOwnStatus, type PresenceContextValue } from './components/PresenceContext'
+import { MOBILE_QUERY, MobileNavContext } from './components/MobileNavContext'
+import { MobileNavButton } from './components/MobileNavButtons'
 import { useAuth } from './auth/AuthProvider'
 import { useServerStructure } from './hooks/useServerStructure'
 import { useServersUnread } from './hooks/useServersUnread'
@@ -27,6 +29,7 @@ import { useFriends, type FriendEvent } from './hooks/useFriends'
 import { useE2EKeys } from './hooks/useE2EKeys'
 import { E2EKeyPanel } from './components/E2EKeyPanel'
 import { useMe } from './hooks/useMe'
+import { useMediaQuery } from './hooks/useMediaQuery'
 import { useMyProfile } from './hooks/useMyProfile'
 import { useServerMembers } from './hooks/useServerMembers'
 import { useUnread } from './hooks/useUnread'
@@ -119,6 +122,11 @@ function App() {
   const [categoryDialog, setCategoryDialog] = useState<{ id?: string }>()
   const [channelDialog, setChannelDialog] = useState<{ id?: string; categoryId?: string }>()
   const [permissionsChannelId, setPermissionsChannelId] = useState<string>()
+  // Gaveta aberta no layout móvel (docs/architecture.md, "Decisão: layout
+  // móvel com gavetas"); no computador é ignorada.
+  const isMobile = useMediaQuery(MOBILE_QUERY)
+  const [mobileDrawer, setMobileDrawer] = useState<'nav' | 'members'>()
+  const swipeStart = useRef<{ x: number; y: number }>(undefined)
 
   const selectedFriend = friends.find((f) => f.accountId === selectedFriendId)
 
@@ -355,6 +363,41 @@ function App() {
     return null
   }
 
+  // Sem nada para mostrar no painel principal, a gaveta de servidores e
+  // canais fica aberta no celular: é por ela que se escolhe o que abrir.
+  const navForced = showFriends ? !!myE2EKeyPair && !selectedFriend : !server || !channel
+  const drawer = !isMobile ? undefined : navForced ? 'nav' : mobileDrawer
+  const closeDrawer = () => setMobileDrawer(undefined)
+
+  // Arrastar na horizontal abre e fecha as gavetas. Começa em qualquer ponto
+  // (as bordas da tela são o gesto de voltar do Android) e ignora diálogos e
+  // campos de texto, onde arrastar tem outro sentido (recorte do avatar,
+  // seleção de texto).
+  const onTouchStart = (e: ReactTouchEvent) => {
+    const target = e.target as Element
+    swipeStart.current =
+      !isMobile || e.touches.length > 1 || target.closest('.dialog-overlay, input, textarea, video, [data-no-swipe]')
+        ? undefined
+        : { x: e.touches[0].clientX, y: e.touches[0].clientY }
+  }
+  const onTouchEnd = (e: ReactTouchEvent) => {
+    const start = swipeStart.current
+    swipeStart.current = undefined
+    if (!start) return
+    const dx = e.changedTouches[0].clientX - start.x
+    const dy = e.changedTouches[0].clientY - start.y
+    if (Math.abs(dx) < 60 || Math.abs(dx) < 1.5 * Math.abs(dy)) return
+    if (drawer === 'nav') {
+      if (dx < 0 && !navForced) closeDrawer()
+    } else if (drawer === 'members') {
+      if (dx > 0) closeDrawer()
+    } else if (dx > 0) {
+      setMobileDrawer('nav')
+    } else if (!showFriends && server) {
+      setMobileDrawer('members')
+    }
+  }
+
   if (status === 'signed-out') {
     return <LoginScreen />
   }
@@ -362,70 +405,124 @@ function App() {
   return (
     <PresenceContext.Provider value={presence}>
       <NotificationsContext.Provider value={notify}>
-        <div className="app-shell">
-          <ServerRail
-            servers={servers}
-            selectedServerId={selectedServerId}
-            friendsSelected={showFriends}
-            unreadServerIds={unreadServerIds}
-            friendsUnread={!showFriends && (unreadFriendIds.size > 0 || incomingRequests.length > 0)}
-            updateReady={updateReady}
-            onUpdate={applyUpdate}
-            myProfile={myProfile}
-            account={{
-              profileName: authentikName,
-              username: user?.profile.preferred_username,
-              email: user?.profile.email,
-              nickname: showFriends ? undefined : me?.nickname,
-              serverName: server?.name,
-            }}
-            myStatus={ownStatus}
-            onSetStatus={(next) => {
-              setMyStatus(next).catch(() => {
-                /* setStatus já desfez a troca otimista */
-              })
-            }}
-            onSelectServer={(id) => {
-              setShowFriends(false)
-              setSelectedServerId(id)
-            }}
-            serverMenuActions={{
-              loading: !me,
-              // Sem o bit o POST de convite daria 403 (CreateInvites/ManageInvites ou dono).
-              onInvite: canCreateInvites ? () => setShowInviteServer(true) : undefined,
-              onManageMembers: canOpenMemberAdmin ? () => setShowManageRoles(true) : undefined,
-            }}
-            onReorderServers={saveServerOrder}
-            onSelectFriends={() => setShowFriends(true)}
-            onAddServer={() => setShowAddServer(true)}
-            onOpenMyAvatar={() => setShowMyAvatar(true)}
-            onEditDisplayName={myProfile ? () => setShowEditDisplayName(true) : undefined}
-            onEditNickname={!showFriends && server && me ? () => setShowEditNickname(true) : undefined}
-            onSignOut={signOut}
-          />
-          {showFriends ? (
-            <>
-              <FriendsView
-                friends={friends}
-                selectedFriendId={selectedFriendId}
-                unreadFriendIds={unreadFriendIds}
-                onSelectFriend={setSelectedFriendId}
-                onAddFriend={() => setShowAddFriend(true)}
-                incomingRequests={incomingRequests}
-                outgoingRequests={outgoingRequests}
-                onAcceptRequest={(id) => {
-                  acceptFriendRequest(id).catch((err: unknown) =>
-                    notify(err instanceof Error ? err.message : 'Falha ao aceitar o pedido.', 'error'),
-                  )
+        <MobileNavContext.Provider
+          value={{
+            isMobile,
+            openNav: () => setMobileDrawer('nav'),
+            openMembers: !showFriends && server ? () => setMobileDrawer('members') : undefined,
+          }}
+        >
+          <div
+            className={isMobile ? 'app-shell mobile' : 'app-shell'}
+            data-drawer={drawer}
+            onTouchStart={onTouchStart}
+            onTouchEnd={onTouchEnd}
+          >
+            <div className="nav-drawer">
+              <ServerRail
+                servers={servers}
+                selectedServerId={selectedServerId}
+                friendsSelected={showFriends}
+                unreadServerIds={unreadServerIds}
+                friendsUnread={!showFriends && (unreadFriendIds.size > 0 || incomingRequests.length > 0)}
+                updateReady={updateReady}
+                onUpdate={applyUpdate}
+                myProfile={myProfile}
+                account={{
+                  profileName: authentikName,
+                  username: user?.profile.preferred_username,
+                  email: user?.profile.email,
+                  nickname: showFriends ? undefined : me?.nickname,
+                  serverName: server?.name,
                 }}
-                onRemoveRequest={(id) => {
-                  removeFriendRequest(id).catch((err: unknown) =>
-                    notify(err instanceof Error ? err.message : 'Falha ao remover o pedido.', 'error'),
-                  )
+                myStatus={ownStatus}
+                onSetStatus={(next) => {
+                  setMyStatus(next).catch(() => {
+                    /* setStatus já desfez a troca otimista */
+                  })
                 }}
+                onSelectServer={(id) => {
+                  setShowFriends(false)
+                  setSelectedServerId(id)
+                }}
+                serverMenuActions={{
+                  loading: !me,
+                  // Sem o bit o POST de convite daria 403 (CreateInvites/ManageInvites ou dono).
+                  onInvite: canCreateInvites ? () => setShowInviteServer(true) : undefined,
+                  onManageMembers: canOpenMemberAdmin ? () => setShowManageRoles(true) : undefined,
+                }}
+                onReorderServers={saveServerOrder}
+                onSelectFriends={() => setShowFriends(true)}
+                onAddServer={() => setShowAddServer(true)}
+                onOpenMyAvatar={() => setShowMyAvatar(true)}
+                onEditDisplayName={myProfile ? () => setShowEditDisplayName(true) : undefined}
+                onEditNickname={!showFriends && server && me ? () => setShowEditNickname(true) : undefined}
+                onSignOut={signOut}
               />
-              {!myE2EKeyPair ? (
-                <E2EKeyPanel e2e={e2eKeys} />
+              {showFriends ? (
+                <FriendsView
+                  friends={friends}
+                  selectedFriendId={selectedFriendId}
+                  unreadFriendIds={unreadFriendIds}
+                  onSelectFriend={(id) => {
+                    setSelectedFriendId(id)
+                    closeDrawer()
+                  }}
+                  onAddFriend={() => setShowAddFriend(true)}
+                  incomingRequests={incomingRequests}
+                  outgoingRequests={outgoingRequests}
+                  onAcceptRequest={(id) => {
+                    acceptFriendRequest(id).catch((err: unknown) =>
+                      notify(err instanceof Error ? err.message : 'Falha ao aceitar o pedido.', 'error'),
+                    )
+                  }}
+                  onRemoveRequest={(id) => {
+                    removeFriendRequest(id).catch((err: unknown) =>
+                      notify(err instanceof Error ? err.message : 'Falha ao remover o pedido.', 'error'),
+                    )
+                  }}
+                />
+              ) : server ? (
+                <ChannelSidebar
+                  server={server}
+                  categories={categories}
+                  selectedChannelId={selectedChannelId}
+                  unreadChannelIds={unreadChannelIds}
+                  voiceParticipants={voiceParticipants}
+                  members={members}
+                  selfMemberId={me?.memberId}
+                  onSelectChannel={(id) => {
+                    setSelectedChannelId(id)
+                    closeDrawer()
+                  }}
+                  structure={structurePermissions}
+                  canManageRoles={canManageRoles}
+                  onEditChannelPermissions={setPermissionsChannelId}
+                  onCreateCategory={() => setCategoryDialog({})}
+                  onEditCategory={(id) => setCategoryDialog({ id })}
+                  onCreateChannel={(categoryId) => setChannelDialog({ categoryId })}
+                  onEditChannel={(id) => setChannelDialog({ id })}
+                  onReorderCategories={saveCategoryOrder}
+                  onReorderChannels={saveChannelOrder}
+                />
+              ) : null}
+            </div>
+            {drawer && !navForced && <div className="drawer-backdrop" onClick={closeDrawer} />}
+            {showFriends ? (
+              !myE2EKeyPair ? (
+                isMobile ? (
+                  // No celular a tela da chave precisa de um cabeçalho com o ☰
+                  // para voltar à lista de amigos e aos servidores.
+                  <section className="main-panel">
+                    <header className="channel-header">
+                      <MobileNavButton />
+                      <span className="channel-title">Mensagens diretas</span>
+                    </header>
+                    <E2EKeyPanel e2e={e2eKeys} />
+                  </section>
+                ) : (
+                  <E2EKeyPanel e2e={e2eKeys} />
+                )
               ) : selectedFriend ? (
                 <DirectMessageView
                   key={selectedFriend.accountId}
@@ -438,180 +535,161 @@ function App() {
                 <div className="empty-state">
                   <p>Selecione um amigo para conversar.</p>
                 </div>
-              )}
-            </>
-          ) : server ? (
-            <>
-              <ChannelSidebar
-                server={server}
-                categories={categories}
-                selectedChannelId={selectedChannelId}
-                unreadChannelIds={unreadChannelIds}
-                voiceParticipants={voiceParticipants}
-                members={members}
-                selfMemberId={me?.memberId}
-                onSelectChannel={setSelectedChannelId}
-                structure={structurePermissions}
-                canManageRoles={canManageRoles}
-                onEditChannelPermissions={setPermissionsChannelId}
-                onCreateCategory={() => setCategoryDialog({})}
-                onEditCategory={(id) => setCategoryDialog({ id })}
-                onCreateChannel={(categoryId) => setChannelDialog({ categoryId })}
-                onEditChannel={(id) => setChannelDialog({ id })}
-                onReorderCategories={saveCategoryOrder}
-                onReorderChannels={saveChannelOrder}
+              )
+            ) : server ? (
+              <>
+                <MainPanel channel={channel} serverBaseUrl={server.baseUrl} canModerateMessages={canModerateMessages} />
+                <MemberList members={members} roles={roles} friendActions={memberFriendActions} />
+              </>
+            ) : (
+              <div className="empty-state">
+                <p>Nenhum servidor ainda. Adicione um pelo botão "+" na barra lateral.</p>
+              </div>
+            )}
+            {showAddServer && (
+              <AddServerDialog onAdd={addServer} onClose={() => setShowAddServer(false)} />
+            )}
+            {showInviteServer && server && (
+              <InviteServerDialog
+                serverName={server.name}
+                serverBaseUrl={server.baseUrl}
+                onCreateInvite={async () => {
+                  const invite = await createServerInvite(server.baseUrl, accessToken ?? '')
+                  return invite.code
+                }}
+                onClose={() => setShowInviteServer(false)}
               />
-              <MainPanel channel={channel} serverBaseUrl={server.baseUrl} canModerateMessages={canModerateMessages} />
-              <MemberList members={members} roles={roles} friendActions={memberFriendActions} />
-            </>
-          ) : (
-            <div className="empty-state">
-              <p>Nenhum servidor ainda. Adicione um pelo botão "+" na barra lateral.</p>
-            </div>
-          )}
-          {showAddServer && (
-            <AddServerDialog onAdd={addServer} onClose={() => setShowAddServer(false)} />
-          )}
-          {showInviteServer && server && (
-            <InviteServerDialog
-              serverName={server.name}
-              serverBaseUrl={server.baseUrl}
-              onCreateInvite={async () => {
-                const invite = await createServerInvite(server.baseUrl, accessToken ?? '')
-                return invite.code
-              }}
-              onClose={() => setShowInviteServer(false)}
-            />
-          )}
-          {showManageRoles && (
-            <ManageRolesDialog
-              members={members}
-              roles={roles}
-              bans={bans}
-              currentMemberId={me?.memberId}
-              canManageRoles={canManageRoles}
-              canKick={canKick}
-              canBan={canBan}
-              onCreateRole={createRole}
-              onUpdateRole={updateRole}
-              onDeleteRole={deleteRole}
-              onAssignRole={assignRole}
-              onRemoveRole={removeRole}
-              onKick={kickMember}
-              onBan={banMember}
-              onUnban={unbanMember}
-              onClose={() => setShowManageRoles(false)}
-            />
-          )}
-          {categoryDialog && server && (
-            <CategoryDialog
-              category={realCategories.find((c) => c.id === categoryDialog.id)}
-              canRename={structurePermissions.rename}
-              onSave={async (name) => {
-                if (categoryDialog.id) {
-                  await updateCategory(server.baseUrl, accessToken ?? '', categoryDialog.id, { name })
-                } else {
-                  await createCategory(server.baseUrl, accessToken ?? '', name)
+            )}
+            {showManageRoles && (
+              <ManageRolesDialog
+                members={members}
+                roles={roles}
+                bans={bans}
+                currentMemberId={me?.memberId}
+                canManageRoles={canManageRoles}
+                canKick={canKick}
+                canBan={canBan}
+                onCreateRole={createRole}
+                onUpdateRole={updateRole}
+                onDeleteRole={deleteRole}
+                onAssignRole={assignRole}
+                onRemoveRole={removeRole}
+                onKick={kickMember}
+                onBan={banMember}
+                onUnban={unbanMember}
+                onClose={() => setShowManageRoles(false)}
+              />
+            )}
+            {categoryDialog && server && (
+              <CategoryDialog
+                category={realCategories.find((c) => c.id === categoryDialog.id)}
+                canRename={structurePermissions.rename}
+                onSave={async (name) => {
+                  if (categoryDialog.id) {
+                    await updateCategory(server.baseUrl, accessToken ?? '', categoryDialog.id, { name })
+                  } else {
+                    await createCategory(server.baseUrl, accessToken ?? '', name)
+                  }
+                  refreshStructure()
+                }}
+                onDelete={
+                  structurePermissions.deleteCategories
+                    ? async () => {
+                        if (!categoryDialog.id) return
+                        await deleteCategory(server.baseUrl, accessToken ?? '', categoryDialog.id)
+                        refreshStructure()
+                      }
+                    : undefined
                 }
-                refreshStructure()
-              }}
-              onDelete={
-                structurePermissions.deleteCategories
-                  ? async () => {
-                      if (!categoryDialog.id) return
-                      await deleteCategory(server.baseUrl, accessToken ?? '', categoryDialog.id)
-                      refreshStructure()
-                    }
-                  : undefined
-              }
-              onClose={() => setCategoryDialog(undefined)}
-            />
-          )}
-          {permissionsChannel && server && (
-            <ChannelPermissionsDialog
-              key={permissionsChannel.id}
-              channel={permissionsChannel}
-              roles={roles}
-              myPermissions={me?.permissions ?? 0}
-              isOwner={!!me?.isOwner}
-              onLoad={loadChannelOverwrites}
-              onSet={async (roleId, overwrite) => {
-                await setChannelOverwrite(server.baseUrl, accessToken ?? '', permissionsChannel.id, roleId, overwrite)
-              }}
-              onDelete={(roleId) => deleteChannelOverwrite(server.baseUrl, accessToken ?? '', permissionsChannel.id, roleId)}
-              onSaved={refreshStructure}
-              onClose={() => setPermissionsChannelId(undefined)}
-            />
-          )}
-          {channelDialog && server && (
-            <ChannelDialog
-              channel={findChannelForDialog(categories, channelDialog.id)}
-              initialCategoryId={channelDialog.categoryId}
-              categories={realCategories}
-              canRename={structurePermissions.rename}
-              canMove={structurePermissions.reorderChannels}
-              onSave={async ({ name, type, categoryId }) => {
-                const existing = findChannelForDialog(categories, channelDialog.id)
-                if (existing) {
-                  // Só manda o que mudou: renomear e mover exigem permissões
-                  // diferentes, e mandar o nome igual pediria ManageChannels à toa.
-                  const changes: { name?: string; categoryId?: string | null } = {}
-                  if (name !== existing.name) changes.name = name
-                  if (categoryId !== existing.categoryId) changes.categoryId = categoryId ?? null
-                  if (Object.keys(changes).length === 0) return
-                  await updateChannel(server.baseUrl, accessToken ?? '', existing.id, changes)
-                } else {
-                  const created = await createChannel(server.baseUrl, accessToken ?? '', { name, type, categoryId })
-                  setSelectedChannelId(created.id)
+                onClose={() => setCategoryDialog(undefined)}
+              />
+            )}
+            {permissionsChannel && server && (
+              <ChannelPermissionsDialog
+                key={permissionsChannel.id}
+                channel={permissionsChannel}
+                roles={roles}
+                myPermissions={me?.permissions ?? 0}
+                isOwner={!!me?.isOwner}
+                onLoad={loadChannelOverwrites}
+                onSet={async (roleId, overwrite) => {
+                  await setChannelOverwrite(server.baseUrl, accessToken ?? '', permissionsChannel.id, roleId, overwrite)
+                }}
+                onDelete={(roleId) => deleteChannelOverwrite(server.baseUrl, accessToken ?? '', permissionsChannel.id, roleId)}
+                onSaved={refreshStructure}
+                onClose={() => setPermissionsChannelId(undefined)}
+              />
+            )}
+            {channelDialog && server && (
+              <ChannelDialog
+                channel={findChannelForDialog(categories, channelDialog.id)}
+                initialCategoryId={channelDialog.categoryId}
+                categories={realCategories}
+                canRename={structurePermissions.rename}
+                canMove={structurePermissions.reorderChannels}
+                onSave={async ({ name, type, categoryId }) => {
+                  const existing = findChannelForDialog(categories, channelDialog.id)
+                  if (existing) {
+                    // Só manda o que mudou: renomear e mover exigem permissões
+                    // diferentes, e mandar o nome igual pediria ManageChannels à toa.
+                    const changes: { name?: string; categoryId?: string | null } = {}
+                    if (name !== existing.name) changes.name = name
+                    if (categoryId !== existing.categoryId) changes.categoryId = categoryId ?? null
+                    if (Object.keys(changes).length === 0) return
+                    await updateChannel(server.baseUrl, accessToken ?? '', existing.id, changes)
+                  } else {
+                    const created = await createChannel(server.baseUrl, accessToken ?? '', { name, type, categoryId })
+                    setSelectedChannelId(created.id)
+                  }
+                  refreshStructure()
+                }}
+                onDelete={
+                  structurePermissions.deleteChannels
+                    ? async () => {
+                        if (!channelDialog.id) return
+                        await deleteChannel(server.baseUrl, accessToken ?? '', channelDialog.id)
+                        refreshStructure()
+                      }
+                    : undefined
                 }
-                refreshStructure()
-              }}
-              onDelete={
-                structurePermissions.deleteChannels
-                  ? async () => {
-                      if (!channelDialog.id) return
-                      await deleteChannel(server.baseUrl, accessToken ?? '', channelDialog.id)
-                      refreshStructure()
-                    }
-                  : undefined
-              }
-              onClose={() => setChannelDialog(undefined)}
-            />
-          )}
-          {showAddFriend && (
-            <AddFriendDialog
-              onCreateInvite={createInvite}
-              onRedeemInvite={redeemInvite}
-              onClose={() => setShowAddFriend(false)}
-            />
-          )}
-          {showEditNickname && (
-            <NicknameDialog
-              currentNickname={me?.nickname}
-              onSave={async (nickname) => {
-                await setNickname(nickname)
-                await refreshMembers()
-              }}
-              onClose={() => setShowEditNickname(false)}
-            />
-          )}
-          {showEditDisplayName && (
-            <DisplayNameDialog
-              currentName={myProfile?.customDisplayName}
-              authentikName={authentikName}
-              onSave={setMyDisplayName}
-              onClose={() => setShowEditDisplayName(false)}
-            />
-          )}
-          {showMyAvatar && (
-            <AvatarDialog
-              profile={myProfile}
-              onUpload={uploadAvatar}
-              onRemove={removeAvatar}
-              onClose={() => setShowMyAvatar(false)}
-            />
-          )}
-        </div>
+                onClose={() => setChannelDialog(undefined)}
+              />
+            )}
+            {showAddFriend && (
+              <AddFriendDialog
+                onCreateInvite={createInvite}
+                onRedeemInvite={redeemInvite}
+                onClose={() => setShowAddFriend(false)}
+              />
+            )}
+            {showEditNickname && (
+              <NicknameDialog
+                currentNickname={me?.nickname}
+                onSave={async (nickname) => {
+                  await setNickname(nickname)
+                  await refreshMembers()
+                }}
+                onClose={() => setShowEditNickname(false)}
+              />
+            )}
+            {showEditDisplayName && (
+              <DisplayNameDialog
+                currentName={myProfile?.customDisplayName}
+                authentikName={authentikName}
+                onSave={setMyDisplayName}
+                onClose={() => setShowEditDisplayName(false)}
+              />
+            )}
+            {showMyAvatar && (
+              <AvatarDialog
+                profile={myProfile}
+                onUpload={uploadAvatar}
+                onRemove={removeAvatar}
+                onClose={() => setShowMyAvatar(false)}
+              />
+            )}
+          </div>
+        </MobileNavContext.Provider>
         <NotificationStack notifications={notifications} onDismiss={dismissNotification} />
       </NotificationsContext.Provider>
     </PresenceContext.Provider>

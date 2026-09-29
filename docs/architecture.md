@@ -1644,6 +1644,26 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** incomodar o amigo só ver o nome novo depois de recarregar (um frame de perfil alterado para amigos resolve nome e avatar juntos).
 
+## Decisão: layout móvel com gavetas
+
+**Contexto:** testado num Galaxy Z Fold7 (tela externa, 412 CSS px) por depuração remota (2026-09-28). O client não tinha nenhum layout por largura: rail (72px), canais (240px) e membros (240px) ficavam lado a lado e o chat caía para **0px**, com a página alargada para 707px e rolando de lado. Quem via "apertado" no celular estava com o Chrome em "Site para computador" (UA de Linux, viewport forçada em 980px e escala 0,42), que esconde o problema encolhendo tudo; desligar essa opção sem o layout móvel deixava a tela pior.
+
+**Decisão:** abaixo de 768px (`MOBILE_QUERY` em `components/MobileNavContext.ts`, lido por `hooks/useMediaQuery.ts`), o painel principal ocupa a tela inteira e o resto vira gaveta, no molde do Discord no celular:
+- **Esquerda:** rail + lista de canais (ou a lista de Amigos), por ☰ no cabeçalho do painel ou arrastando para a direita. Escolher um canal ou amigo fecha a gaveta; trocar de servidor não, porque o próximo passo é escolher o canal.
+- **Direita:** lista de membros, pelo botão de membros no cabeçalho ou arrastando para a esquerda. Não existe na tela de Amigos/DM.
+- Sem nada para mostrar no painel (sem servidor, sem canal, amigo não escolhido), a gaveta da esquerda fica aberta e não fecha.
+- O gesto começa em qualquer ponto da tela, e não só na borda, porque as bordas são o "voltar" do Android. Ele ignora diálogos (o recorte do avatar arrasta com o dedo), campos de texto e vídeo, e só conta com pelo menos 60px na horizontal e 1,5x mais horizontal que vertical, para não disputar com a rolagem.
+
+**Implementação:** um `div.nav-drawer` envolve rail e barra lateral; no computador ele é `display: contents`, então o flex do `.app-shell` e as larguras ficam como antes. No celular as gavetas ficam em `position: absolute` com `translateX` e `visibility: hidden` quando fechadas (fora do foco por teclado e do leitor de tela), e `transform: none` quando abertas, para os menus `position: fixed` do rail não se prenderem à gaveta. O `.app-shell` usa `overflow: clip`, e não `hidden`, porque com `hidden` o foco ou um `scrollIntoView` rolava a tela de lado (visto com o cartão da chave de E2E). Junto: `.empty-state` com `min-width: 0`, cartões de diálogo com `box-sizing: border-box` e altura máxima com rolagem no celular, e o ✎ do canal aberto sempre visível em telas sem hover.
+
+**Também:** o botão "Compartilhar tela" some quando o navegador não tem `getDisplayMedia` (Chrome no Android), por detecção e não por largura.
+
+**Alternativas descartadas:** esconder membros e pôr canais num menu simples (menos trabalho, sem o gesto a que quem usa Discord já está acostumado); tratar o modo "Site para computador" pelo app (a viewport de 980px é imposta pelo Chrome e a `meta viewport` é ignorada nesse modo, então não há o que o app faça).
+
+**Verificado (2026-09-28):** no Fold7 por CDP (bundle local servido no lugar do de produção, viewport móvel emulada em 412px), com a conta real: ☰ e membros abrem, tocar no fundo fecha, escolher canal fecha a gaveta, os quatro gestos abrem e fecham certo, rolagem vertical não abre nada, e texto, fórum (lista e thread), voz (antes e depois de entrar), Amigos, tela da chave de E2E, menu da conta e diálogo de avatar sem nada passando da largura da tela. O recorte do avatar arrasta com o dedo sem abrir gaveta. Em 980px o layout de computador ficou igual (72/240/428/240). **Não verificado:** tablet ou tela interna do Fold (acima de 768px ficam no layout de computador) e o PWA instalado.
+
+**Revisitar quando:** faltar o botão "voltar" do Android fechando a gaveta (hoje ele sai da página), ou quando uma tela intermediária (768 a 1024px) ficar apertada com as três colunas.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.
