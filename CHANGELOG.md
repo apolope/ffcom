@@ -15,6 +15,9 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## client v0.17.2 · 2026-09-29
+- Chave de depuração para testar a conexão de voz só pelo servidor TURN (`ffcom:forceRelay` no armazenamento local do navegador); sem ela, nada muda.
+
 ## client v0.17.1 · 2026-09-29
 - O botão verde de atualizar volta a aparecer quando saem duas versões seguidas com o app aberto; antes, se a primeira não terminasse de baixar, as seguintes só apareciam depois de recarregar a página.
 

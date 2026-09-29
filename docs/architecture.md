@@ -939,6 +939,22 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** alguém relatar voz sem conectar numa rede restritiva, ou quando o roteamento SNI na 443 de `VMSUBS24OCI0102` estiver disponível.
 
+## Decisão: TURN/TLS na 443 — medir o relay antes, IP público dedicado em vez de SNI no gateway
+
+**Contexto:** item do TODO "TURN/TLS na 443". A limitação registrada acima continua: TURN em 33478 não ajuda nas redes que só liberam 443. Antes de desenhar a 443, faltava algo mais básico: nunca foi verificado que o relay atual funciona de ponta a ponta. O LiveKit anuncia só `node_ip = 137.131.249.145` (IP da `VMSUBS24OCI0102`), então o coturn em `10.20.4.10` precisa mandar a mídia relayada para esse IP público, que sai pela WAN do site, chega na VM e volta por DNAT ao próprio host (hairpin, com retorno provavelmente assimétrico). É hipótese, não testada. Como o TURN embutido do LiveKit relaya para o mesmo `node_ip`, herdaria o mesmo problema: pôr TLS na 443 sem resolver isso entregaria um relay quebrado numa porta nova.
+
+**Alternativas consideradas para a 443:**
+- **Roteador SNI na 443 da VM (nginx stream com `ssl_preread` ou HAProxy) na frente do NPM**, mandando `turn.ffcom…` para o TURN embutido do LiveKit com `external_tls: true` e `proxy_protocol: true` (as duas opções existem na config do LiveKit, conferidas em `config-sample.yaml` em 2026-09-29): toda a entrada HTTPS da rede passaria por uma camada nova, e o NPM perderia o IP real do cliente sem PROXY protocol também do lado dele. Risco alto num gateway compartilhado por outros serviços, para um problema ainda não relatado por nenhum usuário.
+- **coturn com TLS:** mesmo problema de porta que as outras, e mantém um container e o segredo compartilhado a mais sem ganho sobre o TURN embutido.
+- **Segundo IP público na `VMSUBS24OCI0102`, só para o TURN:** 443 TCP (TLS) e UDP em DNAT até o TURN embutido do LiveKit, no mesmo molde das regras DNAT que já existem para 7881/33478. Não toca no NPM. O LiveKit termina o TLS (`cert_file`/`key_file`), com emissão/renovação do certificado a resolver no host. Não confirmado: se a OCI dá IP público secundário para essa VM e a que custo.
+
+**Decisão:**
+1. **Passo 0, feito em `client-v0.17.2`:** chave de depuração `localStorage['ffcom:forceRelay'] = '1'` em `useVoiceChannel.ts`, que conecta com `rtcConfig.iceTransportPolicy = 'relay'` (o LiveKit continua preenchendo os `iceServers` que o servidor manda, só quando o `rtcConfig` não traz os seus). Com ela, entrar numa sala com outra pessoa: áudio nos dois sentidos = relay funciona; ICE que não fecha = hairpin confirmado, a corrigir antes de qualquer 443.
+2. **Para a 443, preferência pelo IP público dedicado**, trocando o coturn pelo TURN embutido do LiveKit (tira um container e o segredo compartilhado; credencial com TTL própria). SNI na 443 do gateway só se o IP dedicado não for viável.
+3. **Só executar a 443 quando houver necessidade real** (alguém sem voz numa rede restritiva), como já dizia a decisão anterior.
+
+**Revisitar quando:** o teste do passo 0 der resultado (registrar aqui), ou o agente de infra responder sobre o IP secundário na OCI.
+
 ## Decisão: participantes da sala de voz na barra lateral — poll da RoomService do LiveKit, sem SDK nem webhook
 
 **Contexto:** a `ChannelSidebar` não mostrava quem estava num canal de voz; só dava para saber entrando. `server-channel` não guarda estado de voz (a sala é criada implicitamente pelo LiveKit, ver "Decisão: integração de voz com LiveKit").

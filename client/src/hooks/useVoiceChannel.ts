@@ -458,7 +458,17 @@ export function useVoiceChannel(
       // mudo sem nenhum aviso (o microfone dele funcionava normalmente).
       room.on(RoomEvent.AudioPlaybackStatusChanged, () => setAudioPlaybackBlocked(!room.canPlaybackAudio))
 
-      await room.connect(url, token)
+      // Chave de depuração: com localStorage['ffcom:forceRelay'] = '1' o ICE
+      // só usa candidatos TURN, para testar se o relay funciona de ponta a
+      // ponta. Ver docs/architecture.md, "Decisão: TURN/TLS na 443".
+      let forceRelay = false
+      try {
+        forceRelay = localStorage.getItem('ffcom:forceRelay') === '1'
+      } catch {
+        // localStorage indisponível: segue sem forçar
+      }
+      if (forceRelay) console.info('[ffcom] forceRelay: ICE só por TURN')
+      await room.connect(url, token, forceRelay ? { rtcConfig: { iceTransportPolicy: 'relay' } } : undefined)
       if (pushToTalkRef.current) {
         // Pede a permissão e publica já mutado, para o primeiro aperto abrir
         // na hora (sem o seletor de permissão com a tecla apertada) e sem
