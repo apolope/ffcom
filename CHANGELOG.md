@@ -15,6 +15,25 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## client v0.16.0 · 2026-09-28
+- **Nome de exibição:** "Alterar nome de exibição" no menu do seu avatar escolhe o nome que amigos, mensagens diretas e servidores veem; o apelido de cada servidor continua valendo por cima dele. Deixar vazio volta ao nome da sua conta.
+- **No celular**, o chat ocupa a tela inteira: servidores e canais abrem numa gaveta à esquerda (☰ ou arrastando) e a lista de membros numa gaveta à direita.
+- Ao sair, a tela mostra "Saindo…" até o fim, sem o botão de entrar que levava de volta à mesma conta; o botão de entrar fica bloqueado enquanto o login abre.
+- "Esqueci minha senha" na tela de login, para definir uma senha nova e voltar ao app.
+- **App para computador:** compartilhar tela agora funciona, com um seletor de telas e janelas em miniatura e, no Windows, a opção de compartilhar o áudio do computador. O app ganhou o ícone do FFCom, e links externos (código-fonte, licenças, recuperar senha) abrem no navegador.
+- Imagens e arquivos das mensagens não são mais baixados de novo a cada hora, quando a sessão é renovada.
+
+## central v0.12.0 · 2026-09-28
+- Nova rota `PUT /api/me/display-name` para escolher o nome de exibição da conta (vazio volta ao nome do Authentik); `GET /api/me` passa a trazer `customDisplayName` quando há um nome escolhido.
+- O e-mail de definir senha de um cadastro aprovado sai com a marca do FFCom e leva a uma página do FFCom que termina de volta no app.
+
+## site v0.6.0 · 2026-09-28
+- Link "Esqueci minha senha" logo abaixo de "Entrar no FFCom".
+
+## channel-image v1.1.0 · 2026-09-28
+- A imagem do servidor agora também sai para **linux/arm64** (Raspberry Pi, VPS ARM); o `docker pull` escolhe a versão da máquina sozinho.
+- O lançador mostra as licenças de terceiros com `--licenses`.
+
 ## client v0.15.1 · 2026-09-28
 - Digitar o link de convite em "Adicionar servidor" não corta mais o código no primeiro caractere; colar o link continua preenchendo o endereço e o código de uma vez.
 
