@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth/AuthProvider'
 import { fetchAttachmentBlob, type RemoteAttachment } from '../lib/serverChannelApi'
 import './MessageAttachment.css'
@@ -17,11 +17,19 @@ export function MessageAttachment({ serverBaseUrl, attachment }: MessageAttachme
   const [blobUrl, setBlobUrl] = useState<string>()
   const [failed, setFailed] = useState(false)
 
+  // O token fica fora das dependências: a renovação silenciosa (a cada ~1h)
+  // não deve baixar de novo todo anexo já na tela nem revogar a object URL
+  // que o <img> e o link estão usando.
+  const accessTokenRef = useRef(accessToken)
+  useEffect(() => {
+    accessTokenRef.current = accessToken
+  }, [accessToken])
+
   useEffect(() => {
     let cancelled = false
     let url: string | undefined
 
-    fetchAttachmentBlob(serverBaseUrl, attachment, accessToken!)
+    fetchAttachmentBlob(serverBaseUrl, attachment, accessTokenRef.current!)
       .then((blob) => {
         if (cancelled) return
         url = URL.createObjectURL(blob)
@@ -35,7 +43,7 @@ export function MessageAttachment({ serverBaseUrl, attachment }: MessageAttachme
       cancelled = true
       if (url) URL.revokeObjectURL(url)
     }
-  }, [serverBaseUrl, attachment.id, accessToken])
+  }, [serverBaseUrl, attachment.id])
 
   if (failed) {
     return <div className="attachment attachment-error">falha ao carregar anexo: {attachment.filename}</div>

@@ -67,8 +67,8 @@ function toggleBit(mask: number, bit: number) {
 // Painel de administração de roles: criar, editar (inclusive a @everyone,
 // que é a base de todo membro) e remover roles do servidor e
 // atribuí-las a membros (ver docs/architecture.md, "Sistema de
-// permissões/roles por servidor e por canal"). Overwrites por canal ainda
-// não têm UI — só a API existe por enquanto (ver TODO.md).
+// permissões/roles por servidor e por canal"). Overwrites por canal ficam
+// em ChannelPermissionsDialog, aberto pelo cadeado da ChannelSidebar.
 export function ManageRolesDialog({
   members,
   roles,

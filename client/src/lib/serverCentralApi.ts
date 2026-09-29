@@ -6,9 +6,10 @@ import type { ChosenStatus, PresenceStatus } from '../types'
 // endereço adicionado manualmente.
 
 // Instância oficial única do server-central (ver docs/architecture.md,
-// contexto: "server-central (instância única oficial)"). Domínio de
-// produção ainda não provisionado (ver TODO.md); em dev local aponta para o
-// docker-compose de referência (SERVER_CENTRAL_PORT=8081).
+// contexto: "server-central (instância única oficial)"). O build de
+// produção recebe o domínio por VITE_SERVER_CENTRAL_URL
+// (deploy-ffcom-client.yml); sem ela, aponta para o docker-compose de
+// referência em dev local (SERVER_CENTRAL_PORT=8081).
 export const SERVER_CENTRAL_URL: string =
   import.meta.env.VITE_SERVER_CENTRAL_URL ?? 'http://localhost:8081'
 
