@@ -1137,6 +1137,8 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Atualização (2026-09-23):** o `webAudioMix: true` descartado acima como solução do autoplay foi ligado depois por outro motivo, o volume por pessoa acima de 100% (ver "Decisão: volume por pessoa no canal de voz"). O botão "Ativar som" continua, agora retomando o `AudioContext`. O que foi observado no Android até `client-v0.6.x` era com o áudio tocando pelo `<audio>`.
 
+**Resultado (2026-09-29, `client-v0.17.2`):** numa chamada entre o PC e o celular Android no 4G (Wi-Fi desligado), o celular ouviu o PC e o PC ouviu o celular. O sintoma de 2026-09-23 não se repetiu. A causa original não foi isolada: entre a `v0.6.x` e a `v0.17.2` mudaram o caminho de reprodução (`webAudioMix`, `AudioContext` retomado pelo "Ativar som") e várias correções de conexão, e não foi anotado se o aviso "Ativar som" apareceu nem se era o navegador ou o PWA instalado. Os itens de teste e troubleshoot do Android no TODO foram fechados com base nisso; se o celular voltar a ficar mudo, o roteiro de depuração remota continua valendo (registrado no histórico do `TODO.md`).
+
 ## Decisão: `CreateInvites` separado de `ManageInvites`
 
 **Contexto:** gerar convite, listar e revogar exigiam o mesmo bit, `ManageInvites`. Para o dono deixar qualquer membro convidar, a única saída era ligar `ManageInvites` na @everyone, o que também deixava qualquer membro listar e apagar os convites dos outros. Além disso, o botão "Convidar" da `ChannelSidebar` aparecia para todo mundo, e quem não tinha o bit levava `403` ao gerar.
