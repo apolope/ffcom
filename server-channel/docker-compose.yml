@@ -39,51 +39,24 @@ services:
           port_range_start: ${LIVEKIT_RTC_PORT_RANGE_START:-50000}
           port_range_end: ${LIVEKIT_RTC_PORT_RANGE_END:-50100}
           use_external_ip: true
-          # Repassa o coturn abaixo aos clients no ICE config; com `secret` o
-          # LiveKit gera credenciais temporárias no esquema do
-          # --use-auth-secret do coturn. Sem isso o coturn roda mas nenhum
-          # client o usa. Ver docs/architecture.md, "Decisão: TURN repassado
-          # pelo LiveKit".
-          turn_servers:
-            - host: ${TURN_EXTERNAL_IP:?defina TURN_EXTERNAL_IP (IP público do host) no .env}
-              port: 3478
-              protocol: udp
-              secret: "${TURN_STATIC_AUTH_SECRET:?defina TURN_STATIC_AUTH_SECRET no .env}"
-            - host: ${TURN_EXTERNAL_IP}
-              port: 3478
-              protocol: tcp
-              secret: "${TURN_STATIC_AUTH_SECRET}"
+        # TURN embutido do LiveKit, só UDP (sem certificado): para quem não
+        # consegue mandar UDP direto para as portas de mídia. O LiveKit anuncia
+        # o TURN no próprio IP público (o mesmo que descobre com
+        # use_external_ip) e gera credenciais temporárias sozinho. Substitui o
+        # coturn, que não relayava para o próprio --external-ip (o mesmo IP do
+        # LiveKit). O relay manda a mídia para esse IP público, então o
+        # roteador precisa de NAT loopback (hairpin), que a maioria tem. Ver
+        # docs/architecture.md, "Decisão: TURN/TLS na 443".
+        turn:
+          enabled: true
+          udp_port: ${TURN_UDP_PORT:-3478}
         keys:
           ${LIVEKIT_API_KEY:?defina LIVEKIT_API_KEY no .env}: ${LIVEKIT_API_SECRET:?defina LIVEKIT_API_SECRET no .env}
     ports:
       - "7880:7880/tcp" # HTTP/WebSocket (signaling)
       - "7881:7881/tcp" # RTC fallback via TCP
       - "${LIVEKIT_RTC_PORT_RANGE_START:-50000}-${LIVEKIT_RTC_PORT_RANGE_END:-50100}:${LIVEKIT_RTC_PORT_RANGE_START:-50000}-${LIVEKIT_RTC_PORT_RANGE_END:-50100}/udp" # mídia RTC
-    networks:
-      - ffcom-channel
-
-  # TURN/STUN para NAT traversal — necessário para quem hospedar atrás de NAT
-  # residencial. Ver docs/architecture.md, "Implicação de deploy" na decisão do LiveKit.
-  # TURN_EXTERNAL_IP é obrigatório: precisa ser o IP público (ou IP mapeado via
-  # port-forwarding) do host, não o IP interno do container.
-  coturn:
-    image: coturn/coturn:latest
-    restart: unless-stopped
-    command:
-      - -n
-      - --log-file=stdout
-      - --external-ip=${TURN_EXTERNAL_IP:?defina TURN_EXTERNAL_IP (IP público do host) no .env}
-      - --realm=${TURN_REALM:-ffcom.local}
-      - --use-auth-secret
-      - --static-auth-secret=${TURN_STATIC_AUTH_SECRET:?defina TURN_STATIC_AUTH_SECRET no .env}
-      - --min-port=${TURN_RELAY_MIN_PORT:-49160}
-      - --max-port=${TURN_RELAY_MAX_PORT:-49200}
-      - --no-cli
-      - --fingerprint
-    ports:
-      - "3478:3478/tcp"
-      - "3478:3478/udp"
-      - "${TURN_RELAY_MIN_PORT:-49160}-${TURN_RELAY_MAX_PORT:-49200}:${TURN_RELAY_MIN_PORT:-49160}-${TURN_RELAY_MAX_PORT:-49200}/udp"
+      - "${TURN_UDP_PORT:-3478}:${TURN_UDP_PORT:-3478}/udp" # TURN (UDP)
     networks:
       - ffcom-channel
 

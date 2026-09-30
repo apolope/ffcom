@@ -1,6 +1,6 @@
 # Sobe o ambiente local de desenvolvimento do FFCom inteiro:
 #   - server-central        http://localhost:8082
-#   - server-channel "Teste" http://localhost:8080 (+ LiveKit e coturn)
+#   - server-channel "Teste" http://localhost:8080 (+ LiveKit)
 #   - server-channel "Estúdio" http://localhost:8083 (docker-compose.dev-second.yml)
 #   - client (Vite)         http://localhost:5173
 # e aplica a estrutura de exemplo (categorias e canais) nos dois

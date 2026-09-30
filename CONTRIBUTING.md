@@ -46,8 +46,7 @@ e as demais variáveis do `.env.example` local.
 ### Ambiente local
 
 `./scripts/dev-local.ps1` (PowerShell, na raiz) sobe tudo de uma vez:
-server-central (`:8082`), o server-channel "Teste" (`:8080`, com LiveKit e
-coturn), um segundo server-channel "Estúdio" (`:8083`,
+server-central (`:8082`), o server-channel "Teste" (`:8080`, com LiveKit), um segundo server-channel "Estúdio" (`:8083`,
 `server-channel/docker-compose.dev-second.yml`, que só existe para
 desenvolvimento) e o Vite (`:5173`). `-Build` recompila as imagens e
 `-NoClient` não sobe o Vite. O `server-channel/docker-compose.yml` sozinho

@@ -6,10 +6,10 @@ O "servidor" propriamente dito do FFCom: categorias, canais de texto/voz/forum. 
 
 - Go
 - [LiveKit](https://github.com/livekit/livekit) (self-hosted) para voz/vídeo/compartilhamento de tela
-- [coturn](https://github.com/coturn/coturn) para TURN/NAT traversal
+- TURN embutido do LiveKit para NAT traversal
 - PostgreSQL
 - WebSocket para texto, presença e sinalização
-- Docker Compose como unidade de deploy (app + LiveKit + coturn + Postgres)
+- Docker Compose como unidade de deploy (app + LiveKit + Postgres)
 
 ## Responsabilidade
 
@@ -25,12 +25,12 @@ Ver [`../TODO.md`](../TODO.md), seção "server-channel", para o estado atual it
 
 ```
 cp .env.example .env
-# edite .env: defina POSTGRES_PASSWORD, LIVEKIT_API_KEY/SECRET,
-# TURN_EXTERNAL_IP e TURN_STATIC_AUTH_SECRET (gerar segredos: openssl rand -hex 32)
+# edite .env: defina POSTGRES_PASSWORD e LIVEKIT_API_KEY/SECRET
+# (gerar segredos: openssl rand -hex 32)
 docker compose up -d
 ```
 
-Sobe quatro serviços: `postgres`, `livekit`, `coturn` e `app`. O `app` não é
+Sobe três serviços: `postgres`, `livekit` e `app`. O `app` não é
 compilado na sua máquina: o compose puxa a imagem publicada
 `ghcr.io/apolope/ffcom-channel:1`, e o serviço `server-channel` dentro dela
 se atualiza sozinho (ver "Atualizações" abaixo). Nada de Go ou de clone
@@ -263,7 +263,7 @@ no ar, dá para apagá-la com `docker image rm`.
 ## TLS / HTTPS
 
 O `app` deste compose fala HTTP puro na porta `8080` (mesmo valendo para
-`livekit`/`coturn`) — não há terminação TLS embutida no binário. Para expor
+`livekit`) — não há terminação TLS embutida no binário. Para expor
 publicamente (fora de teste em LAN), coloque um proxy reverso na frente que
 termine TLS e encaminhe para `localhost:8080`. Quem não tem preferência
 formada, [Caddy](https://caddyserver.com/) é o caminho mais simples: emite e
@@ -315,13 +315,12 @@ diretório:
 | 7880 | TCP | `livekit` (sinalização) | fixa no compose |
 | 7881 | TCP | `livekit` (RTC fallback via TCP) | fixa no compose |
 | 50000–50100 | UDP | `livekit` (mídia RTC) | `LIVEKIT_RTC_PORT_RANGE_START`/`_END` |
-| 3478 | TCP + UDP | `coturn` (TURN/STUN) | fixa no compose |
-| 49160–49200 | UDP | `coturn` (relay) | `TURN_RELAY_MIN_PORT`/`_MAX_PORT` |
+| 3478 | UDP | `livekit` (TURN) | `TURN_UDP_PORT` |
 
 Se alguma dessas portas já estiver em uso na rede (ex. outro serviço no
 mesmo roteador), ajuste a variável correspondente no `.env` e o mapeamento
 no roteador juntos — o compose já usa `${VAR}` dos dois lados (porta do
-host e `--listening-port`/flags do coturn), então não precisa editar o
+host e do container), então não precisa editar o
 `docker-compose.yml`.
 
 ### DNS dinâmico
@@ -342,13 +341,8 @@ O LiveKit descobre sozinho seu IP público via STUN (`use_external_ip: true`
 já configurado no compose) — nenhuma ação manual necessária aí, mesmo com
 IP dinâmico.
 
-**Limitação conhecida:** `TURN_EXTERNAL_IP` do coturn precisa ser um IP
-literal (o `--external-ip` do `turnserver` não resolve hostname a cada
-alocação de relay) — não dá pra apontar para o hostname DDNS diretamente.
-Se seu IP público mudar, atualize `TURN_EXTERNAL_IP` no `.env` e rode
-`docker compose up -d coturn` para recriar o serviço com o IP novo. Quem
-tiver IP público praticamente estável na prática (a maioria dos planos
-residenciais só muda em reconexões raras) pode tratar isso como manutenção
-ocasional em vez de automatizar; automatizar (script que compara o IP
-público atual e reinicia o `coturn` quando muda) fica como melhoria futura
-se virar fricção real.
+O TURN também usa esse IP descoberto, então não há IP para configurar à mão
+nem para atualizar quando ele muda. O relay do TURN manda a mídia para o
+próprio IP público, o que exige NAT loopback (hairpin) no roteador; a maioria
+dos roteadores domésticos tem. Sem ele, só quem depende do relay (redes que
+bloqueiam UDP direto às portas de mídia) fica sem voz.
