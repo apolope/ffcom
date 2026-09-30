@@ -81,13 +81,6 @@ type Overwrite struct {
 	Deny   int64
 }
 
-// Effective aplica, sobre a permissão base de um membro (já a soma de todas
-// as suas roles, incluindo a default), os overwrites de canal das roles que
-// ele tiver: primeiro soma todos os allow, depois remove todos os deny —
-// mesma ordem usada pelo Discord (allow de todo overwrite aplicável vence
-// deny de outro só se vier depois; aqui, com um overwrite por role, deny
-// sempre vence porque é aplicado por último). base == Owner (todos os bits)
-// ignora overwrites por completo.
 // Grants reports whether base already holds every bit set in target —
 // Administrator (or Owner) trivially grants anything. Used to stop
 // ManageRoles from being, by itself, enough to hand out a permission (most
@@ -101,7 +94,17 @@ func Grants(base, target int64) bool {
 	return target&^base == 0
 }
 
-func Effective(base int64, memberRoleIDs []string, overwrites []Overwrite) int64 {
+// Effective aplica, sobre a permissão base de um membro (já a soma de todas
+// as suas roles, incluindo a default), os overwrites de canal, na ordem do
+// Discord: primeiro o overwrite da role default (everyoneRoleID, a
+// "@everyone"), tirando o deny e somando o allow dela; depois os overwrites
+// das outras roles que o membro tiver, juntos, também deny antes de allow.
+// Assim o allow de uma role vence tanto o deny da @everyone (é o que torna
+// um canal privado: nega a todos e libera para uma role) quanto o deny de
+// outra role do mesmo membro. base com Administrator (inclusive Owner)
+// ignora overwrites por completo. Ver docs/architecture.md, "Decisão:
+// precedência de overwrites de canal no modelo do Discord".
+func Effective(base int64, everyoneRoleID string, memberRoleIDs []string, overwrites []Overwrite) int64 {
 	if base&Administrator != 0 {
 		return base
 	}
@@ -114,13 +117,16 @@ func Effective(base int64, memberRoleIDs []string, overwrites []Overwrite) int64
 		roleSet[id] = true
 	}
 
+	effective := base
 	var allow, deny int64
 	for _, o := range overwrites {
-		if !roleSet[o.RoleID] {
-			continue
+		switch {
+		case o.RoleID == everyoneRoleID:
+			effective = (effective &^ o.Deny) | o.Allow
+		case roleSet[o.RoleID]:
+			allow |= o.Allow
+			deny |= o.Deny
 		}
-		allow |= o.Allow
-		deny |= o.Deny
 	}
-	return (base | allow) &^ deny
+	return (effective &^ deny) | allow
 }

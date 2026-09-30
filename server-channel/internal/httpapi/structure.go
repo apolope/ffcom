@@ -20,7 +20,7 @@ func visibleChannels(ctx context.Context, roles *store.RoleStore, overwrites *st
 		return channels, nil
 	}
 
-	base, roleIDs, err := memberBasePermission(ctx, roles, member)
+	base, everyoneRoleID, roleIDs, err := memberPermissionRoles(ctx, roles, member)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +36,7 @@ func visibleChannels(ctx context.Context, roles *store.RoleStore, overwrites *st
 
 	visible := make([]store.Channel, 0, len(channels))
 	for _, c := range channels {
-		effective := permissions.Effective(base, roleIDs, byChannel[c.ID])
+		effective := permissions.Effective(base, everyoneRoleID, roleIDs, byChannel[c.ID])
 		if permissions.Has(effective, permissions.ViewChannels) {
 			visible = append(visible, c)
 		}

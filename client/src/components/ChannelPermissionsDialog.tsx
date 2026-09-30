@@ -141,8 +141,9 @@ export function ChannelPermissionsDialog({
       <div className="dialog-card channel-permissions-dialog" onClick={(e) => e.stopPropagation()}>
         <h2>Permissões de #{channel.name}</h2>
         <p className="dialog-hint">
-          "Herdar" usa a permissão da role no servidor. Negar vence permitir quando a pessoa tem mais de uma
-          role. Quem é Administrador ou dono ignora tudo isto.
+          "Herdar" usa a permissão da role no servidor. Permitir numa role vence Negar em @everyone e em outra
+          role da mesma pessoa, então para um canal privado negue "Ver canal" a @everyone e permita às roles que
+          entram. Quem é Administrador ou dono ignora tudo isto.
           {!isAdmin && ' Negar "Ver canal" para @everyone também esconde o canal de você, se só @everyone o libera.'}
         </p>
         {!original && !error && <p className="dialog-hint">Carregando…</p>}

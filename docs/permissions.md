@@ -7,7 +7,7 @@ Referência de todos os bits de permissão de um `server-channel`: o que cada um
 A permissão é um bitmask `int64` (`internal/permissions/permissions.go`), guardado em `roles.permissions` e nos `allow`/`deny` de `channel_role_overwrites`.
 
 - **Permissão base** de um membro: OR das permissões de todas as roles dele, somada à role default `@everyone`, que todo membro tem sem precisar de linha em `member_roles` (`memberBasePermission`, `internal/httpapi/permissions.go`). A `@everyone` nasce com `ViewChannels | SendMessages | Voice` (7).
-- **Permissão efetiva num canal:** a base, com os overwrites daquele canal aplicados. Primeiro soma todos os `allow` das roles do membro, depois remove todos os `deny` (`permissions.Effective`). Overwrite existe só por role, não por membro.
+- **Permissão efetiva num canal:** a base, com os overwrites daquele canal aplicados na ordem do Discord (`permissions.Effective`): primeiro o overwrite da @everyone (tira o `deny`, soma o `allow`), depois os das outras roles do membro juntos, também `deny` antes de `allow`. Então o `allow` de uma role vence o `deny` da @everyone (canal privado: nega "Ver canal" à @everyone e libera para a role) e o `deny` de outra role da mesma pessoa. Overwrite existe só por role, não por membro.
 - **Dono do servidor** (`members.is_owner`, quem entrou primeiro) não é uma role: a permissão dele vale `Owner = -1` (todos os bits), passa em qualquer checagem e ignora overwrites.
 - **`Administrator`** passa em qualquer checagem (`permissions.Has`) e ignora overwrites, como o `ADMINISTRATOR` do Discord.
 - **Conceder bit:** quem tem `ManageRoles` só consegue criar ou editar role, ou atribuir role, com bits que ele mesmo já tem (`permissions.Grants`). Assim `ManageRoles` sozinho não vira `Administrator`.
