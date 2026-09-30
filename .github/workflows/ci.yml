@@ -9,6 +9,23 @@ jobs:
   test-central:
     name: server-central (vet + test)
     runs-on: [self-hosted, a3s-network]
+    # Postgres descartável para os testes de integração (openTestStore): o
+    # runner cria o container antes dos passos e o remove no fim, mesmo se o
+    # job falhar ou for cancelado. Porta do host aleatória, porque os três
+    # runners do SVRUBS24IPS0101 rodam jobs em paralelo.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: ffcom_test
+        ports:
+          - 5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ffcom_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -19,6 +36,8 @@ jobs:
         run: go vet ./...
       - name: go test
         working-directory: server-central
+        env:
+          FFCOM_TEST_DATABASE_URL: postgres://postgres:test@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/ffcom_test?sslmode=disable
         run: go test ./...
       - name: licenças de terceiros atualizadas
         run: |
@@ -31,6 +50,23 @@ jobs:
   test-channel:
     name: server-channel (vet + test)
     runs-on: [self-hosted, a3s-network]
+    # Postgres descartável para os testes de integração (openTestStore): o
+    # runner cria o container antes dos passos e o remove no fim, mesmo se o
+    # job falhar ou for cancelado. Porta do host aleatória, porque os três
+    # runners do SVRUBS24IPS0101 rodam jobs em paralelo.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: ffcom_test
+        ports:
+          - 5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ffcom_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -41,6 +77,8 @@ jobs:
         run: go vet ./...
       - name: go test
         working-directory: server-channel
+        env:
+          FFCOM_TEST_DATABASE_URL: postgres://postgres:test@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/ffcom_test?sslmode=disable
         run: go test ./...
       - name: licenças de terceiros atualizadas
         run: |

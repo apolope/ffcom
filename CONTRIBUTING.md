@@ -118,10 +118,24 @@ npm run lint
 npm run build   # tsc -b pega erro de tipo que o lint sozinho não pega
 ```
 
-Os testes de handler que precisam de banco (hoje `server-channel/internal/httpapi/channels_admin_test.go`)
-são pulados sem `FFCOM_TEST_DATABASE_URL`, e o CI não sobe Postgres. Para
-rodá-los, aponte a variável para um banco descartável (as migrations são
-aplicadas nele):
+Os testes de integração de handler (`openTestStore`, hoje em
+`server-central/internal/httpapi/ideas_test.go` e
+`server-channel/internal/httpapi/channels_admin_test.go`) precisam de um
+Postgres descartável em `FFCOM_TEST_DATABASE_URL` (as migrations são aplicadas
+nele). No CI, cada job Go sobe um `postgres:17-alpine` como `services:` só
+para aquele job, e a falta da variável faz o teste falhar em vez de ser
+pulado. Localmente, sem a variável, eles são pulados; para rodá-los do mesmo
+jeito que o CI:
+
+```
+./scripts/test-go.ps1                   # vet + test dos dois módulos
+./scripts/test-go.ps1 -Module channel   # só um
+./scripts/test-go.ps1 -Run EndToEnd     # repassa -run ao go test
+```
+
+O script sobe o Postgres em tmpfs numa porta aleatória de `127.0.0.1`, cria
+um banco por módulo e remove o container no fim, mesmo se algo falhar. Fora
+do PowerShell, o equivalente à mão:
 
 ```
 docker run -d --rm --name ffcom-test-pg -e POSTGRES_PASSWORD=test -e POSTGRES_DB=ffcom_test -p 55432:5432 postgres:17-alpine

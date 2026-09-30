@@ -22,13 +22,18 @@ import (
 
 // Teste de integração contra um Postgres de verdade: só roda com
 // FFCOM_TEST_DATABASE_URL apontando para um banco descartável (as
-// migrations são aplicadas nele), mesmo padrão de server-channel. O relay é
+// migrations são aplicadas nele), mesmo padrão de server-channel. Fora do CI,
+// sem a variável, é pulado; no CI (que sobe o banco como service) a falta
+// dela é erro, para o teste não voltar a ser pulado em silêncio. O relay é
 // falso (httptest): guarda o prompt e a URL de callback, e o teste faz o
 // papel do relay chamando o listener de callback.
 func openTestStore(t *testing.T) *store.Store {
 	t.Helper()
 	dbURL := os.Getenv("FFCOM_TEST_DATABASE_URL")
 	if dbURL == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("FFCOM_TEST_DATABASE_URL não definida no CI")
+		}
 		t.Skip("FFCOM_TEST_DATABASE_URL não definida")
 	}
 	db, err := store.Open(context.Background(), dbURL)

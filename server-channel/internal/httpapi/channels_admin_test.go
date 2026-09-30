@@ -19,12 +19,16 @@ import (
 
 // Teste de integração contra um Postgres de verdade: só roda com
 // FFCOM_TEST_DATABASE_URL apontando para um banco descartável (as
-// migrations são aplicadas nele). Sem a variável é pulado, já que o CI não
-// sobe Postgres.
+// migrations são aplicadas nele). Fora do CI, sem a variável, é pulado; no CI
+// (que sobe o banco como service) a falta dela é erro, para o teste não
+// voltar a ser pulado em silêncio.
 func openTestStore(t *testing.T) *store.Store {
 	t.Helper()
 	url := os.Getenv("FFCOM_TEST_DATABASE_URL")
 	if url == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("FFCOM_TEST_DATABASE_URL não definida no CI")
+		}
 		t.Skip("FFCOM_TEST_DATABASE_URL não definida")
 	}
 	db, err := store.Open(context.Background(), url)
