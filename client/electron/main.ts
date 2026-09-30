@@ -13,6 +13,7 @@ import {
 import { existsSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import electronUpdater from 'electron-updater'
 import { UiohookKey, uIOhook, type UiohookKeyboardEvent } from 'uiohook-napi'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -183,6 +184,36 @@ function registerPushToTalkIpc() {
   })
 }
 
+// Atualização do app desktop pelo mesmo botão verde do web (ver
+// docs/architecture.md, "Decisão: distribuição e atualização do app
+// desktop"). O electron-updater lê o latest.yml da release fixa
+// desktop-stable (app-update.yml, gerado pelo electron-builder a partir de
+// build.publish no package.json), baixa a versão nova em segundo plano e só
+// então avisa o renderer. Clicar instala e reabre; sem clicar, instala ao
+// fechar o app. Só no app empacotado: no dev não há app-update.yml.
+const UPDATE_CHECK_INTERVAL_MS = 30 * 60_000
+let updateDownloaded = false
+
+function registerAutoUpdate() {
+  const { autoUpdater } = electronUpdater
+  ipcMain.handle('ffcom:get-update-ready', () => updateDownloaded)
+  ipcMain.handle('ffcom:apply-update', () => {
+    // isSilent: sem a tela do instalador; isForceRunAfter: reabre o app.
+    if (updateDownloaded) autoUpdater.quitAndInstall(true, true)
+  })
+  if (!app.isPackaged) return
+  autoUpdater.on('update-downloaded', () => {
+    updateDownloaded = true
+    for (const win of BrowserWindow.getAllWindows()) win.webContents.send('ffcom:update-ready')
+  })
+  autoUpdater.on('error', (err) => console.warn('[ffcom] atualização', err))
+  const check = () => {
+    autoUpdater.checkForUpdates().catch((err: unknown) => console.warn('[ffcom] atualização', err))
+  }
+  check()
+  setInterval(check, UPDATE_CHECK_INTERVAL_MS)
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
@@ -282,6 +313,7 @@ app.whenReady().then(() => {
   registerPushToTalkIpc()
   registerSystemIdleIpc()
   registerDisplayMediaIpc()
+  registerAutoUpdate()
   createWindow()
 })
 

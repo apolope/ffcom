@@ -14,6 +14,14 @@ interface FfcomElectronBridge {
   setPushToTalkKey(accelerator: string | null): Promise<boolean>
   // true ao apertar, false ao soltar; devolve a função que remove o listener.
   onPushToTalk(callback: (pressed: boolean) => void): () => void
+  // Atualização do app desktop (electron-updater no main): true quando uma
+  // versão nova já foi baixada e espera o clique no botão de atualizar.
+  getUpdateReady(): Promise<boolean>
+  // Chamado quando termina de baixar uma versão nova; devolve a função que
+  // remove o listener.
+  onUpdateReady(callback: () => void): () => void
+  // Fecha, instala a versão baixada e reabre o app.
+  applyUpdate(): Promise<void>
   // Segundos sem teclado nem mouse no sistema inteiro (powerMonitor), para
   // o "ausente" automático (hooks/useIdle.ts).
   getSystemIdleSeconds(): Promise<number>

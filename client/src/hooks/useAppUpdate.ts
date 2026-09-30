@@ -23,9 +23,21 @@ interface UseAppUpdateResult {
 // mostra o botão de atualizar (components/UpdateButton.tsx). Ver
 // docs/architecture.md, "Decisão: botão de atualizar o client".
 //
-// No build Electron o plugin está desligado e o módulo virtual é vazio:
-// updateReady nunca vira true.
+// No build Electron o plugin está desligado e o módulo virtual é vazio; lá
+// quem baixa a versão nova é o electron-updater no main (electron/main.ts),
+// e este hook só repassa o aviso e o clique pela ponte.
 export function useAppUpdate(): UseAppUpdateResult {
+  const electron = window.ffcomElectron
+  const [desktopUpdateReady, setDesktopUpdateReady] = useState(false)
+  useEffect(() => {
+    if (!electron) return
+    const unsubscribe = electron.onUpdateReady(() => setDesktopUpdateReady(true))
+    void electron.getUpdateReady().then((ready) => {
+      if (ready) setDesktopUpdateReady(true)
+    })
+    return unsubscribe
+  }, [electron])
+
   const registrationRef = useRef<ServiceWorkerRegistration | undefined>(undefined)
   // O needRefresh do vite-plugin-pwa vem do workbox-window, que para de
   // ouvir "updatefound" depois da primeira atualização vinda de fora do
@@ -79,6 +91,10 @@ export function useAppUpdate(): UseAppUpdateResult {
   // worker que estava esperando chega a "activated", com um prazo de
   // segurança; sem nada esperando (já ativou antes), recarrega direto.
   const applyUpdate = useCallback(() => {
+    if (electron) {
+      void electron.applyUpdate()
+      return
+    }
     const waiting = registrationRef.current?.waiting
     if (!waiting) {
       window.location.reload()
@@ -95,7 +111,7 @@ export function useAppUpdate(): UseAppUpdateResult {
     })
     setTimeout(reload, RELOAD_FALLBACK_MS)
     void updateServiceWorker(true)
-  }, [updateServiceWorker])
+  }, [updateServiceWorker, electron])
 
-  return { updateReady, applyUpdate }
+  return { updateReady: updateReady || desktopUpdateReady, applyUpdate }
 }

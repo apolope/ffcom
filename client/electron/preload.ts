@@ -21,6 +21,15 @@ contextBridge.exposeInMainWorld('ffcomElectron', {
       ipcRenderer.removeListener('ffcom:push-to-talk', listener)
     }
   },
+  getUpdateReady: (): Promise<boolean> => ipcRenderer.invoke('ffcom:get-update-ready'),
+  onUpdateReady: (callback: () => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent) => callback()
+    ipcRenderer.on('ffcom:update-ready', listener)
+    return () => {
+      ipcRenderer.removeListener('ffcom:update-ready', listener)
+    }
+  },
+  applyUpdate: (): Promise<void> => ipcRenderer.invoke('ffcom:apply-update'),
   getSystemIdleSeconds: (): Promise<number> => ipcRenderer.invoke('ffcom:get-system-idle-seconds'),
   getDisplaySources: (): Promise<unknown> => ipcRenderer.invoke('ffcom:get-display-sources'),
   chooseDisplaySource: (id: string, audio: boolean): Promise<boolean> =>

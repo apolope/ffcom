@@ -26,6 +26,7 @@
   "dependencies": {
     "@noble/hashes": "^2.4.0",
     "@sapphi-red/web-noise-suppressor": "0.4.1",
+    "electron-updater": "^6.8.9",
     "livekit-client": "^2.22.3",
     "oidc-client-ts": "^3.5.0",
     "react": "^19.2.8",
@@ -61,7 +62,8 @@
       "buildResources": "build"
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "artifactName": "FFCom-Setup-${version}.${ext}"
     },
     "mac": {
       "target": "dmg",
@@ -71,6 +73,12 @@
       "target": "AppImage",
       "category": "Network"
     },
-    "npmRebuild": false
+    "npmRebuild": false,
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://github.com/apolope/ffcom/releases/download/desktop-stable"
+      }
+    ]
   }
 }

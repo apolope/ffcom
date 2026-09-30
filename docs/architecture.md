@@ -657,6 +657,28 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Correção (2026-09-29): assets relativos quebravam o retorno do login.** No primeiro teste de ponta a ponta do instalador contra produção, o login voltava para `app://ffcom/auth/callback` e a página falhava com "Expected a JavaScript-or-Wasm module script but the server responded with a MIME type of text/html". O `vite-plugin-electron` troca a `base` padrão por `./` quando o projeto não define uma, então o `index.html` pedia `./assets/...`, que a partir de `/auth/callback` vira `/auth/assets/...`; sem arquivo ali, o fallback de SPA devolvia o `index.html`. A premissa acima de que as URLs do Vite eram raiz-absoluta deixou de valer em algum momento. Corrigido com `base: '/'` explícito em `vite.config.ts` (o build web não muda: mesmo hash de bundle). Conferido abrindo o `FFCom.exe` empacotado com depuração remota em `app://ffcom/auth/callback`: o script carrega de `app://ffcom/assets/` e o React monta. O smoke test de 2026-09-21 só abriu a raiz, por isso não pegou.
 
+## Decisão: distribuição e atualização do app desktop — GitHub Releases, índice fixo `desktop-stable` e o mesmo botão verde
+
+**Contexto:** preparar o app Windows para ser baixado pelo site e atualizado sem reinstalar à mão. Até aqui o instalador só era gerado localmente (`npm run package:win`, versão `0.0.0`), e o botão verde de atualizar só existia no web, pelo service worker.
+
+**Alternativas consideradas:**
+- **Onde hospedar:** GitHub Releases ou o próprio site (`ffcom-site` em `SVRUBS24IPS0101`). No site, cada versão (~110 MB) passaria pela VM da OCI e exigiria limpar as antigas. **GitHub Releases**, escolhido pelo dono: gratuito em repositório público e sem banda nossa.
+- **Como o app acha a versão nova:** o provider `github` do `electron-updater` lê a release "Latest" do repositório, que é do `server-channel` (`channel-vX.Y.Z`); mudar isso brigaria com o índice do `channel`. Escolhido o provider `generic` apontando para uma **release fixa `desktop-stable`** (pre-release, `make_latest: false`, mesmo padrão da `channel-stable`), que guarda o `latest.yml` e uma cópia do instalador com nome fixo (`FFCom-Setup.exe`) para o botão do site. O instalador de cada versão fica na release `client-vX.Y.Z`, e o `latest.yml` aponta para ele com URL absoluta (o `electron-updater` resolve com `new URL(caminho, base)`, e URL absoluta ignora a base).
+- **Onde gerar o instalador:** o runner próprio é Linux, e o NSIS do `electron-builder` no Linux exige wine. Escolhido o runner `windows-latest` do GitHub, gratuito em repositório público.
+- **Assinatura de código:** sem assinatura por enquanto (decisão do dono). O SmartScreen avisa na instalação (o site explica o "Mais informações" → "Executar assim mesmo"); a atualização pelo botão funciona igual. Dá para assinar depois sem mudar o resto.
+
+**Decisão:**
+1. **Versão:** a tag `client-vX.Y.Z` vale para o web e para o desktop. No CI, `--config.extraMetadata.version=X.Y.Z` no `electron-builder` e `VITE_APP_VERSION` no build (menu do avatar). Localmente continua `0.0.0`.
+2. **CI** (`deploy-ffcom-client.yml`, job `desktop-windows`, só em tag): `npm ci`, `build:electron`, `electron-builder --win`, reescreve o `latest.yml` para a release da versão, cria `client-vX.Y.Z` com o instalador e o `.blockmap` (`make_latest: false`), e troca os assets de `desktop-stable` com nome temporário primeiro, para o download do site não ficar em 404 durante o upload.
+3. **App** (`electron/main.ts`, `registerAutoUpdate`): só empacotado, confere ao abrir e a cada 30 min, baixa em segundo plano e avisa o renderer (`ffcom:update-ready`); `useAppUpdate` acende o mesmo botão verde, e o clique chama `quitAndInstall(true, true)` (instala sem tela e reabre). Sem clicar, instala ao fechar o app (padrão do `electron-updater`).
+4. **Site:** "Baixar para Windows" no topo aponta para `releases/download/desktop-stable/FFCom-Setup.exe`.
+
+**Razão:** reaproveita o botão que as pessoas já conhecem, não custa nada nem usa banda própria, e segue um padrão que o repositório já usa para o `server-channel`.
+
+**Verificado (2026-09-29):** build local com `--config.extraMetadata.version=0.17.6` gera `FFCom-Setup-0.17.6.exe`, `.blockmap` e `latest.yml`, e embute `app-update.yml` com `provider: generic` e a URL de `desktop-stable`. **Não verificado:** o job no runner Windows, e uma atualização de ponta a ponta (exige duas versões publicadas: instalar uma pelo site e publicar a seguinte).
+
+**Revisitar quando:** o SmartScreen atrapalhar a adoção (assinatura: certificado ou Azure Trusted Signing), ou o app ganhar macOS/Linux (targets e um runner por sistema).
+
 ## Decisão: CI de testes/lint — workflow novo separado do deploy, disparado em `push`/`pull_request`
 
 **Contexto:** implementar o item de TODO "CI rodar testes/lint de código". Os três workflows existentes (`deploy-ffcom-{central,channel,client}.yml`) só disparam em `workflow_dispatch` ou push de tag (`central-v*`/`channel-v*`/`client-v*`, ver "Decisão: versionamento e release dos binários"), e cada um só faz Hadolint (Dockerfile) + Gitleaks (segredo) antes do build/push/deploy — nenhum roda `go vet`/`go test` nem lint/build do frontend. `CONTRIBUTING.md` já documentava esses comandos como algo a rodar manualmente antes de commitar (`go vet ./...`, `go test ./...` nos dois servidores; `npm run lint`, `npm run build` no client), mas nada os executava automaticamente.

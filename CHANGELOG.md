@@ -15,6 +15,13 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## site v0.7.0 · 2026-09-29
+- Botão **Baixar para Windows** no topo, sempre com a versão mais recente do app desktop, e a explicação do aviso do Windows ao instalar.
+
+## client v0.17.6 · 2026-09-29
+- **App para Windows publicado**, com instalador para baixar pelo site.
+- O app desktop avisa quando há versão nova pelo mesmo botão verde do navegador: um clique instala e reabre.
+
 ## client v0.17.5 · 2026-09-29
 - App desktop: **apertar para falar funciona com o FFCom em segundo plano**, por exemplo com um jogo em foco, sem bloquear a tecla nos outros programas.
 

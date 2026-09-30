@@ -105,3 +105,115 @@ jobs:
       - name: Logout do GHCR
         if: always()
         run: docker logout ghcr.io
+
+  # App desktop Windows (ver docs/architecture.md, "Decisão: distribuição e
+  # atualização do app desktop"). Runner Windows do GitHub (gratuito em
+  # repositório público): o runner próprio é Linux, e o NSIS do
+  # electron-builder no Linux exigiria wine. Só em tag.
+  desktop-windows:
+    name: App desktop Windows
+    needs: [security-scan, changelog]
+    if: startsWith(github.ref, 'refs/tags/client-v')
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Versão
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/client-}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "number=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build do instalador
+        working-directory: client
+        env:
+          VITE_APP_VERSION: ${{ steps.version.outputs.tag }}
+        run: |
+          npm ci
+          npm run build:electron
+          npx electron-builder --win --publish never "--config.extraMetadata.version=${{ steps.version.outputs.number }}"
+
+      # O latest.yml sai com o nome do instalador relativo à URL de
+      # build.publish (a release fixa desktop-stable); o instalador em si fica
+      # na release da versão, então o índice passa a apontar para ele.
+      - name: Apontar o latest.yml para a release da versão
+        working-directory: client/release
+        env:
+          FILE: FFCom-Setup-${{ steps.version.outputs.number }}.exe
+          BASE: https://github.com/${{ github.repository }}/releases/download/client-${{ steps.version.outputs.tag }}
+        run: |
+          sed -i -E "s#^(\s*-?\s*(url|path): )${FILE}\$#\1${BASE}/${FILE}#" latest.yml
+          cat latest.yml
+          grep -q "url: ${BASE}/${FILE}" latest.yml && grep -q "path: ${BASE}/${FILE}" latest.yml
+          cp "${FILE}" FFCom-Setup.exe
+
+      - name: Release da versão
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: client-${{ steps.version.outputs.tag }}
+          name: FFCom ${{ steps.version.outputs.tag }}
+          files: |
+            client/release/FFCom-Setup-${{ steps.version.outputs.number }}.exe
+            client/release/FFCom-Setup-${{ steps.version.outputs.number }}.exe.blockmap
+          fail_on_unmatched_files: true
+          make_latest: false
+
+      # Release fixa lida pelo app instalado (latest.yml) e pelo botão de
+      # download do site (FFCom-Setup.exe, nome estável). Pre-release, como a
+      # channel-stable, para nunca virar a "Latest" do repositório. Mesmo
+      # mecanismo da channel-stable (deploy-ffcom-channel.yml): sobe com nome
+      # temporário e só depois troca, para o download do site não ficar em
+      # 404 durante o upload do instalador (~110 MB).
+      - name: Índice desktop-stable
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const { owner, repo } = context.repo;
+            const tag = 'desktop-stable';
+            let rel;
+            try {
+              rel = (await github.rest.repos.getReleaseByTag({ owner, repo, tag })).data;
+            } catch (e) {
+              if (e.status !== 404) throw e;
+              rel = (await github.rest.repos.createRelease({
+                owner, repo, tag_name: tag, target_commitish: context.sha,
+                name: 'App desktop: versão atual',
+                body: 'Índice (latest.yml) lido pelo app desktop para se atualizar e instalador com nome fixo (FFCom-Setup.exe) para o botão de download do site. Não é uma versão; ver docs/architecture.md, "Decisão: distribuição e atualização do app desktop".',
+                prerelease: true, make_latest: 'false',
+              })).data;
+            }
+
+            const finals = ['latest.yml', 'FFCom-Setup.exe'];
+            const suffix = `.new-${context.runId}`;
+            const uploaded = {};
+            for (const name of finals) {
+              const data = fs.readFileSync(`client/release/${name}`);
+              const res = await github.rest.repos.uploadReleaseAsset({
+                owner, repo, release_id: rel.id, name: name + suffix, data,
+                headers: { 'content-type': 'application/octet-stream', 'content-length': data.length },
+              });
+              uploaded[name] = res.data.id;
+            }
+
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets, { owner, repo, release_id: rel.id, per_page: 100 });
+            for (const a of assets) {
+              const stale = finals.includes(a.name) || (/\.new-\d+$/.test(a.name) && !a.name.endsWith(suffix));
+              if (stale) await github.rest.repos.deleteReleaseAsset({ owner, repo, asset_id: a.id });
+            }
+            for (const name of finals) {
+              await github.rest.repos.updateReleaseAsset({ owner, repo, asset_id: uploaded[name], name });
+            }
+            core.info(`índice publicado em ${rel.html_url}`);
