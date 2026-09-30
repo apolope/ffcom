@@ -28,6 +28,7 @@ import { useKnownServers } from './hooks/useKnownServers'
 import { useFriends, type FriendEvent } from './hooks/useFriends'
 import { useE2EKeys } from './hooks/useE2EKeys'
 import { E2EKeyPanel } from './components/E2EKeyPanel'
+import { NotMemberPanel } from './components/NotMemberPanel'
 import { useMe } from './hooks/useMe'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { useMyProfile } from './hooks/useMyProfile'
@@ -45,6 +46,7 @@ import {
   deleteChannel,
   deleteChannelOverwrite,
   fetchChannelOverwrites,
+  joinServer,
   setChannelOverwrite,
   updateCategory,
   updateChannel,
@@ -81,7 +83,7 @@ function App() {
     () => notify('Falha ao salvar a ordem dos servidores. Tentando de novo…', 'error'),
     [notify],
   )
-  const { servers, addServer, saveOrder: saveServerOrder } = useKnownServers(accessToken ?? '', onServerOrderSaveError)
+  const { servers, addServer, removeServer, saveOrder: saveServerOrder } = useKnownServers(accessToken ?? '', onServerOrderSaveError)
   // Pedido de amizade recebido ou aceito chega pelo WebSocket de presença,
   // com a pessoa em qualquer tela: vira aviso no canto (ver
   // docs/architecture.md, "Decisão: pedido de amizade pela lista de membros").
@@ -225,7 +227,12 @@ function App() {
   const profileName = myProfile ? (myProfile.customDisplayName ?? authentikName) : undefined
   const refreshMembersRef = useRef<() => Promise<void>>(undefined)
   const onProfileNameSaved = useCallback(() => void refreshMembersRef.current?.(), [])
-  const { me, setNickname } = useMe(server?.baseUrl ?? '', accessToken ?? '', profileName, onProfileNameSaved)
+  const {
+    me,
+    notMember,
+    reload: reloadMe,
+    setNickname,
+  } = useMe(server?.baseUrl ?? '', accessToken ?? '', profileName, onProfileNameSaved)
   const canManageRoles = me ? hasPermission(me.permissions, PERMISSIONS.ManageRoles) || !!me.isOwner : false
   const canKick = me ? hasPermission(me.permissions, PERMISSIONS.KickMembers) || !!me.isOwner : false
   const canBan = me ? hasPermission(me.permissions, PERMISSIONS.BanMembers) || !!me.isOwner : false
@@ -305,7 +312,9 @@ function App() {
     refresh: refreshStructure,
     saveCategoryOrder,
     saveChannelOrder,
-  } = useServerStructure(server?.baseUrl ?? '', accessToken ?? '', onStructureSaveError)
+    // 403 num poll: pode ter sido expulso com o servidor aberto, e só
+    // /api/me diz com certeza (ver NotMemberPanel).
+  } = useServerStructure(server?.baseUrl ?? '', accessToken ?? '', onStructureSaveError, reloadMe)
   const realCategories = useMemo(() => categories.filter((c) => c.id !== UNCATEGORIZED_ID), [categories])
   const serverBaseUrl = server?.baseUrl
   // Estável por canal: ChannelPermissionsDialog recarrega quando muda.
@@ -336,6 +345,19 @@ function App() {
         .flatMap((category) => category.channels)
         .find((c) => c.id === selectedChannelId),
     [categories, selectedChannelId],
+  )
+
+  const notMemberPanel = server && (
+    <NotMemberPanel
+      serverName={server.name}
+      onJoin={async (inviteCode) => {
+        await joinServer(server.baseUrl, accessToken ?? '', inviteCode)
+        reloadMe()
+        refreshStructure()
+        void refreshMembersRef.current?.()
+      }}
+      onRemove={() => removeServer(server.id)}
+    />
   )
 
   // Marca o canal como lido ao entrar nele e de novo ao sair (cursor "agora"
@@ -511,7 +533,9 @@ function App() {
               ) : server ? (
                 <ChannelSidebar
                   server={server}
-                  categories={categories}
+                  // Fora do servidor, a estrutura do último poll bem-sucedido
+                  // não vale mais.
+                  categories={notMember ? [] : categories}
                   selectedChannelId={selectedChannelId}
                   unreadChannelIds={unreadChannelIds}
                   voiceParticipants={voiceParticipants}
@@ -561,6 +585,20 @@ function App() {
                 <div className="empty-state">
                   <p>Selecione um amigo para conversar.</p>
                 </div>
+              )
+            ) : server && notMember ? (
+              isMobile ? (
+                // Mesmo caso da chave de E2E: no celular o painel precisa do ☰
+                // para voltar aos servidores.
+                <section className="main-panel">
+                  <header className="channel-header">
+                    <MobileNavButton />
+                    <span className="channel-title">{server.name}</span>
+                  </header>
+                  {notMemberPanel}
+                </section>
+              ) : (
+                notMemberPanel
               )
             ) : server ? (
               <>

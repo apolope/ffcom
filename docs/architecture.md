@@ -1794,6 +1794,18 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** um servidor tiver vários moderadores com os mesmos bits e isso gerar conflito, ou quando existir reordenação de roles (aí a hierarquia por `position` fica barata).
 
+## Decisão: aviso de membro expulso no lugar da tela vazia
+
+**Contexto:** no teste do canal privado com contas reais (2026-09-30), `teste-ffcom02`, expulsa numa limpeza anterior, ainda tinha "Games With Respect" no rail: expulsar e banir mexem só no `server-channel`, e a lista de servidores da conta fica no `server-central`, que não sabe de nada. Ao abrir o servidor, toda rota respondia `403` e o client mostrava a tela vazia, sem canal nem aviso. O `useServerStructure` só vira tela de erro na primeira carga, então quem era expulso **com o servidor aberto** continuava vendo a estrutura antiga, congelada.
+
+**Alternativas consideradas:** (1) o `server-channel` avisar o `server-central` no kick/ban para tirar o servidor da lista, o que criaria a primeira chamada entre os dois servidores (hoje só o client fala com ambos) e daria ao `server-channel`, que qualquer um autohospeda, credencial para mexer na lista de contas do `server-central`; (2) o `server-channel` marcar o 403 de não membro com um header ou corpo próprio, o que muda o protocolo e exige `Access-Control-Expose-Headers`; (3) só no client: um `403` no `GET /api/me` já quer dizer "não é membro", porque essa rota não exige bit nenhum e só `auth.RequireMember` a recusa.
+
+**Decisão:** (3). `useMe` expõe `notMember` (só em `HttpError` 403, não em erro de rede ou servidor fora do ar) e `reload`. `useServerStructure` ganhou `onForbidden`, chamado em qualquer carga que volte `403`, inclusive nos repolls de 20s; o `App` passa `reloadMe`, então a expulsão com o servidor aberto aparece no poll seguinte. Com `notMember`, o `App` esvazia a lista de canais e troca o painel do canal por `NotMemberPanel`: "Você não é mais membro de {servidor}", um campo para o link ou o código do convite (chama `POST /api/join` e recarrega `/api/me`, estrutura e membros) e "Remover da lista" (`DELETE` no `server-central`). O `parseInviteLink` saiu do `AddServerDialog` para `lib/inviteLink.ts`, usado pelos dois.
+
+**Razão:** resolve o caso com o que o protocolo já garante, sem mudar servidor nem CORS, e funciona também contra `server-channel` autohospedado de versões antigas. O `403` do `/api/me` ficou documentado em `docs/protocol.md` como contrato, para uma rota nova ali não quebrar isso sem querer.
+
+**Escopo aceito:** o `server-central` continua guardando o servidor na lista de quem foi expulso até a pessoa remover ou entrar de novo. O aviso não diferencia expulso de banido: para quem foi banido, o convite volta `403` "banido deste servidor", e essa mensagem aparece no próprio painel.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

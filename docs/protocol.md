@@ -106,7 +106,7 @@ Base URL: `KnownServer.baseUrl`, uma por servidor cadastrado no client (endereç
 |---|---|---|---|---|---|
 | GET | `/healthz` | não | — | `{status, version}` | — |
 | POST | `/api/join` | Bearer (sem `RequireMember`) | `{code?}` | `200` (já membro) ou `201` `{memberId, founder?}` | `403` sem convite (exceto fundador) ou banido, `404`/`410`/`409` convite inválido |
-| GET | `/api/me` | Bearer + membro | — | `{memberId, oidcSubject, nickname?, joinedAt, isOwner?, permissions, roleIds?}` | — |
+| GET | `/api/me` | Bearer + membro | — | `{memberId, oidcSubject, nickname?, joinedAt, isOwner?, permissions, roleIds?}` | `403` só quando o `sub` não é membro (nunca entrou, expulso ou banido): a rota não exige bit, e o client usa esse 403 para mostrar o aviso de membro expulso |
 | PATCH | `/api/me` | Bearer + membro | `{nickname: string \| null}` | `Me` (mesmo shape de GET) | `400` apelido > 64 chars |
 | GET | `/api/members` | Bearer + membro | — | `{members: [{id, nickname?, joinedAt, isOwner?, roleIds?}]}` — só membros ativos, sem quem foi expulso | — |
 | POST | `/api/members/{memberId}/kick` | Bearer + membro + `KickMembers` | — | `204` | `400` alvo é você mesmo, `403` alvo é o dono, `404` membro, `409` já expulso |

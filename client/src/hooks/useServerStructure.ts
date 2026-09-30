@@ -4,6 +4,7 @@ import {
   fetchCategories,
   fetchChannels,
   groupIntoCategories,
+  HttpError,
   reorderCategories,
   reorderChannels,
   type ChannelOrderGroup,
@@ -51,10 +52,16 @@ const STRUCTURE_POLL_INTERVAL_MS = 20_000
 //
 // onSaveError é chamado na primeira falha de uma sequência de tentativas de
 // gravar a ordem (não a cada nova tentativa), para avisar a pessoa uma vez.
+//
+// onForbidden é chamado quando uma carga (a primeira ou um repoll) volta 403:
+// quem é expulso com o servidor aberto só percebe por aqui, já que o repoll
+// falha em silêncio e a estrutura antiga ficaria na tela. Quem chama confere
+// se a pessoa ainda é membro (useMe.reload).
 export function useServerStructure(
   serverBaseUrl: string,
   accessToken: string,
   onSaveError?: () => void,
+  onForbidden?: () => void,
 ): UseServerStructureResult {
   const [loaded, setLoaded] = useState<Category[]>([])
   const [status, setStatus] = useState<ServerStructureStatus>('loading')
@@ -68,6 +75,10 @@ export function useServerStructure(
   useEffect(() => {
     onSaveErrorRef.current = onSaveError
   }, [onSaveError])
+  const onForbiddenRef = useRef(onForbidden)
+  useEffect(() => {
+    onForbiddenRef.current = onForbidden
+  }, [onForbidden])
 
   useEffect(() => {
     // Antes da lista de servidores chegar, serverBaseUrl vem vazio e o fetch
@@ -83,7 +94,9 @@ export function useServerStructure(
           setStatus('ready')
         })
         .catch((err) => {
-          if (cancelled || !isFirstLoad) return
+          if (cancelled) return
+          if (err instanceof HttpError && err.status === 403) onForbiddenRef.current?.()
+          if (!isFirstLoad) return
           setStatus('error')
           setError(err instanceof Error ? err.message : 'falha ao carregar categorias/canais')
         })

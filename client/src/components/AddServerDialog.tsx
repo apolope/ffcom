@@ -1,40 +1,11 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
+import { parseInviteLink } from '../lib/inviteLink'
 import './Dialog.css'
 
 interface AddServerDialogProps {
   onAdd: (address: string, name: string, inviteCode?: string) => Promise<void>
   onClose: () => void
-}
-
-// Adiciona um server-channel ao diretório da conta via endereço informado
-// manualmente (ver docs/architecture.md, "Decisão: descoberta de
-// server-channel" — sem descoberta automática, só convite/IP manual).
-// Entrar de fato no server-channel agora exige um convite válido, a menos
-// que ninguém ainda seja membro (bootstrap do self-host) — ver
-// docs/architecture.md, "Convites obrigatórios para entrar em
-// server-channel". O campo de código é opcional na UI porque cobre os dois
-// casos sem exigir que quem está configurando um servidor novo saiba disso.
-//
-// O campo "Endereço" também aceita colar o link gerado por
-// InviteServerDialog (endereço + `?invite=CODE`) — parseInviteLink separa os
-// dois de volta, para quem só tem o link não precisar copiar/colar duas
-// vezes. A separação acontece ao colar, ao sair do campo e no envio, nunca
-// a cada tecla: digitando, `?invite=J` já é um link válido e o resto do
-// código iria parar no fim do endereço. Ver docs/architecture.md, "Decisão: convite auto-contido".
-function parseInviteLink(value: string): { address: string; inviteCode: string; name?: string } | undefined {
-  let url: URL
-  try {
-    url = new URL(value)
-  } catch {
-    return undefined
-  }
-  const code = url.searchParams.get('invite')
-  if (!code) return undefined
-  // Links anteriores ao `&name=` não trazem o nome; a pessoa digita.
-  const name = url.searchParams.get('name')?.trim() || undefined
-  url.search = ''
-  return { address: url.toString().replace(/\/+$/, ''), inviteCode: code, name }
 }
 
 // TLS obrigatório fora de localhost (ver docs/architecture.md, "Criptografia
@@ -53,6 +24,22 @@ function isAddressSecure(address: string): boolean {
   return url.protocol === 'http:' && LOCAL_HOSTNAMES.has(url.hostname)
 }
 
+// Adiciona um server-channel ao diretório da conta via endereço informado
+// manualmente (ver docs/architecture.md, "Decisão: descoberta de
+// server-channel" — sem descoberta automática, só convite/IP manual).
+// Entrar de fato no server-channel agora exige um convite válido, a menos
+// que ninguém ainda seja membro (bootstrap do self-host) — ver
+// docs/architecture.md, "Convites obrigatórios para entrar em
+// server-channel". O campo de código é opcional na UI porque cobre os dois
+// casos sem exigir que quem está configurando um servidor novo saiba disso.
+//
+// O campo "Endereço" também aceita colar o link gerado por
+// InviteServerDialog (endereço + `?invite=CODE`) — parseInviteLink
+// (lib/inviteLink.ts) separa os dois de volta, para quem só tem o link não
+// precisar copiar/colar duas vezes. A separação acontece ao colar, ao sair
+// do campo e no envio, nunca a cada tecla: digitando, `?invite=J` já é um
+// link válido e o resto do código iria parar no fim do endereço. Ver
+// docs/architecture.md, "Decisão: convite auto-contido".
 export function AddServerDialog({ onAdd, onClose }: AddServerDialogProps) {
   const [address, setAddress] = useState('')
   const [name, setName] = useState('')

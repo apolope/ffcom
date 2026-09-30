@@ -1,0 +1,11 @@
+.not-member-card {
+  width: 420px;
+  max-width: calc(100% - 32px);
+}
+
+.not-member-card > p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text);
+}

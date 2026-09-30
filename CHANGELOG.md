@@ -15,6 +15,9 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## client v0.20.0 · 2026-09-30
+- Quem foi expulso de um servidor e ainda o tem na lista vê o aviso "Você não é mais membro", com a opção de voltar colando um convite novo ou de tirar o servidor da lista, em vez de uma tela vazia. Vale também para quem é expulso com o servidor aberto.
+
 ## channel v0.9.0 · 2026-09-30
 - Canal privado funciona como no Discord: negar "Ver canal" para @everyone e permitir para uma role libera o canal para quem tem a role (antes só Administrador e dono entravam). Permitir numa role também vence Negar em outra role da mesma pessoa.
 - Quem gerencia roles sem ser Administrador não consegue mais apagar, editar, tirar de alguém ou mexer nas permissões de canal de uma role com permissões que ele não tem, e ninguém expulsa ou bane quem tem permissões que ele não tem.
