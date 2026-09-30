@@ -13,6 +13,7 @@ import {
 import { existsSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { UiohookKey, uIOhook, type UiohookKeyboardEvent } from 'uiohook-napi'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -90,6 +91,95 @@ function registerMuteShortcutIpc() {
     })
     if (ok) muteShortcut = accelerator
     return ok
+  })
+}
+
+// Push-to-talk com o app em segundo plano (ver docs/architecture.md,
+// "Decisão: push-to-talk", revisão de 2026-09-29). O globalShortcut só
+// entrega o apertar; o hook de teclado nativo (uiohook-napi, binário N-API
+// pré-compilado por plataforma) entrega também o soltar. Com a janela em
+// foco quem trata a tecla é o renderer (que ignora campos de digitação), então
+// o apertar só é repassado com a janela fora de foco; o soltar é repassado
+// sempre, para fechar uma fala que começou fora de foco. O hook só roda
+// enquanto há uma tecla registrada (conectado na voz, modo "apertar para
+// falar").
+interface PushToTalkKey {
+  keycode: number
+  ctrl: boolean
+  alt: boolean
+  shift: boolean
+  meta: boolean
+}
+
+function pushToTalkKeycode(key: string): number | undefined {
+  const keys = UiohookKey as Record<string, number>
+  if (/^[A-Z0-9]$/.test(key) || /^F([1-9]|1\d|2[0-4])$/.test(key) || key === 'Space') return keys[key]
+  const m = /^num(\d)$/.exec(key)
+  return m ? keys[`Numpad${m[1]}`] : undefined
+}
+
+let pushToTalkKey: PushToTalkKey | undefined
+let pushToTalkWindow: BrowserWindow | undefined
+let pushToTalkHeld = false
+let hookRunning = false
+
+function onHookKeyDown(e: UiohookKeyboardEvent) {
+  const k = pushToTalkKey
+  const win = pushToTalkWindow
+  if (!k || !win || win.isDestroyed() || e.keycode !== k.keycode || pushToTalkHeld) return
+  if (e.ctrlKey !== k.ctrl || e.altKey !== k.alt || e.shiftKey !== k.shift || e.metaKey !== k.meta) return
+  if (win.isFocused()) return
+  pushToTalkHeld = true
+  win.webContents.send('ffcom:push-to-talk', true)
+}
+
+function onHookKeyUp(e: UiohookKeyboardEvent) {
+  const k = pushToTalkKey
+  const win = pushToTalkWindow
+  // Só a tecla principal: os modificadores podem ser soltos antes.
+  if (!k || e.keycode !== k.keycode) return
+  pushToTalkHeld = false
+  if (win && !win.isDestroyed()) win.webContents.send('ffcom:push-to-talk', false)
+}
+
+function stopPushToTalkHook() {
+  pushToTalkKey = undefined
+  pushToTalkHeld = false
+  if (hookRunning) {
+    uIOhook.stop()
+    hookRunning = false
+  }
+}
+
+function registerPushToTalkIpc() {
+  uIOhook.on('keydown', onHookKeyDown)
+  uIOhook.on('keyup', onHookKeyUp)
+  ipcMain.handle('ffcom:set-push-to-talk-key', (event, accelerator: unknown) => {
+    stopPushToTalkHook()
+    if (accelerator === null) return true
+    if (typeof accelerator !== 'string' || !SHORTCUT_FORMAT.test(accelerator)) return false
+    const parts = accelerator.split('+')
+    const keycode = pushToTalkKeycode(parts[parts.length - 1])
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (keycode === undefined || !win) return false
+    pushToTalkKey = {
+      keycode,
+      ctrl: parts.includes('Ctrl'),
+      alt: parts.includes('Alt'),
+      shift: parts.includes('Shift'),
+      meta: parts.includes('Super'),
+    }
+    pushToTalkWindow = win
+    try {
+      uIOhook.start()
+      hookRunning = true
+      return true
+    } catch (err) {
+      // Ex. macOS sem a permissão de Acessibilidade: segue só com a janela em foco.
+      console.warn('[ffcom] push-to-talk em segundo plano indisponível', err)
+      pushToTalkKey = undefined
+      return false
+    }
   })
 }
 
@@ -189,6 +279,7 @@ function registerDisplayMediaIpc() {
 app.whenReady().then(() => {
   registerAppProtocol()
   registerMuteShortcutIpc()
+  registerPushToTalkIpc()
   registerSystemIdleIpc()
   registerDisplayMediaIpc()
   createWindow()
@@ -196,6 +287,7 @@ app.whenReady().then(() => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
+  stopPushToTalkHook()
 })
 
 app.on('window-all-closed', () => {

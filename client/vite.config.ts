@@ -27,6 +27,9 @@ export default defineConfig(({ mode }) => ({
       electron({
         main: {
           entry: 'electron/main.ts',
+          // Módulo nativo (.node): fica em node_modules e é carregado em
+          // runtime, não empacotado no main.js.
+          vite: { build: { rolldownOptions: { external: ['uiohook-napi'] } } },
         },
         preload: {
           input: 'electron/preload.ts',

@@ -7,6 +7,13 @@ interface FfcomElectronBridge {
   // Chamado a cada aperto do atalho global; devolve a função que remove o
   // listener.
   onMuteShortcut(callback: () => void): () => void
+  // Liga (ou, com null, desliga) o push-to-talk em segundo plano: o main
+  // passa a avisar o apertar da tecla com a janela fora de foco e o soltar
+  // sempre. Resolve false se o hook de teclado não subir (ex. macOS sem
+  // permissão de Acessibilidade).
+  setPushToTalkKey(accelerator: string | null): Promise<boolean>
+  // true ao apertar, false ao soltar; devolve a função que remove o listener.
+  onPushToTalk(callback: (pressed: boolean) => void): () => void
   // Segundos sem teclado nem mouse no sistema inteiro (powerMonitor), para
   // o "ausente" automático (hooks/useIdle.ts).
   getSystemIdleSeconds(): Promise<number>

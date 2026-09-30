@@ -7,9 +7,11 @@ const RELEASE_DELAY_MS = 200
 
 // De onde vem o "segurar": a tecla configurada, o botão na tela pelo
 // ponteiro (mouse ou toque) ou o botão na tela pelo teclado (Espaço/Enter com
-// ele em foco). O microfone fica aberto enquanto qualquer um estiver
-// segurando, então soltar um não fecha se outro continua apertado.
-type Holder = 'key' | 'pointer' | 'buttonKey'
+// ele em foco), e, no app desktop, a tecla com a janela fora de foco (hook
+// de teclado no main, electron/main.ts). O microfone fica aberto enquanto
+// qualquer um estiver segurando, então soltar um não fecha se outro continua
+// apertado.
+type Holder = 'key' | 'pointer' | 'buttonKey' | 'global'
 
 interface PushToTalkButtonProps {
   onPointerDown: (e: PointerEvent<HTMLButtonElement>) => void
@@ -23,9 +25,10 @@ interface PushToTalkButtonProps {
 // Push-to-talk enquanto `active` (conectado na voz, modo "apertar para
 // falar" e fora do modo de gravar tecla): chama onTalkingChange(true) ao
 // apertar e onTalkingChange(false) ao soltar, com RELEASE_DELAY_MS de atraso.
-// Só funciona com a janela em foco, no web e no Electron: o globalShortcut do
-// Electron não entrega o soltar da tecla. Ver docs/architecture.md, "Decisão:
-// push-to-talk".
+// No web, só com a janela em foco. No app desktop, também em segundo plano:
+// o main avisa o apertar fora de foco e o soltar sempre, e perder o foco com a
+// tecla apertada não fecha (a fala segue até soltar). Ver
+// docs/architecture.md, "Decisão: push-to-talk".
 export function usePushToTalk(
   key: string | undefined,
   active: boolean,
@@ -97,7 +100,27 @@ export function usePushToTalk(
     const onKeyUp = (e: KeyboardEvent) => {
       if (mainKey && keyFromCode(e.code) === mainKey) release('key')
     }
-    const releaseAll = () => release('all', true)
+    // App desktop com o hook ativo: perder o foco com a tecla apertada passa
+    // a fala para o hook, que vai entregar o soltar.
+    const electron = window.ffcomElectron
+    let globalOk = false
+    let unsubscribe: (() => void) | undefined
+    if (electron && key) {
+      unsubscribe = electron.onPushToTalk((pressed) => (pressed ? press('global') : release('global')))
+      void electron.setPushToTalkKey(key).then((ok) => {
+        globalOk = ok
+      })
+    }
+    const releaseAll = () => {
+      if (globalOk && holdersRef.current.has('key')) {
+        holdersRef.current.delete('key')
+        holdersRef.current.add('global')
+        release('pointer', true)
+        release('buttonKey', true)
+        return
+      }
+      release('all', true)
+    }
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') releaseAll()
     }
@@ -110,6 +133,8 @@ export function usePushToTalk(
       window.removeEventListener('keyup', onKeyUp)
       window.removeEventListener('blur', releaseAll)
       document.removeEventListener('visibilitychange', onVisibilityChange)
+      unsubscribe?.()
+      if (electron && key) void electron.setPushToTalkKey(null)
     }
   }, [key, active, press, release])
 

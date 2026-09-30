@@ -293,7 +293,9 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
                   {voicePrefs.pushToTalkKey
                     ? `Segure ${formatShortcut(voicePrefs.pushToTalkKey)} ou o botão "Segure para falar". `
                     : 'Sem tecla definida, segure o botão "Segure para falar". '}
-                  Só funciona com esta janela em foco{window.ffcomElectron ? ', também no app desktop' : ''}.
+                  {window.ffcomElectron
+                    ? 'A tecla funciona também com o app em segundo plano, sem bloquear a tecla nos outros programas.'
+                    : 'No navegador, só funciona com esta janela em foco.'}
                 </span>
               </>
             ) : (

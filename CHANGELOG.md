@@ -15,6 +15,9 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## client v0.17.5 · 2026-09-29
+- App desktop: **apertar para falar funciona com o FFCom em segundo plano**, por exemplo com um jogo em foco, sem bloquear a tecla nos outros programas.
+
 ## client v0.17.4 · 2026-09-29
 - No celular, o botão "voltar" do Android fecha a gaveta aberta em vez de sair do app.
 

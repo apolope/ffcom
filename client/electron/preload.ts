@@ -12,6 +12,15 @@ contextBridge.exposeInMainWorld('ffcomElectron', {
       ipcRenderer.removeListener('ffcom:mute-shortcut', listener)
     }
   },
+  setPushToTalkKey: (accelerator: string | null): Promise<boolean> =>
+    ipcRenderer.invoke('ffcom:set-push-to-talk-key', accelerator),
+  onPushToTalk: (callback: (pressed: boolean) => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, pressed: boolean) => callback(pressed)
+    ipcRenderer.on('ffcom:push-to-talk', listener)
+    return () => {
+      ipcRenderer.removeListener('ffcom:push-to-talk', listener)
+    }
+  },
   getSystemIdleSeconds: (): Promise<number> => ipcRenderer.invoke('ffcom:get-system-idle-seconds'),
   getDisplaySources: (): Promise<unknown> => ipcRenderer.invoke('ffcom:get-display-sources'),
   chooseDisplaySource: (id: string, audio: boolean): Promise<boolean> =>

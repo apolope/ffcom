@@ -30,7 +30,8 @@
     "oidc-client-ts": "^3.5.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "tweetnacl": "^1.0.3"
+    "tweetnacl": "^1.0.3",
+    "uiohook-napi": "^1.5.5"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
@@ -69,6 +70,7 @@
     "linux": {
       "target": "AppImage",
       "category": "Network"
-    }
+    },
+    "npmRebuild": false
   }
 }
