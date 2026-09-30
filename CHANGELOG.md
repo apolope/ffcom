@@ -15,6 +15,9 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## client v0.19.0 · 2026-09-30
+- O link de convite leva o nome do servidor: quem cola o link já vê o nome preenchido, e todos passam a chamar o servidor do mesmo jeito.
+
 ## client v0.18.0 · 2026-09-30
 - **Som quando alguém entra ou sai da chamada**, inclusive você mesmo: três notas subindo ao entrar e descendo ao sair. Dá para desligar em "Som ao entrar e sair", na barra do canal de voz.
 

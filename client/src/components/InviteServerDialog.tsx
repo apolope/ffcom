@@ -13,10 +13,13 @@ interface InviteServerDialogProps {
 // que o dono divulgue o endereço do servidor por um canal separado do
 // código — ver docs/architecture.md, "Decisão: convite auto-contido". O
 // resgate acontece do outro lado, em AddServerDialog, que reconhece esse
-// formato e separa endereço/código de volta.
-function buildInviteLink(serverBaseUrl: string, code: string): string {
+// formato e separa endereço/código de volta. O nome com que quem convida
+// chama o servidor vai junto (`&name=`) para já preencher o campo de nome.
+function buildInviteLink(serverBaseUrl: string, code: string, serverName: string): string {
   const base = serverBaseUrl.replace(/\/+$/, '')
-  return `${base}/?invite=${code}`
+  const params = new URLSearchParams({ invite: code })
+  if (serverName.trim()) params.set('name', serverName.trim())
+  return `${base}/?${params.toString()}`
 }
 
 // Gera um código de convite para este server-channel (ver
@@ -39,7 +42,7 @@ export function InviteServerDialog({
     setGenerating(true)
     try {
       const code = await onCreateInvite()
-      setInvite(buildInviteLink(serverBaseUrl, code))
+      setInvite(buildInviteLink(serverBaseUrl, code, serverName))
       setCopied(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'falha ao gerar convite')

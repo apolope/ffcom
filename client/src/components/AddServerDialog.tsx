@@ -22,7 +22,7 @@ interface AddServerDialogProps {
 // vezes. A separação acontece ao colar, ao sair do campo e no envio, nunca
 // a cada tecla: digitando, `?invite=J` já é um link válido e o resto do
 // código iria parar no fim do endereço. Ver docs/architecture.md, "Decisão: convite auto-contido".
-function parseInviteLink(value: string): { address: string; inviteCode: string } | undefined {
+function parseInviteLink(value: string): { address: string; inviteCode: string; name?: string } | undefined {
   let url: URL
   try {
     url = new URL(value)
@@ -31,8 +31,10 @@ function parseInviteLink(value: string): { address: string; inviteCode: string }
   }
   const code = url.searchParams.get('invite')
   if (!code) return undefined
+  // Links anteriores ao `&name=` não trazem o nome; a pessoa digita.
+  const name = url.searchParams.get('name')?.trim() || undefined
   url.search = ''
-  return { address: url.toString().replace(/\/+$/, ''), inviteCode: code }
+  return { address: url.toString().replace(/\/+$/, ''), inviteCode: code, name }
 }
 
 // TLS obrigatório fora de localhost (ver docs/architecture.md, "Criptografia
@@ -65,6 +67,8 @@ export function AddServerDialog({ onAdd, onClose }: AddServerDialogProps) {
     if (!parsed) return value
     setAddress(parsed.address)
     setInviteCode(parsed.inviteCode)
+    // Sugestão de quem convidou; não passa por cima do que a pessoa já digitou.
+    if (parsed.name && !name.trim()) setName(parsed.name)
     return parsed.address
   }
 
@@ -75,13 +79,14 @@ export function AddServerDialog({ onAdd, onClose }: AddServerDialogProps) {
     const parsed = parseInviteLink(address.trim())
     const trimmedAddress = (parsed?.address ?? address).trim()
     const code = parsed?.inviteCode ?? inviteCode
+    const serverName = name.trim() || parsed?.name || ''
     if (!isAddressSecure(trimmedAddress)) {
       setError('Endereço precisa usar https:// (http:// só é aceito para localhost)')
       return
     }
     setSubmitting(true)
     try {
-      await onAdd(trimmedAddress, name.trim(), code.trim() || undefined)
+      await onAdd(trimmedAddress, serverName, code.trim() || undefined)
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'falha ao adicionar servidor')
