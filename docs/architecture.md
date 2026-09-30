@@ -675,7 +675,7 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Razão:** reaproveita o botão que as pessoas já conhecem, não custa nada nem usa banda própria, e segue um padrão que o repositório já usa para o `server-channel`.
 
-**Verificado (2026-09-29):** build local com `--config.extraMetadata.version=0.17.6` gera `FFCom-Setup-0.17.6.exe`, `.blockmap` e `latest.yml`, e embute `app-update.yml` com `provider: generic` e a URL de `desktop-stable`. **Não verificado:** o job no runner Windows, e uma atualização de ponta a ponta (exige duas versões publicadas: instalar uma pelo site e publicar a seguinte).
+**Verificado (2026-09-29):** build local com `--config.extraMetadata.version=0.17.6` gera `FFCom-Setup-0.17.6.exe`, `.blockmap` e `latest.yml`, e embute `app-update.yml` com `provider: generic` e a URL de `desktop-stable`. **Verificado de ponta a ponta (2026-09-29):** o job `desktop-windows` passou de primeira nas tags `client-v0.17.6` e `client-v0.17.7`; o app instalado pelo botão do site (`v0.17.6`) acendeu o botão verde depois da publicação da `v0.17.7`, e o clique instalou e reabriu já em `v0.17.7`. O rótulo "Latest" do GitHub vai para a release publicada por último (`client-v*` ou `channel-v*`) apesar de `make_latest: false`; é só visual, porque o app e o `server-channel` leem as releases fixas.
 
 **Revisitar quando:** o SmartScreen atrapalhar a adoção (assinatura: certificado ou Azure Trusted Signing), ou o app ganhar macOS/Linux (targets e um runner por sistema).
 
