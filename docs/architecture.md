@@ -1806,6 +1806,8 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Escopo aceito:** o `server-central` continua guardando o servidor na lista de quem foi expulso até a pessoa remover ou entrar de novo. O aviso não diferencia expulso de banido: para quem foi banido, o convite volta `403` "banido deste servidor", e essa mensagem aparece no próprio painel.
 
+**Verificado (2026-09-30, `client-v0.20.0` em produção):** com `teste-ffcom02` expulsa e o servidor ainda na lista, abrir o "Games With Respect" mostrou o aviso; colar o convite no painel fez a conta voltar (banco: membro ativo, convite com 1 uso) e os canais apareceram sem recarregar. Expulsa de novo pela sessão do dono com o servidor aberto na janela dela, o aviso apareceu sozinho no poll seguinte.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.
