@@ -15,6 +15,13 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## channel v0.9.0 · 2026-09-30
+- Canal privado funciona como no Discord: negar "Ver canal" para @everyone e permitir para uma role libera o canal para quem tem a role (antes só Administrador e dono entravam). Permitir numa role também vence Negar em outra role da mesma pessoa.
+- Quem gerencia roles sem ser Administrador não consegue mais apagar, editar, tirar de alguém ou mexer nas permissões de canal de uma role com permissões que ele não tem, e ninguém expulsa ou bane quem tem permissões que ele não tem.
+
+## client v0.19.1 · 2026-09-30
+- A janela de permissões do canal explica como fazer um canal privado: negue "Ver canal" para @everyone e permita para as roles que entram.
+
 ## client v0.19.0 · 2026-09-30
 - O link de convite leva o nome do servidor: quem cola o link já vê o nome preenchido, e todos passam a chamar o servidor do mesmo jeito.
 

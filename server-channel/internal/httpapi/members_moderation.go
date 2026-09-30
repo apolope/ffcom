@@ -37,9 +37,11 @@ func requireMemberPermission(w http.ResponseWriter, r *http.Request, roles *stor
 // resolveModerationTarget busca o membro alvo de kick/ban e recusa alvos
 // inválidos: o próprio requisitante (sair do servidor não é uma feature
 // desta v1) e o dono do servidor (nunca pode ser removido — não é uma role,
-// ver docs/architecture.md). Devolve a resposta HTTP já escrita quando
+// ver docs/architecture.md), e quem tem algum bit que o requisitante não tem
+// (um moderador não expulsa um Administrador; ver "Decisão: teto por bits
+// para remover e rebaixar"). Devolve a resposta HTTP já escrita quando
 // recusa.
-func resolveModerationTarget(w http.ResponseWriter, r *http.Request, members *store.MemberStore, requester store.Member) (store.Member, bool) {
+func resolveModerationTarget(w http.ResponseWriter, r *http.Request, members *store.MemberStore, roles *store.RoleStore, requester store.Member) (store.Member, bool) {
 	targetID := r.PathValue("memberId")
 	if targetID == requester.ID {
 		http.Error(w, "não é possível expulsar/banir a si mesmo", http.StatusBadRequest)
@@ -59,6 +61,21 @@ func resolveModerationTarget(w http.ResponseWriter, r *http.Request, members *st
 		http.Error(w, "não é possível expulsar/banir o dono do servidor", http.StatusForbidden)
 		return store.Member{}, false
 	}
+
+	requesterBase, _, err := memberBasePermission(r.Context(), roles, requester)
+	if err != nil {
+		http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+		return store.Member{}, false
+	}
+	targetBase, _, err := memberBasePermission(r.Context(), roles, target)
+	if err != nil {
+		http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+		return store.Member{}, false
+	}
+	if !permissions.Grants(requesterBase, targetBase) {
+		http.Error(w, "não é possível expulsar/banir quem tem permissões que você não possui", http.StatusForbidden)
+		return store.Member{}, false
+	}
 	return target, true
 }
 
@@ -72,7 +89,7 @@ func handleKickMember(members *store.MemberStore, roles *store.RoleStore) http.H
 		if !ok {
 			return
 		}
-		target, ok := resolveModerationTarget(w, r, members, requester)
+		target, ok := resolveModerationTarget(w, r, members, roles, requester)
 		if !ok {
 			return
 		}
@@ -105,7 +122,7 @@ func handleBanMember(members *store.MemberStore, roles *store.RoleStore, bans *s
 		if !ok {
 			return
 		}
-		target, ok := resolveModerationTarget(w, r, members, requester)
+		target, ok := resolveModerationTarget(w, r, members, roles, requester)
 		if !ok {
 			return
 		}

@@ -557,7 +557,7 @@ Há bastante espaço sobrando no `BIGINT` para bits futuros (canal forum, gerenc
 - `POST /api/members/{memberId}/roles/{roleId}` — as permissões da role sendo atribuída (`target.Permissions`, buscada via `findRole`) precisam passar em `Grants(base, target.Permissions)`. Este é o passo que fecha o caminho de auto-escalonamento, mesmo que a role já existisse (criada por outra pessoa) em vez de ser criada na hora pelo próprio atacante.
 - `PUT /api/channels/{id}/overwrites/{roleId}` — só o `Allow` (`body.Allow`) precisa passar em `Grants`; `Deny` não, porque negar um bit nunca concede poder a ninguém (só restringe, e overwrites nem chegam a ser aplicados contra quem já tem `Administrator`, ver `permissions.Effective`).
 
-Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}` (deletar) nem em `DELETE /api/members/{memberId}/roles/{roleId}` (desatribuir) — remover algo de alguém não concede nada a quem remove, é uma classe de problema diferente (sabotagem/abuso de moderação, não escalonamento de privilégio) e ficou fora do escopo desta revisão.
+Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}` (deletar) nem em `DELETE /api/members/{memberId}/roles/{roleId}` (desatribuir) — remover algo de alguém não concede nada a quem remove, é uma classe de problema diferente (sabotagem/abuso de moderação, não escalonamento de privilégio) e ficou fora do escopo desta revisão. Fechado depois em "Decisão: teto por bits para remover e rebaixar".
 
 **Razão:** a checagem por subconjunto de bits (opção 2) resolve exatamente o vetor relatado (ganhar um bit que não se tinha) com uma função pura de ~5 linhas, sem exigir estado adicional nem mexer no modelo de dados. A opção 3 (exigir `Administrator` para tudo) tornaria `ManageRoles` inútil na prática — hoje ele existe precisamente para permitir um "moderador" gerenciar roles/overwrites sem ser dono/admin total, um caso de uso legítimo (ex. dar `Voice`/`SendMessages` para um cargo novo) que a opção 2 preserva. A hierarquia por `Position` (opção 1) é o modelo real do Discord e mais completa (também impediria um moderador de *editar/remover* uma role acima da sua, não só de se auto-conceder bits), mas exigiria decidir como calcular a "posição" efetiva de um membro com várias roles e não estava causando o problema relatado — fica registrada como possível endurecimento futuro.
 
@@ -1781,6 +1781,18 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 **Razão:** é o modelo que a interface já imita e que quem vem do Discord espera; com (2), um cargo "Silenciado" com `deny` tiraria o bit até de um moderador liberado no canal, o que no Discord não acontece. `Grants` continua valendo para o `allow` (só libera num canal quem já tem o bit), então a mudança não abre caminho de escalonamento.
 
 **Revisitar quando:** existir overwrite por membro (no Discord ele vem por último e vence os de role).
+
+## Decisão: teto por bits para remover e rebaixar
+
+**Contexto:** "ManageRoles não concede permissões além das próprias" deixou de fora, de propósito, remover e rebaixar. Com isso, quem tinha `ManageRoles` sem `Administrator` podia apagar a role de Administrador, tirar o bit dela (`PATCH` com menos bits passava em `Grants`) ou desatribuí-la de alguém, e quem tinha `KickMembers` podia expulsar um Administrador. Na instância oficial só existia a @everyone quando isso foi decidido (2026-09-30), então nenhuma atribuição existente muda.
+
+**Alternativas consideradas:** (1) teto por bits: estender `Grants` à role ou ao membro alvo; (2) hierarquia por `position`, como no Discord (o posto de cada membro é a posição da role mais alta dele, e só se gerencia o que está abaixo, inclusive para Administrador). A (2) fecha também o caso de pares, mas hoje `position` não significa posto: o client grava `position = roles.length`, então a role criada por último ficaria no topo, e não existe tela para reordenar. Exigiria rota e tela de reordenação e uma release conjunta de client e channel.
+
+**Decisão (Apolonio, 2026-09-30):** (1). `requireRoleWithinGrants` (`internal/httpapi/roles.go`) busca a role alvo e responde 403 se ela tiver algum bit que o requisitante não tem; vale em `PATCH /api/roles/{id}` (além do `Grants` das permissões novas), `DELETE /api/roles/{id}`, `POST` e `DELETE /api/members/{memberId}/roles/{roleId}` e `PUT`/`DELETE` de overwrite. Kick e ban (`resolveModerationTarget`) exigem `Grants(base de quem expulsa, base do alvo)`. A @everyone sempre cabe na base de qualquer membro, então overwrite nela segue livre para quem tem `ManageRoles`.
+
+**Razão:** fecha o caso concreto (moderador rebaixando ou expulsando Administrador) com a mesma função já usada para conceder, só no servidor, sem migration nem tela nova. **Limite aceito:** pares com os mesmos bits podem agir um sobre o outro (dois moderadores iguais se expulsam), e Administradores também entre si; o dono continua intocável. O client não esconde as ações acima do teto: o `403` volta com o motivo e aparece na janela de roles, como já acontecia com a regra de conceder.
+
+**Revisitar quando:** um servidor tiver vários moderadores com os mesmos bits e isso gerar conflito, ou quando existir reordenação de roles (aí a hierarquia por `position` fica barata).
 
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 

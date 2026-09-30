@@ -281,6 +281,73 @@ func TestManageRolesGrantsOwnBits(t *testing.T) {
 		http.StatusOK)
 }
 
+// Teto por bits para remover e rebaixar: quem tem ManageRoles só edita,
+// apaga, desatribui ou mexe em overwrite de role cujos bits ele tem. Fecha o
+// caminho de um moderador tirar o Administrador de alguém. Ver
+// docs/architecture.md, "Decisão: teto por bits para remover e rebaixar".
+func TestManageRolesCannotDemote(t *testing.T) {
+	f := newRoleFixture(t)
+	mod := f.member("mod")
+	modRole := f.role("mod", permissions.ManageRoles|permissions.KickMembers)
+	f.assign(mod, modRole)
+	admin := f.member("admin")
+	adminRole := f.role("admin", permissions.Administrator)
+	f.assign(admin, adminRole)
+	banRole := f.role("ban", permissions.BanMembers)
+	ch := f.channel("canal")
+	if _, err := f.db.ChannelOverwrites.Set(f.ctx, ch.ID, banRole.ID, 0, permissions.Voice); err != nil {
+		t.Fatal(err)
+	}
+
+	updateRole := handleUpdateRole(f.db.Roles)
+	deleteRole := handleDeleteRole(f.db.Roles)
+	removeRole := handleRemoveRole(f.db.Roles)
+	setOverwrite := handleSetChannelOverwrite(f.db.Channels, f.db.Roles, f.db.ChannelOverwrites)
+	deleteOverwrite := handleDeleteChannelOverwrite(f.db.Roles, f.db.ChannelOverwrites)
+
+	for _, target := range []store.Role{adminRole, banRole} {
+		expectStatus(t, "tirar os bits da role "+target.Name,
+			f.do(updateRole, mod, "PATCH", roleRequest{Name: target.Name, Permissions: 0}, "id", target.ID), http.StatusForbidden)
+		expectStatus(t, "renomear a role "+target.Name,
+			f.do(updateRole, mod, "PATCH", roleRequest{Name: "x", Permissions: permissions.KickMembers}, "id", target.ID), http.StatusForbidden)
+		expectStatus(t, "apagar a role "+target.Name, f.do(deleteRole, mod, "DELETE", nil, "id", target.ID), http.StatusForbidden)
+		expectStatus(t, "negar num canal para a role "+target.Name,
+			f.do(setOverwrite, mod, "PUT", setOverwriteRequest{Deny: permissions.SendMessages}, "id", ch.ID, "roleId", target.ID), http.StatusForbidden)
+		if got := f.roleByID(target.ID); got.Name != target.Name || got.Permissions != target.Permissions {
+			t.Errorf("role %s mudou apesar do 403: %+v", target.Name, got)
+		}
+	}
+	expectStatus(t, "tirar a role de Administrador de alguém",
+		f.do(removeRole, mod, "DELETE", nil, "memberId", admin.ID, "roleId", adminRole.ID), http.StatusForbidden)
+	if !permissions.Has(f.base(admin), permissions.Administrator) {
+		t.Error("o Administrador perdeu a role apesar do 403")
+	}
+	expectStatus(t, "apagar overwrite da role BanMembers",
+		f.do(deleteOverwrite, mod, "DELETE", nil, "id", ch.ID, "roleId", banRole.ID), http.StatusForbidden)
+	if rows, _ := f.db.ChannelOverwrites.ListForChannel(f.ctx, ch.ID); len(rows) != 1 {
+		t.Errorf("overwrite da role BanMembers sumiu apesar do 403: %+v", rows)
+	}
+
+	// Dentro do teto, continua tudo liberado: a própria role, uma role com
+	// bits que ele tem, e a @everyone.
+	expectStatus(t, "renomear a própria role",
+		f.do(updateRole, mod, "PATCH", roleRequest{Name: modRole.Name + "-2", Permissions: modRole.Permissions}, "id", modRole.ID), http.StatusOK)
+	kickRole := f.role("kick", permissions.KickMembers)
+	target := f.member("alvo")
+	f.assign(target, kickRole)
+	expectStatus(t, "negar num canal para a @everyone",
+		f.do(setOverwrite, mod, "PUT", setOverwriteRequest{Deny: permissions.SendMessages}, "id", ch.ID, "roleId", f.defaultRole().ID), http.StatusOK)
+	expectStatus(t, "tirar uma role dentro do teto",
+		f.do(removeRole, mod, "DELETE", nil, "memberId", target.ID, "roleId", kickRole.ID), http.StatusNoContent)
+	expectStatus(t, "apagar uma role dentro do teto", f.do(deleteRole, mod, "DELETE", nil, "id", kickRole.ID), http.StatusNoContent)
+
+	// Administrator e dono não têm teto.
+	owner := f.owner()
+	expectStatus(t, "Administrator tira a role BanMembers de um canal",
+		f.do(deleteOverwrite, admin, "DELETE", nil, "id", ch.ID, "roleId", banRole.ID), http.StatusNoContent)
+	expectStatus(t, "dono apaga a role BanMembers", f.do(deleteRole, owner, "DELETE", nil, "id", banRole.ID), http.StatusNoContent)
+}
+
 // Administrator (sem ser dono) e o dono passam em Grants para qualquer bit.
 func TestAdministratorAndOwnerGrantAnything(t *testing.T) {
 	f := newRoleFixture(t)
@@ -388,8 +455,8 @@ func TestChannelOverwritesEffectivePermission(t *testing.T) {
 	}
 }
 
-// Kick e ban: cada um exige o próprio bit, e ninguém expulsa o dono nem a si
-// mesmo.
+// Kick e ban: cada um exige o próprio bit, ninguém expulsa o dono nem a si
+// mesmo, e o alvo não pode ter bit que quem expulsa não tem.
 func TestModerationPermissions(t *testing.T) {
 	f := newRoleFixture(t)
 	kicker := f.member("kicker")
@@ -404,7 +471,14 @@ func TestModerationPermissions(t *testing.T) {
 	expectStatus(t, "ban só com KickMembers", f.do(ban, kicker, "POST", nil, "memberId", plain.ID), http.StatusForbidden)
 	expectStatus(t, "kick no dono", f.do(kick, kicker, "POST", nil, "memberId", owner.ID), http.StatusForbidden)
 	expectStatus(t, "kick em si mesmo", f.do(kick, kicker, "POST", nil, "memberId", kicker.ID), http.StatusBadRequest)
-	for _, m := range []store.Member{plain, owner, kicker} {
+	admin := f.member("admin")
+	f.assign(admin, f.role("admin", permissions.Administrator))
+	banner := f.member("banner")
+	f.assign(banner, f.role("banner", permissions.BanMembers))
+	expectStatus(t, "kick num Administrador", f.do(kick, kicker, "POST", nil, "memberId", admin.ID), http.StatusForbidden)
+	expectStatus(t, "kick em quem tem BanMembers", f.do(kick, kicker, "POST", nil, "memberId", banner.ID), http.StatusForbidden)
+	expectStatus(t, "ban de Administrador por quem só tem BanMembers", f.do(ban, banner, "POST", nil, "memberId", admin.ID), http.StatusForbidden)
+	for _, m := range []store.Member{plain, owner, kicker, admin, banner} {
 		if got, err := f.db.Members.GetByID(f.ctx, m.ID); err != nil || got.RemovedAt != nil {
 			t.Errorf("%s foi removido apesar da recusa (err %v)", m.OIDCSubject, err)
 		}

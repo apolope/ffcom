@@ -84,6 +84,9 @@ func handleSetChannelOverwrite(channels *store.ChannelStore, roles *store.RoleSt
 			http.Error(w, "não é possível liberar (allow) uma permissão que você mesmo não possui", http.StatusForbidden)
 			return
 		}
+		if _, ok := requireRoleWithinGrants(w, r, roles, base, r.PathValue("roleId"), "não é possível mexer no overwrite de uma role com permissões que você mesmo não possui"); !ok {
+			return
+		}
 
 		o, err := overwrites.Set(r.Context(), channelID, r.PathValue("roleId"), body.Allow, body.Deny)
 		if err != nil {
@@ -100,7 +103,11 @@ func handleSetChannelOverwrite(channels *store.ChannelStore, roles *store.RoleSt
 // existir. Requer ManageRoles.
 func handleDeleteChannelOverwrite(roles *store.RoleStore, overwrites *store.ChannelOverwriteStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := requireManageRoles(w, r, roles); !ok {
+		base, ok := requireManageRoles(w, r, roles)
+		if !ok {
+			return
+		}
+		if _, ok := requireRoleWithinGrants(w, r, roles, base, r.PathValue("roleId"), "não é possível mexer no overwrite de uma role com permissões que você mesmo não possui"); !ok {
 			return
 		}
 

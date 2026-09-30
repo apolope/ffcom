@@ -83,6 +83,29 @@ func findRole(ctx context.Context, roles *store.RoleStore, id string) (store.Rol
 	return store.Role{}, store.ErrNotFound
 }
 
+// requireRoleWithinGrants busca a role alvo (roleID) e recusa, com a
+// resposta HTTP já escrita, se ela tiver algum bit que base não tem: quem
+// tem ManageRoles só mexe (edita, apaga, desatribui, grava overwrite) em
+// role que ele mesmo poderia ter criado. Sem isso, um moderador conseguia
+// apagar a role de Administrador ou tirar o bit dela. Ver
+// docs/architecture.md, "Decisão: teto por bits para remover e rebaixar".
+func requireRoleWithinGrants(w http.ResponseWriter, r *http.Request, roles *store.RoleStore, base int64, roleID, deniedMessage string) (store.Role, bool) {
+	role, err := findRole(r.Context(), roles, roleID)
+	if errors.Is(err, store.ErrNotFound) {
+		http.Error(w, "role não encontrada", http.StatusNotFound)
+		return store.Role{}, false
+	}
+	if err != nil {
+		http.Error(w, "erro ao buscar role", http.StatusInternalServerError)
+		return store.Role{}, false
+	}
+	if !permissions.Grants(base, role.Permissions) {
+		http.Error(w, deniedMessage, http.StatusForbidden)
+		return store.Role{}, false
+	}
+	return role, true
+}
+
 // GET /api/roles — lista todas as roles do servidor. Aberto a qualquer
 // membro (precisa disso pra mostrar nome/cor de role em qualquer lugar da
 // UI, não só no painel de administração).
@@ -139,7 +162,8 @@ func handleCreateRole(roles *store.RoleStore) http.Handler {
 }
 
 // PATCH /api/roles/{id} — edita name/color/permissions/position, inclusive
-// da role default. Requer ManageRoles.
+// da role default. Requer ManageRoles, e tanto as permissões novas quanto as
+// atuais da role precisam caber nas de quem edita.
 func handleUpdateRole(roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		base, ok := requireManageRoles(w, r, roles)
@@ -160,6 +184,9 @@ func handleUpdateRole(roles *store.RoleStore) http.Handler {
 			http.Error(w, "não é possível conceder permissões que você mesmo não possui", http.StatusForbidden)
 			return
 		}
+		if _, ok := requireRoleWithinGrants(w, r, roles, base, r.PathValue("id"), "não é possível editar uma role com permissões que você mesmo não possui"); !ok {
+			return
+		}
 
 		role, err := roles.Update(r.Context(), r.PathValue("id"), body.Name, body.Color, body.Permissions, body.Position)
 		if errors.Is(err, store.ErrNotFound) {
@@ -178,24 +205,23 @@ func handleUpdateRole(roles *store.RoleStore) http.Handler {
 
 // DELETE /api/roles/{id} — remove uma role. A role default ("@everyone")
 // não pode ser removida (é seeded pela migration e é a base de permissão de
-// todo membro). Requer ManageRoles.
+// todo membro). Requer ManageRoles, e a role não pode ter bit que quem apaga
+// não tem.
 func handleDeleteRole(roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := requireManageRoles(w, r, roles); !ok {
+		base, ok := requireManageRoles(w, r, roles)
+		if !ok {
 			return
 		}
 
 		id := r.PathValue("id")
-		rows, err := roles.List(r.Context())
-		if err != nil {
-			http.Error(w, "erro ao verificar role", http.StatusInternalServerError)
+		role, ok := requireRoleWithinGrants(w, r, roles, base, id, "não é possível apagar uma role com permissões que você mesmo não possui")
+		if !ok {
 			return
 		}
-		for _, role := range rows {
-			if role.ID == id && role.IsDefault {
-				http.Error(w, "a role default não pode ser removida", http.StatusBadRequest)
-				return
-			}
+		if role.IsDefault {
+			http.Error(w, "a role default não pode ser removida", http.StatusBadRequest)
+			return
 		}
 
 		if err := roles.Delete(r.Context(), id); errors.Is(err, store.ErrNotFound) {
@@ -223,16 +249,7 @@ func handleAssignRole(members *store.MemberStore, roles *store.RoleStore) http.H
 			return
 		}
 
-		target, err := findRole(r.Context(), roles, r.PathValue("roleId"))
-		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "role não encontrada", http.StatusNotFound)
-			return
-		} else if err != nil {
-			http.Error(w, "erro ao buscar role", http.StatusInternalServerError)
-			return
-		}
-		if !permissions.Grants(base, target.Permissions) {
-			http.Error(w, "não é possível atribuir uma role com permissões que você mesmo não possui", http.StatusForbidden)
+		if _, ok := requireRoleWithinGrants(w, r, roles, base, r.PathValue("roleId"), "não é possível atribuir uma role com permissões que você mesmo não possui"); !ok {
 			return
 		}
 
@@ -254,10 +271,15 @@ func handleAssignRole(members *store.MemberStore, roles *store.RoleStore) http.H
 }
 
 // DELETE /api/members/{memberId}/roles/{roleId} — remove uma role de um
-// membro. Requer ManageRoles.
+// membro. Requer ManageRoles, e a role não pode ter bit que quem tira não
+// tem.
 func handleRemoveRole(roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := requireManageRoles(w, r, roles); !ok {
+		base, ok := requireManageRoles(w, r, roles)
+		if !ok {
+			return
+		}
+		if _, ok := requireRoleWithinGrants(w, r, roles, base, r.PathValue("roleId"), "não é possível tirar uma role com permissões que você mesmo não possui"); !ok {
 			return
 		}
 

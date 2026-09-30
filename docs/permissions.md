@@ -11,6 +11,7 @@ A permissão é um bitmask `int64` (`internal/permissions/permissions.go`), guar
 - **Dono do servidor** (`members.is_owner`, quem entrou primeiro) não é uma role: a permissão dele vale `Owner = -1` (todos os bits), passa em qualquer checagem e ignora overwrites.
 - **`Administrator`** passa em qualquer checagem (`permissions.Has`) e ignora overwrites, como o `ADMINISTRATOR` do Discord.
 - **Conceder bit:** quem tem `ManageRoles` só consegue criar ou editar role, ou atribuir role, com bits que ele mesmo já tem (`permissions.Grants`). Assim `ManageRoles` sozinho não vira `Administrator`.
+- **Teto para remover e rebaixar:** a mesma regra vale para a role alvo. Quem tem `ManageRoles` só edita, apaga, desatribui ou mexe em overwrite de uma role cujos bits ele tem, e quem tem `KickMembers`/`BanMembers` só expulsa ou bane quem não tem nenhum bit que ele não tenha. Assim um moderador não apaga a role de Administrador nem expulsa um Administrador. Pares com os mesmos bits podem agir um sobre o outro, e Administradores também; o dono nunca.
 - **Checagem na base ou no canal:** algumas permissões dizem respeito a um canal e são checadas na efetiva, então um overwrite mexe nelas. As outras dizem respeito ao servidor inteiro e são checadas só na base, onde overwrite não tem efeito. A coluna "Nível" da tabela abaixo diz qual é qual.
 
 O client espelha os bits em `client/src/lib/permissions.ts` só para decidir o que mostrar. Quem decide de fato é sempre o servidor, em cada rota.
@@ -25,8 +26,8 @@ O client espelha os bits em `client/src/lib/permissions.ts` só para decidir o q
 | `ManageInvites` | 8 | Gerenciar convites | base | Criar, listar e revogar convites de qualquer pessoa. |
 | `ManageRoles` | 16 | Gerenciar roles | base | CRUD de roles, atribuir/remover role de membro, overwrites de canal. Limitado por `Grants`. |
 | `Administrator` | 32 | Administrador | base | Tudo, inclusive apagar mensagem de outra pessoa. Ignora overwrites. |
-| `KickMembers` | 64 | Expulsar membros | base | `POST /api/members/{id}/kick`. |
-| `BanMembers` | 128 | Banir membros | base | `POST /api/members/{id}/ban`, `GET /api/bans`, `DELETE /api/bans/{oidcSubject}`. |
+| `KickMembers` | 64 | Expulsar membros | base | `POST /api/members/{id}/kick`. Só em quem não tem bit a mais. |
+| `BanMembers` | 128 | Banir membros | base | `POST /api/members/{id}/ban` (só em quem não tem bit a mais), `GET /api/bans`, `DELETE /api/bans/{oidcSubject}`. |
 | `ManageChannels` | 256 | Gerenciar categorias e canais (tudo, inclusive renomear) | base | Qualquer ação na estrutura: criar, renomear, ordenar/mover e apagar categoria e canal. É a única que permite **renomear**. |
 | `CreateInvites` | 512 | Criar convites | base | Só gerar convite (`POST /api/invites`). Listar e revogar continuam exigindo `ManageInvites`. |
 | `CreateChannels` | 1024 | Criar canais | base | `POST /api/channels`. |
