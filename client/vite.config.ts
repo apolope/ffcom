@@ -1,8 +1,26 @@
+import { execFileSync } from 'node:child_process'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import electron from 'vite-plugin-electron/simple'
 import { VitePWA } from 'vite-plugin-pwa'
 import { thirdPartyLicenses } from './vite-plugin-third-party-licenses.ts'
+
+// Versão mostrada no menu do avatar. O deploy web passa a tag por
+// VITE_APP_VERSION (Dockerfile, sem .git no contexto); o build local, como o
+// do app desktop (`npm run package:win`), lê do git: "v0.17.5", ou
+// "v0.17.5-1-gb07ec2d" fora de uma tag. Sem os dois, fica vazia e o menu
+// esconde a linha.
+function appVersion(): string {
+  if (process.env.VITE_APP_VERSION) return process.env.VITE_APP_VERSION
+  try {
+    return execFileSync('git', ['describe', '--tags', '--match', 'client-v*'], { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim()
+      .replace(/^client-/, '')
+  } catch {
+    return ''
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -12,6 +30,9 @@ export default defineConfig(({ mode }) => ({
   // o index.html do fallback no lugar do JS. Ver docs/architecture.md,
   // "Decisão: callback OIDC no Electron empacotado".
   base: '/',
+  define: {
+    'import.meta.env.VITE_APP_VERSION': JSON.stringify(appVersion()),
+  },
   server: {
     watch: {
       // Saída do electron-builder: no Windows, o watcher do dev server
