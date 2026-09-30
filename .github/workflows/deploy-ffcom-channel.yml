@@ -148,11 +148,17 @@ jobs:
           name: server-channel-binaries
           path: dist
 
+      # Descrição da release = entrada da versão no CHANGELOG.md, o mesmo
+      # texto da home page (scripts/changelog-notes.sh).
+      - name: Notas da versão
+        run: bash scripts/changelog-notes.sh "channel-v${VERSION}" > "$RUNNER_TEMP/release-notes.md"
+
       - name: Criar release channel-v${{ env.VERSION }}
         uses: softprops/action-gh-release@v3
         with:
           tag_name: channel-v${{ env.VERSION }}
           name: server-channel ${{ env.VERSION }}
+          body_path: ${{ runner.temp }}/release-notes.md
           files: |
             dist/server-channel-linux-amd64
             dist/server-channel-linux-arm64

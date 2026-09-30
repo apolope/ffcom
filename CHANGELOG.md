@@ -1,6 +1,6 @@
 # Histórico de versões
 
-O que cada versão publicada implementou, da mais nova para a mais antiga. Este arquivo é a fonte única do histórico: a home page (`https://ffcom.a3sitsolutions.com.br/#versoes`) lê este arquivo direto do `main`, e cada workflow de deploy recusa uma tag que não tenha a sua entrada aqui.
+O que cada versão publicada implementou, da mais nova para a mais antiga. Este arquivo é a fonte única do histórico: a home page (`https://ffcom.a3sitsolutions.com.br/#versoes`) lê este arquivo direto do `main`, cada workflow de deploy recusa uma tag que não tenha a sua entrada aqui, e as releases do GitHub (`client` e `channel`) usam a entrada como descrição (`scripts/changelog-notes.sh`).
 
 Cada componente tem versão própria (semver independente, ver `docs/architecture.md`), então as seções abaixo são por tag, não por data.
 

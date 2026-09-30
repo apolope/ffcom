@@ -159,11 +159,17 @@ jobs:
           grep -q "url: ${BASE}/${FILE}" latest.yml && grep -q "path: ${BASE}/${FILE}" latest.yml
           cp "${FILE}" FFCom-Setup.exe
 
+      # Descrição da release = entrada da versão no CHANGELOG.md, o mesmo
+      # texto da home page (scripts/changelog-notes.sh).
+      - name: Notas da versão
+        run: bash scripts/changelog-notes.sh "client-${{ steps.version.outputs.tag }}" > "$RUNNER_TEMP/release-notes.md"
+
       - name: Release da versão
         uses: softprops/action-gh-release@v3
         with:
           tag_name: client-${{ steps.version.outputs.tag }}
           name: FFCom ${{ steps.version.outputs.tag }}
+          body_path: ${{ runner.temp }}/release-notes.md
           files: |
             client/release/FFCom-Setup-${{ steps.version.outputs.number }}.exe
             client/release/FFCom-Setup-${{ steps.version.outputs.number }}.exe.blockmap
