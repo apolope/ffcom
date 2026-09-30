@@ -6,6 +6,12 @@ import { thirdPartyLicenses } from './vite-plugin-third-party-licenses.ts'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
+  // Explícito porque o vite-plugin-electron troca a base padrão por './'
+  // quando ela não é definida. Com './', o retorno do login no Electron
+  // (app://ffcom/auth/callback) buscava os assets em /auth/assets/ e recebia
+  // o index.html do fallback no lugar do JS. Ver docs/architecture.md,
+  // "Decisão: callback OIDC no Electron empacotado".
+  base: '/',
   server: {
     watch: {
       // Saída do electron-builder: no Windows, o watcher do dev server
