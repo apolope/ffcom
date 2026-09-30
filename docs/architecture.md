@@ -991,6 +991,13 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** o agente de infra responder sobre o IP secundário na OCI, ou alguém ficar sem voz numa rede restritiva.
 
+**Execução (2026-09-30).** O IP secundário na `VMSUBS24OCI0102` não coube (tenancy Free Tier: 1 VNIC, 1 IP público). O agente de infra executou a Fase 10 do runbook `ffcom-exposicao-publica` do `a3s-network` pela `VMSUBS24OCI0101` (`163.176.198.217`): `turn.ffcom.a3sitsolutions.com.br` aponta para ela, o nginx separa a 443 por SNI (`ssl_preread`), termina o TLS do `turn.ffcom` com certificado do Certbot e entrega TCP puro em `10.20.4.10:15349`; qualquer outro nome segue para o Headscale. Do lado do FFCom (`deploy/channel/docker-compose.yml`), o coturn saiu e entrou o TURN embutido do LiveKit (`turn.enabled`, `domain`, `tls_port: 5349` com `external_tls`, publicado em `15349`; `udp_port: 33478`, publicado na mesma porta que a `0102` já encaminhava). Três pontos conferidos no código do LiveKit 1.13 (`pkg/service/roommanager.go`, `turn.go`) antes de aplicar:
+- o `turns:` é **sempre** anunciado como `turns:<domain>:443`, qualquer que seja o `tls_port`;
+- o TURN **UDP** é anunciado em `node_ip:udp_port`, não no domínio, então o `443/udp` que a infra encaminhou na `0101` não é usado (a UDP segue pela `0102` na `33478`);
+- o relay sai de um socket no container e vai para o `node_ip`, com permissão liberada para IP público (sem o bloqueio do coturn).
+
+**Verificado (2026-09-30):** um join de diagnóstico (token assinado com a chave da API, `SignalResponse` decodificado com `@livekit/protocol`) recebeu `turn:137.131.249.145:33478?transport=udp` e `turns:turn.ffcom.a3sitsolutions.com.br:443?transport=tcp`; com essas credenciais, daqui de fora, alocação e permissão para o `node_ip` passaram pelos dois caminhos (TLS 1.3 com o certificado de `turn.ffcom` na 443, e UDP na 33478). O endereço mapeado aparece como `10.10.10.1` (o nginx não manda PROXY protocol); o Chrome aceita, e o `proxy_protocol` do LiveKit fica para se algum navegador reclamar. **Não verificado:** uma chamada real com a mídia relayada (a volta do hairpin até o socket de relay) e uma rede que só libera a 443.
+
 ## Decisão: participantes da sala de voz na barra lateral — poll da RoomService do LiveKit, sem SDK nem webhook
 
 **Contexto:** a `ChannelSidebar` não mostrava quem estava num canal de voz; só dava para saber entrando. `server-channel` não guarda estado de voz (a sala é criada implicitamente pelo LiveKit, ver "Decisão: integração de voz com LiveKit").
