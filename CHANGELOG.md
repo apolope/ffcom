@@ -15,6 +15,10 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## client v0.17.3 · 2026-09-29
+- O menu do avatar mostra a versão do app, para saber em qual versão cada aparelho está.
+- App desktop: o login volta ao app em vez de parar numa tela com erro de carregamento.
+
 ## client v0.17.2 · 2026-09-29
 - Chave de depuração para testar a conexão de voz só pelo servidor TURN (`ffcom:forceRelay` no armazenamento local do navegador); sem ela, nada muda.
 

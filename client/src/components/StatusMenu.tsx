@@ -156,6 +156,9 @@ export function StatusMenu({
         <a href={`${import.meta.env.BASE_URL}third-party-licenses.txt`} target="_blank" rel="noreferrer">
           Licenças de terceiros
         </a>
+        {/* Tag do deploy (client-vX.Y.Z), embutida no build pelo workflow;
+            ausente em build local. */}
+        {import.meta.env.VITE_APP_VERSION && <span>Versão {import.meta.env.VITE_APP_VERSION}</span>}
       </p>
     </div>
   )

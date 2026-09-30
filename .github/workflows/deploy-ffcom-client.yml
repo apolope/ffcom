@@ -78,6 +78,7 @@ jobs:
           fi
           docker buildx build "${TAGS[@]}" \
             --build-arg VITE_SERVER_CENTRAL_URL="${VITE_SERVER_CENTRAL_URL}" \
+            --build-arg VITE_APP_VERSION="${VERSION}" \
             -f Dockerfile --push .
 
       - name: Deploy ffcom-client
