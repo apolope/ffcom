@@ -6,6 +6,14 @@ import { thirdPartyLicenses } from './vite-plugin-third-party-licenses.ts'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
+  server: {
+    watch: {
+      // Saída do electron-builder: no Windows, o watcher do dev server
+      // segura a pasta e o `npm run package:win` falha com EPERM ao renomear
+      // release/win-unpacked.tmp.
+      ignored: ['**/release/**'],
+    },
+  },
   plugins: [
     react(),
     thirdPartyLicenses(),
