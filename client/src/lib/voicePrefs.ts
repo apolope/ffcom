@@ -9,6 +9,9 @@ export interface VoicePrefs {
   // Aviso sonoro ao mutar/desmutar e, no push-to-talk, ao apertar e soltar
   // (lib/micToggleSound.ts).
   micToggleSound: boolean
+  // Aviso sonoro quando alguém entra ou sai da chamada, inclusive a própria
+  // pessoa (lib/presenceSound.ts).
+  presenceSound: boolean
   // Atalho de mutar/desmutar no formato de lib/shortcut.ts; ausente = sem
   // atalho (padrão, para não roubar nenhuma combinação sem a pessoa pedir).
   muteShortcut?: string
@@ -25,6 +28,7 @@ export interface VoicePrefs {
 
 const DEFAULTS: VoicePrefs = {
   micToggleSound: true,
+  presenceSound: true,
   pushToTalk: false,
   enhancedNoiseSuppression: false,
 }
@@ -41,6 +45,7 @@ export function getVoicePrefs(accountSub: string): VoicePrefs {
     if (prefs.pushToTalkKey !== undefined && !isShortcutFormat(prefs.pushToTalkKey)) {
       delete prefs.pushToTalkKey
     }
+    prefs.presenceSound = prefs.presenceSound !== false
     prefs.pushToTalk = prefs.pushToTalk === true
     prefs.enhancedNoiseSuppression = prefs.enhancedNoiseSuppression === true
     return prefs

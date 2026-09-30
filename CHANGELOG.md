@@ -15,6 +15,9 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## client v0.18.0 · 2026-09-30
+- **Som quando alguém entra ou sai da chamada**, inclusive você mesmo: três notas subindo ao entrar e descendo ao sair. Dá para desligar em "Som ao entrar e sair", na barra do canal de voz.
+
 ## client v0.17.7 · 2026-09-29
 - No app desktop, a dica do botão verde explica que ele fecha, instala a versão nova e abre de novo, em vez de falar em recarregar a página.
 

@@ -92,6 +92,7 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
     participantAudio,
     voicePrefs.pushToTalk,
     voicePrefs.enhancedNoiseSuppression,
+    voicePrefs.presenceSound,
   )
   // Em push-to-talk o atalho de mutar fica desligado (o microfone é da tecla
   // de falar); no Electron isso também libera a combinação global.
@@ -278,6 +279,14 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
                 onChange={() => updateVoicePrefs({ micToggleSound: !voicePrefs.micToggleSound })}
               />
               {voicePrefs.pushToTalk ? 'Som ao apertar e soltar' : 'Som ao mutar'}
+            </label>
+            <label className="voice-pref">
+              <input
+                type="checkbox"
+                checked={voicePrefs.presenceSound}
+                onChange={() => updateVoicePrefs({ presenceSound: !voicePrefs.presenceSound })}
+              />
+              Som ao entrar e sair
             </label>
             {voicePrefs.pushToTalk ? (
               <>

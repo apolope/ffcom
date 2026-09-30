@@ -15,7 +15,9 @@ const PEAK_GAIN = 0.12
 
 let context: AudioContext | undefined
 
-function getContext(): AudioContext | undefined {
+// Também usado pelo som de entrada e saída da chamada (lib/presenceSound.ts),
+// que divide o mesmo AudioContext.
+export function getContext(): AudioContext | undefined {
   if (context) return context
   try {
     context = new AudioContext()
@@ -36,10 +38,17 @@ export function primeMicToggleSound(): void {
   }
 }
 
-function playNote(ctx: AudioContext, frequency: number, start: number, seconds = NOTE_SECONDS, peak = PEAK_GAIN): void {
+export function playNote(
+  ctx: AudioContext,
+  frequency: number,
+  start: number,
+  seconds = NOTE_SECONDS,
+  peak = PEAK_GAIN,
+  type: OscillatorType = 'sine',
+): void {
   const osc = ctx.createOscillator()
   const gain = ctx.createGain()
-  osc.type = 'sine'
+  osc.type = type
   osc.frequency.value = frequency
   // Ataque e soltura curtos para não estalar.
   gain.gain.setValueAtTime(0.0001, start)

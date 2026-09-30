@@ -14,6 +14,7 @@ import {
   type TrackPublication,
 } from 'livekit-client'
 import { playMicToggleSound, playPushToTalkSound, primeMicToggleSound } from '../lib/micToggleSound'
+import { playPresenceSound } from '../lib/presenceSound'
 import { participantAudioOf, type ParticipantAudioMap } from '../lib/participantAudio'
 import { fetchVoiceToken } from '../lib/serverChannelApi'
 import { setVoiceConnected } from '../lib/voiceActivity'
@@ -147,12 +148,25 @@ export function useVoiceChannel(
   // "Supressão de ruído reforçada" (lib/rnnoiseProcessor.ts). Trocar
   // conectado recaptura o microfone com as novas constraints.
   enhancedNoiseSuppression = false,
+  // Som de alguém entrando ou saindo da chamada (lib/presenceSound.ts), lido
+  // por ref como o micToggleSound.
+  presenceSound = true,
 ): UseVoiceChannelResult {
   const roomRef = useRef<Room | undefined>(undefined)
   const micToggleSoundRef = useRef(micToggleSound)
   useEffect(() => {
     micToggleSoundRef.current = micToggleSound
   }, [micToggleSound])
+  const presenceSoundRef = useRef(presenceSound)
+  useEffect(() => {
+    presenceSoundRef.current = presenceSound
+  }, [presenceSound])
+  // Quem está na sala para o som de entrada e saída. `ready` só liga depois
+  // do join terminar: o LiveKit dispara ParticipantConnected para quem já
+  // estava na sala durante o connect, e isso não é alguém entrando. `known`
+  // sobrevive ao reconectar completo, que desfaz e refaz todos os
+  // participantes remotos e soaria como a sala inteira saindo e voltando.
+  const presenceRef = useRef<{ room: Room; ready: boolean; known: Set<string> } | undefined>(undefined)
   const participantAudioRef = useRef(participantAudio)
   const pushToTalkRef = useRef(pushToTalk)
   // Estado do microfone pedido por último e a sala com uma troca em
@@ -307,6 +321,10 @@ export function useVoiceChannel(
 
   const disconnect = useCallback(
     (room: Room | undefined) => {
+      if (room && presenceRef.current?.room === room) {
+        if (presenceRef.current.ready && presenceSoundRef.current) playPresenceSound(false)
+        presenceRef.current = undefined
+      }
       room?.disconnect()
       cleanupAudioEls()
       cleanupVideoTiles()
@@ -390,6 +408,9 @@ export function useVoiceChannel(
 
   const join = useCallback(async () => {
     if (roomRef.current) return
+    // Ainda dentro do clique: destrava o AudioContext para o som de entrada,
+    // que só toca depois do connect.
+    if (presenceSoundRef.current) primeMicToggleSound()
     setStatus('connecting')
     setError(undefined)
     try {
@@ -409,9 +430,28 @@ export function useVoiceChannel(
         audioCaptureDefaults: captureEnhanced ? ENHANCED_CAPTURE_OPTIONS : undefined,
       })
       roomRef.current = room
+      const presence = { room, ready: false, known: new Set<string>() }
+      presenceRef.current = presence
 
-      room.on(RoomEvent.ParticipantConnected, () => refreshParticipants(room))
-      room.on(RoomEvent.ParticipantDisconnected, () => refreshParticipants(room))
+      room.on(RoomEvent.ParticipantConnected, (participant) => {
+        if (!presence.known.has(participant.identity)) {
+          presence.known.add(participant.identity)
+          if (presence.ready && presenceSoundRef.current) playPresenceSound(true)
+        }
+        refreshParticipants(room)
+      })
+      room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+        // No reconectar completo o LiveKit desfaz os participantes ainda com
+        // a sala em Connected e só depois passa para Reconnecting, no mesmo
+        // tick: conferir o estado depois separa isso de uma saída de verdade.
+        queueMicrotask(() => {
+          if (room.state !== ConnectionState.Connected) return
+          if (room.remoteParticipants.has(participant.identity)) return
+          if (!presence.known.delete(participant.identity)) return
+          if (presence.ready && presenceSoundRef.current) playPresenceSound(false)
+        })
+        refreshParticipants(room)
+      })
       room.on(RoomEvent.LocalTrackPublished, (publication, participant) => {
         if (publication.source === Track.Source.Camera) {
           addVideoTile(publication, participant)
@@ -499,6 +539,10 @@ export function useVoiceChannel(
       setAudioPlaybackBlocked(!room.canPlaybackAudio)
       setStatus('connected')
       refreshParticipants(room)
+      if (presenceRef.current === presence) {
+        presence.ready = true
+        if (presenceSoundRef.current) playPresenceSound(true)
+      }
     } catch (err) {
       disconnect(roomRef.current)
       setStatus('error')

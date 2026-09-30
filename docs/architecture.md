@@ -1223,6 +1223,33 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** o teste mostrar o bipe de desmutar chegando aos outros pelo ar (aí, tocar mais baixo ou só o de mutar com alto-falante), ou quando o painel de preferências de voz existir.
 
+## Decisão: som de entrada e saída da chamada — arpejo no mesmo `AudioContext` do som de mutar, filtrando o connect e o reconectar
+
+**Contexto:** alguém entrar ou sair do canal de voz só aparecia na lista de participantes; de olho em outra janela (jogo, outro programa), a pessoa não percebia.
+
+**Alternativas consideradas:**
+- **Arquivo de áudio:** mesmos motivos de "Decisão: som ao mutar e desmutar" (asset no build e no precache, autoplay). Descartada.
+- **Tocar em todo `ParticipantConnected`/`ParticipantDisconnected`:** o LiveKit dispara `ParticipantConnected` para quem já estava na sala durante o `connect`, e no reconectar completo desfaz todos os remotos (`ParticipantDisconnected` com a sala ainda em `Connected`) e refaz depois do `Reconnected`: soaria como a sala inteira entrando ao chegar e saindo e voltando a cada queda de rede. Descartada.
+- **Só para os outros, sem som para si:** perde a confirmação audível de que entrou de fato (o `connect` pode levar alguns segundos). Descartada; toca também para a própria pessoa, como no Discord.
+
+**Decisão:**
+1. **`lib/presenceSound.ts`:** três notas em onda triangular (dó, mi, sol; 90 ms cada), subindo ao entrar e descendo ao sair, pico de 0,1. Timbre, número de notas e duração diferentes dos bipes de mutar para não confundir. Usa o mesmo `AudioContext` de `lib/micToggleSound.ts` (que passou a exportar `getContext` e `playNote`). Duas chamadas em menos de 400 ms tocam uma vez só.
+2. **Filtro em `hooks/useVoiceChannel.ts`:** um `presenceRef` por sala com `ready` e `known` (identities vistas). Durante o `join`, as entradas só alimentam `known`; `ready` liga depois do microfone publicado, junto com o som de entrada da própria pessoa. Uma entrada toca só se a identity não estava em `known`. Uma saída é conferida num `queueMicrotask`: se a sala já não está em `Connected` (reconectar, que passa para `Reconnecting` no mesmo tick) ou a identity voltou, não toca e continua em `known`, então os participantes refeitos depois do reconectar também não tocam.
+3. **Saída da própria pessoa:** em `disconnect`, se a sala chegou a ficar `ready`. Vale para "Sair", trocar de canal, desmontar e queda da sala; falha no `join` não toca.
+4. **`AudioContext` destravado no clique de "Entrar"** (`primeMicToggleSound()` antes do primeiro `await`), porque o som de entrada só toca depois do `connect`.
+5. **Preferência:** `presenceSound` em `lib/voicePrefs.ts`, ligada por padrão; checkbox "Som ao entrar e sair" na barra de controles.
+
+**Escopo aceito:**
+- Quem sai durante um reconectar completo não toca som (a saída cai no filtro) e segue em `known`; se voltar na mesma chamada, a volta também não toca.
+- O som não sai pela rede, mas com alto-falante pode vazar pelo microfone, como o de mutar.
+- Se ninguém fez gesto na página (improvável: entrar exige clique), o `AudioContext` pode seguir suspenso e o som não toca.
+
+**Razão:** avisa entradas e saídas reais sem disparar em rajada no connect e nas quedas de rede, sem asset novo e sem tocar no caminho de áudio da sala.
+
+**Verificado (2026-09-30):** `tsc -b`, `npm run lint` sem aviso novo e `npm run build`. Comportamento do LiveKit (`emitWhenConnected`, `handleRestarting`) conferido no fonte de `livekit-client` em `node_modules`. Não verificado numa chamada real.
+
+**Revisitar quando:** o teste mostrar som faltando ou sobrando em reconexões, ou quando existir o painel de preferências de voz.
+
 ## Decisão: atalho de teclado para mutar — `keydown` no web, `globalShortcut` no Electron só durante a chamada
 
 **Contexto:** mutar exigia clicar no botão do canal de voz. Jogando ou com outra janela na frente, a pessoa precisava voltar ao FFCom para isso.
