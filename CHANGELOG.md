@@ -15,6 +15,9 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## client v0.17.7 · 2026-09-29
+- No app desktop, a dica do botão verde explica que ele fecha, instala a versão nova e abre de novo, em vez de falar em recarregar a página.
+
 ## site v0.7.0 · 2026-09-29
 - Botão **Baixar para Windows** no topo, sempre com a versão mais recente do app desktop, e a explicação do aviso do Windows ao instalar.
 

@@ -9,7 +9,11 @@ export function UpdateButton({ onUpdate }: UpdateButtonProps) {
     <button
       type="button"
       className="update-button"
-      title="Nova versão disponível. Clique para atualizar (recarrega a página e sai da chamada de voz)."
+      title={
+        window.ffcomElectron
+          ? 'Nova versão disponível. Clique para instalar (o FFCom fecha, atualiza e abre de novo, saindo da chamada de voz).'
+          : 'Nova versão disponível. Clique para atualizar (recarrega a página e sai da chamada de voz).'
+      }
       aria-label="Atualizar o FFCom para a nova versão"
       onClick={onUpdate}
     >
