@@ -128,6 +128,32 @@ function App() {
   const [mobileDrawer, setMobileDrawer] = useState<'nav' | 'members'>()
   const swipeStart = useRef<{ x: number; y: number }>(undefined)
 
+  // "Voltar" do Android fecha a gaveta em vez de sair da página: abrir
+  // empilha um estado no histórico, e o popstate dele fecha a gaveta. Fechar
+  // pela interface (toque, gesto, escolher um canal) desempilha esse estado,
+  // para o próximo "voltar" não parar numa entrada vazia. A gaveta forçada
+  // (nada aberto no painel) não entra: não há o que fechar.
+  const drawerOpen = isMobile && !!mobileDrawer
+  const drawerInHistory = useRef(false)
+  useEffect(() => {
+    if (drawerOpen) {
+      if (!drawerInHistory.current) {
+        window.history.pushState({ ffcomDrawer: true }, '')
+        drawerInHistory.current = true
+      }
+      const onPopState = () => {
+        drawerInHistory.current = false
+        setMobileDrawer(undefined)
+      }
+      window.addEventListener('popstate', onPopState)
+      return () => window.removeEventListener('popstate', onPopState)
+    }
+    if (drawerInHistory.current) {
+      drawerInHistory.current = false
+      window.history.back()
+    }
+  }, [drawerOpen])
+
   const selectedFriend = friends.find((f) => f.accountId === selectedFriendId)
 
   // Ações do botão direito na lista de membros. Erros (pedido duplicado,

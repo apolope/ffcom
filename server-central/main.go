@@ -211,19 +211,23 @@ func envBool(name string, fallback bool) bool {
 	return raw == "true" || raw == "1"
 }
 
+// desktopAppOrigin é a origem fixa do app desktop empacotado (esquema
+// app://ffcom registrado em client/electron/main.ts). Sempre liberada, somada a
+// CORS_ALLOWED_ORIGINS: nenhum site consegue enviar essa origem (só o app
+// instalado), a API continua exigindo o Bearer token, e assim quem autohospeda
+// não precisa configurar nada para o app desktop abrir a instância. Ver
+// docs/architecture.md, "Decisão: CORS em server-channel", extensão de
+// 2026-09-29.
+const desktopAppOrigin = "app://ffcom"
+
 // parseAllowedOrigins lê CORS_ALLOWED_ORIGINS (lista separada por vírgula,
-// ex.: "http://localhost:5173,https://app.minhacomunidade.com"). Vazio
-// significa nenhuma origem cruzada liberada — mesmo padrão de
-// server-channel (ver docs/architecture.md, "Decisão: CORS em
-// server-channel").
+// ex.: "http://localhost:5173,https://app.minhacomunidade.com") e acrescenta desktopAppOrigin. Vazio
+// libera só o app desktop.
 func parseAllowedOrigins(raw string) []string {
-	if raw == "" {
-		return nil
-	}
-	var origins []string
+	origins := []string{desktopAppOrigin}
 	for _, o := range strings.Split(raw, ",") {
 		o = strings.TrimSpace(o)
-		if o != "" {
+		if o != "" && o != desktopAppOrigin {
 			origins = append(origins, o)
 		}
 	}

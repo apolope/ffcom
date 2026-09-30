@@ -15,6 +15,15 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## client v0.17.4 · 2026-09-29
+- No celular, o botão "voltar" do Android fecha a gaveta aberta em vez de sair do app.
+
+## central v0.13.1 · 2026-09-29
+- O app desktop é sempre aceito pelo servidor, sem precisar configurar nada.
+
+## channel v0.8.1 · 2026-09-29
+- O app desktop é sempre aceito pelo servidor, sem precisar configurar nada: quem hospeda o próprio servidor não precisa mexer no `.env` para o app instalado funcionar.
+
 ## client v0.17.3 · 2026-09-29
 - O menu do avatar mostra a versão do app, para saber em qual versão cada aparelho está.
 - App desktop: o login volta ao app em vez de parar numa tela com erro de carregamento.
