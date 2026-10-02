@@ -32,6 +32,15 @@ interface FfcomElectronBridge {
   // (setScreenShareEnabled). Resolve false se o id não veio da última
   // listagem.
   chooseDisplaySource(id: string, audio: boolean): Promise<boolean>
+  // Login no navegador do sistema (só no app empacotado): abre a URL de
+  // autorização do Authentik fora do app. Resolve false se a URL não for https.
+  openExternalSignIn(url: string): Promise<boolean>
+  // Devolve (e esquece) a URL ffcom://auth/callback que o sistema entregou ao
+  // app, ou null se não houver nenhuma esperando.
+  takeAuthCallback(): Promise<string | null>
+  // Chamado quando chega uma URL de retorno do login; devolve a função que
+  // remove o listener. A URL em si vem de takeAuthCallback.
+  onAuthCallback(callback: () => void): () => void
   // true no Windows, o único sistema em que o Electron captura o áudio do
   // computador junto com a tela.
   canShareSystemAudio: boolean

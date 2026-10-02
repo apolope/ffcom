@@ -37,9 +37,28 @@ export function LoginScreen() {
     <div className="login-screen">
       <div className="login-card">
         <LoginBrand />
-        <p className="placeholder">Entre com sua conta para acessar seus servidores.</p>
-        <button type="button" className="login-button" onClick={signIn} disabled={!!redirecting}>
-          {redirecting ? 'Abrindo o login…' : 'Entrar'}
+        {/* App desktop: o login segue no navegador do sistema e volta
+            sozinho. O botão continua ativo para abrir de novo se a aba foi
+            fechada. */}
+        {redirecting === 'in-browser' ? (
+          <p className="placeholder login-status">
+            <span className="login-spinner" aria-hidden="true" />
+            Continue o login no navegador.
+          </p>
+        ) : (
+          <p className="placeholder">Entre com sua conta para acessar seus servidores.</p>
+        )}
+        <button
+          type="button"
+          className="login-button"
+          onClick={signIn}
+          disabled={redirecting === 'signing-in'}
+        >
+          {redirecting === 'signing-in'
+            ? 'Abrindo o login…'
+            : redirecting === 'in-browser'
+              ? 'Abrir o login de novo'
+              : 'Entrar'}
         </button>
         {/* Nova aba (no Electron, o navegador do sistema): a tela de login
             fica aqui para entrar depois de definir a senha. */}

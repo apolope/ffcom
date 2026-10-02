@@ -34,6 +34,15 @@ contextBridge.exposeInMainWorld('ffcomElectron', {
   getDisplaySources: (): Promise<unknown> => ipcRenderer.invoke('ffcom:get-display-sources'),
   chooseDisplaySource: (id: string, audio: boolean): Promise<boolean> =>
     ipcRenderer.invoke('ffcom:choose-display-source', id, audio),
+  openExternalSignIn: (url: string): Promise<boolean> => ipcRenderer.invoke('ffcom:open-external-sign-in', url),
+  takeAuthCallback: (): Promise<string | null> => ipcRenderer.invoke('ffcom:take-auth-callback'),
+  onAuthCallback: (callback: () => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent) => callback()
+    ipcRenderer.on('ffcom:auth-callback', listener)
+    return () => {
+      ipcRenderer.removeListener('ffcom:auth-callback', listener)
+    }
+  },
   // O áudio do sistema ('loopback' no main) só existe no Windows.
   canShareSystemAudio: process.platform === 'win32',
 })

@@ -73,6 +73,14 @@
       "target": "AppImage",
       "category": "Network"
     },
+    "protocols": [
+      {
+        "name": "FFCom",
+        "schemes": [
+          "ffcom"
+        ]
+      }
+    ],
     "npmRebuild": false,
     "publish": [
       {

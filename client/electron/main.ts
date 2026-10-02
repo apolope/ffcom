@@ -62,6 +62,69 @@ function resolveDistFile(pathname: string): string {
   return path.join(DIST_DIR, 'index.html')
 }
 
+// Login no navegador do sistema (ver docs/architecture.md, "Decisão: login
+// do app desktop no navegador do sistema"). O renderer abre a URL de
+// autorização com shell.openExternal; o Authentik volta para
+// ffcom://auth/callback, que o sistema entrega ao app: no Windows e no Linux
+// como argumento de uma segunda instância (repassado pelo evento
+// second-instance, graças ao single instance lock), no macOS pelo open-url.
+// Se o app estava fechado, a URL chega no argv da primeira instância. A URL
+// fica guardada até o renderer buscá-la (takeAuthCallback), então tanto o
+// aviso quanto a busca ao montar levam ao mesmo lugar, uma vez só.
+const AUTH_SCHEME = 'ffcom'
+let pendingAuthCallback: string | undefined
+
+function isAuthCallbackUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.protocol === `${AUTH_SCHEME}:` && url.host === 'auth' && url.pathname === '/callback'
+  } catch {
+    return false
+  }
+}
+
+function receiveAuthCallback(argvOrUrl: string[] | string) {
+  const candidates = typeof argvOrUrl === 'string' ? [argvOrUrl] : argvOrUrl
+  const url = candidates.find(isAuthCallbackUrl)
+  const win = BrowserWindow.getAllWindows()[0]
+  if (win) {
+    if (win.isMinimized()) win.restore()
+    win.focus()
+  }
+  if (!url) return
+  pendingAuthCallback = url
+  if (win) win.webContents.send('ffcom:auth-callback')
+}
+
+function registerAuthIpc() {
+  ipcMain.handle('ffcom:open-external-sign-in', (_event, url: unknown) => {
+    if (typeof url !== 'string' || !url.startsWith('https://')) return false
+    void shell.openExternal(url)
+    return true
+  })
+  ipcMain.handle('ffcom:take-auth-callback', () => {
+    const url = pendingAuthCallback
+    pendingAuthCallback = undefined
+    return url ?? null
+  })
+}
+
+// Só o app empacotado se registra como dono do ffcom://: o dev apontaria o
+// esquema para o electron.exe do node_modules e roubaria o retorno do login
+// do app instalado. No dev o login continua dentro da janela.
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) {
+  app.quit()
+} else {
+  if (app.isPackaged) app.setAsDefaultProtocolClient(AUTH_SCHEME)
+  pendingAuthCallback = process.argv.find(isAuthCallbackUrl)
+  app.on('second-instance', (_event, argv) => receiveAuthCallback(argv))
+  app.on('open-url', (event, url) => {
+    event.preventDefault()
+    receiveAuthCallback(url)
+  })
+}
+
 function registerAppProtocol() {
   protocol.handle(APP_SCHEME, (request) => {
     const { pathname } = new URL(request.url)
@@ -308,7 +371,9 @@ function registerDisplayMediaIpc() {
 }
 
 app.whenReady().then(() => {
+  if (!gotSingleInstanceLock) return
   registerAppProtocol()
+  registerAuthIpc()
   registerMuteShortcutIpc()
   registerPushToTalkIpc()
   registerSystemIdleIpc()

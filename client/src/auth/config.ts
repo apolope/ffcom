@@ -9,6 +9,10 @@
 export const AUTHENTIK_ISSUER = 'https://auth.ffcom.a3sitsolutions.com.br/application/o/ffcom/'
 export const AUTHENTIK_CLIENT_ID = 'ffcom'
 export const AUTH_CALLBACK_PATH = '/auth/callback'
+// Retorno do login do app desktop empacotado, que entra pelo navegador do
+// sistema (ver docs/architecture.md, "Decisão: login do app desktop no
+// navegador do sistema"). O esquema é registrado por client/electron/main.ts.
+export const DESKTOP_AUTH_CALLBACK_URL = 'ffcom://auth/callback'
 
 // "Esqueci minha senha": fluxo de recuperação do FFCom na brand própria do
 // Authentik (domínio auth.ffcom), o mesmo em que cai o link do e-mail de

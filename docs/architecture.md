@@ -1808,6 +1808,20 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Verificado (2026-09-30, `client-v0.20.0` em produção):** com `teste-ffcom02` expulsa e o servidor ainda na lista, abrir o "Games With Respect" mostrou o aviso; colar o convite no painel fez a conta voltar (banco: membro ativo, convite com 1 uso) e os canais apareceram sem recarregar. Expulsa de novo pela sessão do dono com o servidor aberto na janela dela, o aviso apareceu sozinho no poll seguinte.
 
+## Decisão: login do app desktop no navegador do sistema — esquema `ffcom://`
+
+**Contexto:** no app desktop empacotado, o login do Authentik abria dentro da própria janela do Electron, que não tem a conta, as senhas salvas nem o gerenciador de senhas do navegador da pessoa. O pedido foi fazer o login no navegador do sistema, como recomenda a RFC 8252 (OAuth for Native Apps).
+
+**Alternativas consideradas:** (1) **loopback**: o main sobe um servidor HTTP temporário em `http://127.0.0.1:<porta>/auth/callback`. É simples e não mexe no registro do Windows, mas exige `redirect_uri` em modo regex no Authentik e deixa uma aba "pode fechar" aberta. (2) **esquema próprio** `ffcom://auth/callback`: o app vira dono do esquema no sistema, e o mesmo mecanismo serve depois para os convites por deep link. Escolhido (2) pelo dono.
+
+**Decisão:**
+1. **Main** (`electron/main.ts`): o app pega o single instance lock, e só o app empacotado chama `setAsDefaultProtocolClient('ffcom')`. No dev isso apontaria o esquema para o `electron.exe` do `node_modules` e roubaria o retorno do login do app instalado. O retorno chega por `second-instance` (Windows/Linux), por `open-url` (macOS) ou pelo `argv` da primeira instância se o app estava fechado. O main só aceita `ffcom://auth/callback`, traz a janela para frente, guarda a URL e avisa o renderer (`ffcom:auth-callback`). O renderer busca a URL com `takeAuthCallback`, que a devolve uma vez só, então o aviso e a busca ao montar nunca consomem o mesmo `code` duas vezes. `build.protocols` no `package.json` registra o esquema no `Info.plist` do macOS.
+2. **Renderer**: `externalSignIn` (`auth/userManager.ts`) é true só servido de `app://ffcom` com a ponte do Electron. Nesse caso o `redirect_uri` é `ffcom://auth/callback`, e o "Entrar" monta a URL com `OidcClient.createSigninRequest` (mesmo `stateStore` do `UserManager`, `request_type` `si:r`) e a abre com `openExternalSignIn` (só `https://`). O retorno vai para `userManager.signinRedirectCallback(url)`. Enquanto o login está no navegador, a tela mostra "Continue o login no navegador" e o botão continua ativo para abrir de novo.
+3. **Sair no desktop**: a sessão do Authentik fica no navegador, e o encerramento por redirect dentro da janela não a alcançaria. "Sair" revoga o refresh token e esquece o usuário, sem redirect. Para dar para trocar de conta, uma marca local faz o próximo "Entrar" pedir `prompt=login`. O primeiro login aproveita a sessão do navegador.
+4. **Authentik**: `ffcom://auth/callback` entra nos `redirect_uris` do provider "ffcom" (`providers-ffcom.yaml`, repo `abs-3d-printer`). O `app://ffcom/auth/callback` continua para as versões instaladas que ainda não atualizaram.
+
+**Escopo aceito:** o dev do Electron (`http://localhost:5173`) continua com o login dentro da janela. A entrada do esquema no registro do Windows (HKCU) fica para trás ao desinstalar, como em outros apps.
+
 ## Decisão: chamada de voz continua ao navegar
 
 **Contexto:** em 2026-10-02 as pessoas reclamaram que a chamada "caía". O LiveKit registrou `CLIENT_REQUEST_LEAVE` em todas as 12 quedas, e o access log do proxy mostrou que, no mesmo segundo de cada uma, a pessoa tinha aberto um canal de texto ou um fórum. A sala ficava dentro do `VoiceChannelView`, que só existe com o canal de voz selecionado, e um efeito do `useVoiceChannel` saía da sala ao desmontar, de propósito ("nunca deixar uma sala conectada sem UI"). No Discord a pessoa continua na voz enquanto lê os canais de texto.
