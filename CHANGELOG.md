@@ -15,6 +15,11 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## client v0.21.0 · 2026-10-02
+- A chamada de voz não cai mais ao abrir um canal de texto, um fórum, outro servidor ou os Amigos: no pé da lista de canais aparece "Voz conectada", com o canal da chamada, o botão de mutar, o de sair e o atalho para voltar a ele.
+- Os atalhos de mutar e de **apertar para falar** funcionam com qualquer tela aberta durante a chamada.
+- No app desktop, "Entrar" abre o login no seu navegador, com a conta e as senhas que você já salvou lá, e volta sozinho para o app. Depois de "Sair", o próximo "Entrar" pede a senha, para dar para trocar de conta.
+
 ## client v0.20.0 · 2026-09-30
 - Quem foi expulso de um servidor e ainda o tem na lista vê o aviso "Você não é mais membro", com a opção de voltar colando um convite novo ou de tirar o servidor da lista, em vez de uma tela vazia. Vale também para quem é expulso com o servidor aberto.
 
