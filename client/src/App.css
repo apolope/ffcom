@@ -22,6 +22,29 @@
   display: contents;
 }
 
+/* Coluna de canais ou amigos com a barra da chamada de voz no pé
+   (components/VoiceConnectionBar.tsx). Vazia (sem servidor, fora de Amigos e
+   sem chamada), some. */
+.sidebar-column {
+  width: 240px;
+  flex: 0 0 240px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-secondary);
+}
+
+.sidebar-column:empty {
+  display: none;
+}
+
+.sidebar-column > .channel-sidebar,
+.sidebar-column > .friends-view {
+  flex: 1 1 auto;
+  width: auto;
+  min-height: 0;
+}
+
 .app-shell.mobile {
   position: relative;
   /* clip e não hidden: as gavetas fechadas ficam fora da tela, e hidden
@@ -52,8 +75,7 @@
   transform: translateX(-100%);
 }
 
-.app-shell.mobile .nav-drawer > .channel-sidebar,
-.app-shell.mobile .nav-drawer > .friends-view {
+.app-shell.mobile .nav-drawer > .sidebar-column {
   flex: 1 1 auto;
   width: auto;
   min-width: 0;

@@ -1,72 +1,27 @@
 import { useCallback, useState } from 'react'
-import { useAuth } from '../auth/AuthProvider'
-import { useMuteShortcut } from '../hooks/useMuteShortcut'
-import { usePushToTalk } from '../hooks/usePushToTalk'
-import { useVoiceChannel } from '../hooks/useVoiceChannel'
-import {
-  getParticipantAudio,
-  participantAudioOf,
-  updateParticipantAudio,
-  type ParticipantAudio,
-} from '../lib/participantAudio'
+import { participantAudioOf } from '../lib/participantAudio'
 import { formatShortcut } from '../lib/shortcut'
-import { getVoicePrefs, setVoicePrefs, type VoicePrefs } from '../lib/voicePrefs'
 import { MuteShortcutSetting } from './MuteShortcutSetting'
 import { ParticipantVolumeControls } from './ParticipantVolumeControls'
 import { ScreenSharePicker } from './ScreenSharePicker'
-import type { Channel } from '../types'
+import { useVoiceSession } from './VoiceSessionContext'
+import type { Channel, KnownServer } from '../types'
 import './VoiceChannelView.css'
 
 interface VoiceChannelViewProps {
-  serverBaseUrl: string
+  server: KnownServer
   channel: Channel
 }
 
 // Canal de voz via LiveKit (ver docs/architecture.md, "Decisão: integração
 // de voz com LiveKit"). Cada canal de voz é uma sala LiveKit própria; entrar
-// pede um token novo em server-channel (hooks/useVoiceChannel.ts).
-export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewProps) {
-  const { accessToken, user } = useAuth()
-  const accountSub = user?.profile.sub ?? ''
-  const [voicePrefs, setVoicePrefsState] = useState(() => getVoicePrefs(accountSub))
-  const updateVoicePrefs = useCallback(
-    (change: Partial<VoicePrefs>) => {
-      setVoicePrefsState((prev) => {
-        const next = { ...prev, ...change }
-        setVoicePrefs(accountSub, next)
-        return next
-      })
-    },
-    [accountSub],
-  )
-  const setMuteShortcut = useCallback(
-    (muteShortcut: string | undefined) => updateVoicePrefs({ muteShortcut }),
-    [updateVoicePrefs],
-  )
-  const setPushToTalkKey = useCallback(
-    (pushToTalkKey: string | undefined) => updateVoicePrefs({ pushToTalkKey }),
-    [updateVoicePrefs],
-  )
-  // Qual tecla está sendo gravada: enquanto grava, o atalho correspondente
-  // fica desligado para a tecla antiga não disparar.
-  const [recording, setRecording] = useState<'mute' | 'pushToTalk'>()
-  const setRecordingMute = useCallback((on: boolean) => setRecording(on ? 'mute' : undefined), [])
-  const setRecordingPushToTalk = useCallback((on: boolean) => setRecording(on ? 'pushToTalk' : undefined), [])
-  const [participantAudio, setParticipantAudio] = useState(() => getParticipantAudio(accountSub))
-  const changeParticipantAudio = useCallback(
-    (memberId: string, change: Partial<ParticipantAudio>) => {
-      setParticipantAudio((prev) => updateParticipantAudio(accountSub, prev, memberId, change))
-    },
-    [accountSub],
-  )
-  // No app desktop, compartilhar abre o seletor próprio antes (o Electron não
-  // tem o do navegador); parar continua direto.
-  const electronBridge = window.ffcomElectron
-  const [pickingScreen, setPickingScreen] = useState(false)
-  // No máximo um painel de volume aberto por vez, pela identity da pessoa.
-  const [volumeOpenFor, setVolumeOpenFor] = useState<string>()
+// pede um token novo em server-channel (hooks/useVoiceChannel.ts). A chamada
+// em si é da sessão (VoiceSessionProvider): esta tela só a mostra quando é a
+// deste canal, e sair dela não sai da chamada.
+export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
   const {
-    status,
+    target,
+    status: sessionStatus,
     error,
     participants,
     micEnabled,
@@ -78,40 +33,68 @@ export function VoiceChannelView({ serverBaseUrl, channel }: VoiceChannelViewPro
     noiseSuppressionError,
     startAudio,
     videoContainerRef,
-    join,
+    join: joinSession,
     leave,
     toggleMic,
-    setTalking,
     toggleCamera,
     toggleScreenShare,
-  } = useVoiceChannel(
-    serverBaseUrl,
-    channel.id,
-    accessToken!,
-    voicePrefs.micToggleSound,
+    voicePrefs,
+    updateVoicePrefs,
     participantAudio,
-    voicePrefs.pushToTalk,
-    voicePrefs.enhancedNoiseSuppression,
-    voicePrefs.presenceSound,
+    changeParticipantAudio,
+    recording,
+    setRecording,
+    shortcutRegisterFailed,
+    pushToTalkButtonProps,
+  } = useVoiceSession()
+  const here = target?.serverId === server.id && target.channelId === channel.id
+  // Em outro canal, esta tela mostra só o convite para entrar (que troca de
+  // canal).
+  const status = here ? sessionStatus : 'idle'
+  const inOtherChannel = !here && !!target && (sessionStatus === 'connected' || sessionStatus === 'connecting')
+  const join = useCallback(
+    () =>
+      joinSession({
+        serverId: server.id,
+        serverName: server.name,
+        baseUrl: server.baseUrl,
+        channelId: channel.id,
+        channelName: channel.name,
+      }),
+    [joinSession, server.id, server.name, server.baseUrl, channel.id, channel.name],
   )
-  // Em push-to-talk o atalho de mutar fica desligado (o microfone é da tecla
-  // de falar); no Electron isso também libera a combinação global.
-  const { registerFailed: shortcutRegisterFailed } = useMuteShortcut(
-    voicePrefs.muteShortcut,
-    status === 'connected' && !voicePrefs.pushToTalk && recording === undefined,
-    toggleMic,
+  const setMuteShortcut = useCallback(
+    (muteShortcut: string | undefined) => updateVoicePrefs({ muteShortcut }),
+    [updateVoicePrefs],
   )
-  const { buttonProps: pushToTalkButtonProps } = usePushToTalk(
-    voicePrefs.pushToTalkKey,
-    status === 'connected' && voicePrefs.pushToTalk && recording === undefined,
-    setTalking,
+  const setPushToTalkKey = useCallback(
+    (pushToTalkKey: string | undefined) => updateVoicePrefs({ pushToTalkKey }),
+    [updateVoicePrefs],
   )
+  const setRecordingMute = useCallback((on: boolean) => setRecording(on ? 'mute' : undefined), [setRecording])
+  const setRecordingPushToTalk = useCallback(
+    (on: boolean) => setRecording(on ? 'pushToTalk' : undefined),
+    [setRecording],
+  )
+  // No app desktop, compartilhar abre o seletor próprio antes (o Electron não
+  // tem o do navegador); parar continua direto.
+  const electronBridge = window.ffcomElectron
+  const [pickingScreen, setPickingScreen] = useState(false)
+  // No máximo um painel de volume aberto por vez, pela identity da pessoa.
+  const [volumeOpenFor, setVolumeOpenFor] = useState<string>()
 
   return (
     <div className="voice-channel">
       {status === 'idle' && (
         <div className="voice-channel-prompt">
-          <p>Ninguém conectado ainda em "{channel.name}".</p>
+          {inOtherChannel && target ? (
+            <p>
+              Você está em "{target.channelName}"
+              {target.serverId !== server.id ? ` (${target.serverName})` : ''}. Entrar aqui sai de lá.
+            </p>
+          ) : (
+            <p>Ninguém conectado ainda em "{channel.name}".</p>
+          )}
           <button type="button" onClick={join}>
             Entrar no canal de voz
           </button>

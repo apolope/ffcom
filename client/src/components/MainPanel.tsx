@@ -1,4 +1,4 @@
-import type { Channel, ChannelType } from '../types'
+import type { Channel, ChannelType, KnownServer } from '../types'
 import { ForumChannelView } from './ForumChannelView'
 import { TextChannelView } from './TextChannelView'
 import { VoiceChannelView } from './VoiceChannelView'
@@ -13,11 +13,12 @@ const CHANNEL_ICON: Record<ChannelType, string> = {
 
 interface MainPanelProps {
   channel: Channel | undefined
-  serverBaseUrl: string
+  server: KnownServer
   canModerateMessages: boolean
 }
 
-export function MainPanel({ channel, serverBaseUrl, canModerateMessages }: MainPanelProps) {
+export function MainPanel({ channel, server, canModerateMessages }: MainPanelProps) {
+  const serverBaseUrl = server.baseUrl
   return (
     <section className="main-panel">
       <header className="channel-header">
@@ -43,7 +44,7 @@ export function MainPanel({ channel, serverBaseUrl, canModerateMessages }: MainP
           />
         )}
         {channel?.type === 'voice' && (
-          <VoiceChannelView key={channel.id} serverBaseUrl={serverBaseUrl} channel={channel} />
+          <VoiceChannelView key={channel.id} server={server} channel={channel} />
         )}
         {channel?.type === 'forum' && (
           <ForumChannelView key={channel.id} serverBaseUrl={serverBaseUrl} channel={channel} />

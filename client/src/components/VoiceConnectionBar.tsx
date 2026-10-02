@@ -1,0 +1,65 @@
+import type { VoiceTarget } from '../hooks/useVoiceChannel'
+import { useVoiceSession } from './VoiceSessionContext'
+import './VoiceConnectionBar.css'
+
+interface VoiceConnectionBarProps {
+  // Abre o canal da chamada (troca de servidor e sai de Amigos se preciso).
+  onOpen: (target: VoiceTarget) => void
+}
+
+// "Conectado em 🔊 canal" no pé da coluna de canais, como no Discord: com a
+// chamada em andamento e outra tela aberta, mostra onde a pessoa está, deixa
+// mutar e sair sem voltar ao canal, e clicar no nome volta a ele. Ver
+// docs/architecture.md, "Decisão: chamada de voz continua ao navegar".
+export function VoiceConnectionBar({ onOpen }: VoiceConnectionBarProps) {
+  const { target, status, micEnabled, toggleMic, leave, voicePrefs, audioPlaybackBlocked, startAudio } =
+    useVoiceSession()
+  if (!target || (status !== 'connected' && status !== 'connecting')) return null
+  const connected = status === 'connected'
+
+  return (
+    <div className="voice-connection-bar" role="status">
+      <div className="voice-connection-info">
+        <span className={connected ? 'voice-connection-state connected' : 'voice-connection-state'}>
+          {connected ? 'Voz conectada' : 'Conectando…'}
+        </span>
+        <button
+          type="button"
+          className="voice-connection-channel"
+          onClick={() => onOpen(target)}
+          title="Abrir o canal de voz"
+        >
+          🔊 {target.channelName} · {target.serverName}
+        </button>
+      </div>
+      {connected && audioPlaybackBlocked && (
+        <button type="button" className="voice-connection-action" onClick={startAudio}>
+          Ativar som
+        </button>
+      )}
+      {/* No push-to-talk o microfone é da tecla de falar: alternar aqui o
+          deixaria aberto. */}
+      {connected && !voicePrefs.pushToTalk && (
+        <button
+          type="button"
+          className="voice-connection-icon"
+          onClick={toggleMic}
+          aria-pressed={!micEnabled}
+          aria-label={micEnabled ? 'Silenciar microfone' : 'Ativar microfone'}
+          title={micEnabled ? 'Silenciar microfone' : 'Ativar microfone'}
+        >
+          {micEnabled ? '🎤' : '🔇'}
+        </button>
+      )}
+      <button
+        type="button"
+        className="voice-connection-icon leave"
+        onClick={leave}
+        aria-label="Sair do canal de voz"
+        title="Sair do canal de voz"
+      >
+        ✕
+      </button>
+    </div>
+  )
+}

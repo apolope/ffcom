@@ -31,7 +31,19 @@ export interface VoiceParticipant {
   screenShareAudio: boolean
 }
 
-interface UseVoiceChannelResult {
+// O canal de voz da chamada, com o que a barra "Conectado em" precisa para
+// mostrar e voltar a ele de qualquer tela.
+export interface VoiceTarget {
+  serverId: string
+  serverName: string
+  baseUrl: string
+  channelId: string
+  channelName: string
+}
+
+export interface UseVoiceChannelResult {
+  // Canal da última tentativa de entrar (o status abaixo é dele), até sair.
+  target: VoiceTarget | undefined
   status: VoiceChannelStatus
   error: string | undefined
   participants: VoiceParticipant[]
@@ -50,7 +62,8 @@ interface UseVoiceChannelResult {
   noiseSuppressionError: string | undefined
   startAudio: () => void
   videoContainerRef: (node: HTMLDivElement | null) => void
-  join: () => void
+  // Entra no canal; se já estiver em outro, sai dele antes.
+  join: (target: VoiceTarget) => void
   leave: () => void
   toggleMic: () => void
   // Push-to-talk: abre (true) ou fecha (false) o microfone, com o bipe do
@@ -78,6 +91,10 @@ function toParticipant(p: LocalParticipant | RemoteParticipant): VoiceParticipan
 // integração de voz com LiveKit"). Cada canal tem sua própria sala LiveKit
 // (nome = id do canal); entrar busca um token novo em
 // POST /api/channels/{id}/voice/token a cada tentativa, em vez de cachear.
+// A chamada é da sessão, não da tela do canal: o hook fica no
+// VoiceSessionProvider e a chamada continua enquanto a pessoa navega por
+// texto, fórum, outros servidores e amigos. Ver docs/architecture.md,
+// "Decisão: chamada de voz continua ao navegar".
 // Constraints do áudio da tela, repassadas cruas ao getDisplayMedia pelo
 // livekit-client. Sem restrictOwnAudio por enquanto: com ele (Chrome 141+),
 // tela inteira com áudio do sistema no Windows publicou a track (🔊 na
@@ -131,8 +148,6 @@ type NoiseMode = 'browser' | 'raw' | 'enhanced'
 const NO_PARTICIPANT_AUDIO: ParticipantAudioMap = {}
 
 export function useVoiceChannel(
-  baseUrl: string,
-  channelId: string,
   accessToken: string,
   // Aviso sonoro ao mutar/desmutar e ao apertar/soltar no push-to-talk
   // (lib/voicePrefs.ts). Lido por ref para
@@ -153,6 +168,11 @@ export function useVoiceChannel(
   presenceSound = true,
 ): UseVoiceChannelResult {
   const roomRef = useRef<Room | undefined>(undefined)
+  // Cada join e cada saída avançam o contador: um join que volta de um await
+  // depois de outro join (troca de canal) ou de sair desiste sozinho.
+  const joinSeqRef = useRef(0)
+  const [target, setTarget] = useState<VoiceTarget>()
+  const targetRef = useRef<VoiceTarget | undefined>(undefined)
   const micToggleSoundRef = useRef(micToggleSound)
   useEffect(() => {
     micToggleSoundRef.current = micToggleSound
@@ -237,10 +257,16 @@ export function useVoiceChannel(
   // vida do componente, mas as tiles de vídeo (câmera e tela) são inseridas
   // de forma imperativa (mesmo padrão já usado para os elementos de áudio),
   // então guardamos o nó atual para anexar/remover tiles depois.
+  // A grade sai da tela quando a pessoa abre outro canal com a chamada em
+  // andamento, e o navegador pausa um <video> tirado do documento: ao voltar,
+  // as tiles são reanexadas e o vídeo precisa de play() de novo.
   const videoContainerRef = useCallback((node: HTMLDivElement | null) => {
     videoContainerElRef.current = node
     if (node) {
-      videoTilesRef.current.forEach((tile) => node.appendChild(tile))
+      videoTilesRef.current.forEach((tile) => {
+        node.appendChild(tile)
+        void tile.querySelector('video')?.play().catch(() => {})
+      })
     }
   }, [])
 
@@ -326,6 +352,9 @@ export function useVoiceChannel(
         presenceRef.current = undefined
       }
       room?.disconnect()
+      // Sala de uma chamada anterior (o Disconnected dela chega depois de
+      // trocar de canal): o estado já é da sala nova.
+      if (room !== roomRef.current) return
       cleanupAudioEls()
       cleanupVideoTiles()
       roomRef.current = undefined
@@ -348,11 +377,14 @@ export function useVoiceChannel(
     return () => setVoiceConnected(false)
   }, [status])
 
-  // Sair do canal de voz ao trocar de canal ou desmontar o componente —
-  // nunca deixar uma sala LiveKit conectada em segundo plano sem UI.
+  // Sair da chamada quando a sessão acaba (logout desmonta o provider).
   useEffect(() => {
-    return () => disconnect(roomRef.current)
-  }, [channelId, disconnect])
+    const joinSeq = joinSeqRef
+    return () => {
+      joinSeq.current++
+      disconnect(roomRef.current)
+    }
+  }, [disconnect])
 
   // Leva a track do microfone ao modo pedido (reforçada ou do navegador).
   // As trocas vão numa fila, porque recapturar e plugar o processador levam
@@ -406,15 +438,27 @@ export function useVoiceChannel(
       .catch(() => {})
   }, [])
 
-  const join = useCallback(async () => {
-    if (roomRef.current) return
+  const join = useCallback(async (next: VoiceTarget) => {
+    const current = targetRef.current
+    if (
+      roomRef.current &&
+      current?.serverId === next.serverId &&
+      current.channelId === next.channelId
+    ) {
+      return
+    }
+    const seq = ++joinSeqRef.current
+    disconnect(roomRef.current)
+    targetRef.current = next
+    setTarget(next)
     // Ainda dentro do clique: destrava o AudioContext para o som de entrada,
     // que só toca depois do connect.
     if (presenceSoundRef.current) primeMicToggleSound()
     setStatus('connecting')
     setError(undefined)
     try {
-      const { token, url } = await fetchVoiceToken(baseUrl, channelId, accessToken)
+      const { token, url } = await fetchVoiceToken(next.baseUrl, next.channelId, accessToken)
+      if (seq !== joinSeqRef.current) return
       // webAudioMix: o áudio remoto toca por um AudioContext com um GainNode
       // por track em vez do volume do <audio> (limitado a 100%), para o
       // volume por pessoa ir até 200%. Ver docs/architecture.md, "Decisão:
@@ -509,6 +553,7 @@ export function useVoiceChannel(
       }
       if (forceRelay) console.info('[ffcom] forceRelay: ICE só por TURN')
       await room.connect(url, token, forceRelay ? { rtcConfig: { iceTransportPolicy: 'relay' } } : undefined)
+      if (seq !== joinSeqRef.current) return
       if (pushToTalkRef.current) {
         // Pede a permissão e publica já mutado, para o primeiro aperto abrir
         // na hora (sem o seletor de permissão com a tecla apertada) e sem
@@ -544,13 +589,13 @@ export function useVoiceChannel(
         if (presenceSoundRef.current) playPresenceSound(true)
       }
     } catch (err) {
+      // Trocou de canal ou saiu no meio: quem fez isso já desfez esta sala.
+      if (seq !== joinSeqRef.current) return
       disconnect(roomRef.current)
       setStatus('error')
       setError(err instanceof Error ? err.message : 'falha ao conectar à voz')
     }
   }, [
-    baseUrl,
-    channelId,
     accessToken,
     refreshParticipants,
     disconnect,
@@ -560,7 +605,12 @@ export function useVoiceChannel(
     syncNoiseSuppression,
   ])
 
-  const leave = useCallback(() => disconnect(roomRef.current), [disconnect])
+  const leave = useCallback(() => {
+    joinSeqRef.current++
+    disconnect(roomRef.current)
+    targetRef.current = undefined
+    setTarget(undefined)
+  }, [disconnect])
 
   // Precisa rodar dentro do handler do clique: é o toque que autoriza o
   // navegador a tocar áudio.
@@ -712,6 +762,7 @@ export function useVoiceChannel(
   const cameraEnabled = participants.some((p) => p.isLocal && p.cameraEnabled)
 
   return {
+    target,
     status,
     error,
     participants,

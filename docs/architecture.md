@@ -1808,6 +1808,19 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Verificado (2026-09-30, `client-v0.20.0` em produção):** com `teste-ffcom02` expulsa e o servidor ainda na lista, abrir o "Games With Respect" mostrou o aviso; colar o convite no painel fez a conta voltar (banco: membro ativo, convite com 1 uso) e os canais apareceram sem recarregar. Expulsa de novo pela sessão do dono com o servidor aberto na janela dela, o aviso apareceu sozinho no poll seguinte.
 
+## Decisão: chamada de voz continua ao navegar
+
+**Contexto:** em 2026-10-02 as pessoas reclamaram que a chamada "caía". O LiveKit registrou `CLIENT_REQUEST_LEAVE` em todas as 12 quedas, e o access log do proxy mostrou que, no mesmo segundo de cada uma, a pessoa tinha aberto um canal de texto ou um fórum. A sala ficava dentro do `VoiceChannelView`, que só existe com o canal de voz selecionado, e um efeito do `useVoiceChannel` saía da sala ao desmontar, de propósito ("nunca deixar uma sala conectada sem UI"). No Discord a pessoa continua na voz enquanto lê os canais de texto.
+
+**Decisão:**
+1. **A chamada é da sessão.** `components/VoiceSessionProvider.tsx` fica em volta do app logado e chama o `useVoiceChannel`. Junto com ele vêm as preferências de voz, os volumes por pessoa e os atalhos de mutar e de falar, que antes viviam no `VoiceChannelView` e precisam funcionar com qualquer tela aberta. O `VoiceChannelView` só lê a sessão (`useVoiceSession`): mostra a chamada quando ela é deste canal e, se a pessoa está em outro, mostra o convite "Entrar aqui sai de lá".
+2. **`join(target)`** recebe o canal (servidor, endereço e nomes) em vez de o hook ser preso a um canal. Entrar em outro canal sai do atual antes. Um contador de tentativas faz um `join` que volta de um `await` depois de outro `join` ou de "Sair" desistir sozinho, e o `disconnect` de uma sala antiga (o `Disconnected` dela chega depois) não mexe no estado da sala nova.
+3. **Barra "Voz conectada"** (`components/VoiceConnectionBar.tsx`) no pé da coluna de canais ou de amigos (`.sidebar-column`): canal e servidor da chamada, "Ativar som" quando o navegador bloqueou o áudio, mutar (fora do push-to-talk, em que o microfone é da tecla) e sair. Clicar no nome volta ao canal da chamada, inclusive em outro servidor: o `App` guarda o canal pendente até a estrutura daquele servidor chegar.
+4. **Quando a chamada acaba sem a pessoa clicar em sair:** logout (o provider desmonta) e tirar da lista o servidor da chamada. Trocar de servidor, abrir texto, fórum ou amigos não sai.
+5. A grade de vídeo sai do documento quando a pessoa abre outro canal, e o navegador pausa o `<video>`. Ao voltar, as tiles são reanexadas com `play()`.
+
+**Escopo aceito:** no celular a barra fica dentro da gaveta de navegação, então com o painel do canal de texto na frente não há indicador visível da chamada até abrir a gaveta. Ser expulso do servidor da chamada não derruba a sala pelo client: isso fica com o LiveKit/`server-channel`.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.
