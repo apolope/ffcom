@@ -53,6 +53,7 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, avatarFiles *storage.Av
 	mux.Handle("GET /api/presence", protected(handlePresenceSnapshot(hub, db.Friendships)))
 	mux.Handle("GET /api/presence/ws", protected(handlePresenceWS(hub, db.Friendships, db.DirectMessages, upgrader)))
 	mux.Handle("GET /api/friends", protected(handleListFriends(db.Friendships, db.Profiles, db.Accounts, db.DirectMessages)))
+	mux.Handle("DELETE /api/friends/{accountId}", protected(handleDeleteFriend(hub, db.Friendships)))
 	mux.Handle("POST /api/friends/invites", protected(handleCreateFriendInvite(db.FriendInvites)))
 	mux.Handle("POST /api/friends/invites/{code}/redeem", protected(handleRedeemFriendInvite(hub, db.FriendInvites, db.Friendships, db.Profiles)))
 	mux.Handle("GET /api/friends/requests", protected(handleListFriendRequests(db.Friendships, db.Profiles)))

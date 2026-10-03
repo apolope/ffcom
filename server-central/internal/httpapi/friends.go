@@ -196,6 +196,37 @@ func handleListFriends(friendships *store.FriendshipStore, profiles *store.Profi
 	})
 }
 
+// DELETE /api/friends/{accountId} — desfaz a amizade aceita com accountId
+// (qualquer um dos dois lados pode). Os dois recebem friend.removed pelo
+// WebSocket de presença, para a lista atualizar em todas as abas; a partir
+// daí presença e DMs param de fluir entre eles, porque ambos dependem de
+// AcceptedFriendIDs/AreFriends a cada evento.
+func handleDeleteFriend(hub *realtime.Hub, friendships *store.FriendshipStore) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		account, ok := auth.AccountFromContext(r.Context())
+		if !ok {
+			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			return
+		}
+
+		friendID := r.PathValue("accountId")
+		if _, err := friendships.DeleteAccepted(r.Context(), account.ID, friendID); err != nil {
+			// Id que não é UUID também cai aqui; para quem chamou, é igual a
+			// não serem amigos.
+			http.Error(w, "vocês não são amigos", http.StatusNotFound)
+			return
+		}
+
+		if payload, err := realtime.EncodeFriendRemoved(friendID); err == nil {
+			hub.SendTo(account.ID, payload)
+		}
+		if payload, err := realtime.EncodeFriendRemoved(account.ID); err == nil {
+			hub.SendTo(friendID, payload)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+}
+
 type friendInviteView struct {
 	Code      string    `json:"code"`
 	CreatedAt time.Time `json:"createdAt"`

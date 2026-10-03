@@ -338,6 +338,15 @@ export async function deleteFriendRequest(accessToken: string, id: string): Prom
   await throwWithBody(res)
 }
 
+// Desfaz uma amizade aceita (qualquer um dos dois lados pode).
+export async function deleteFriend(accessToken: string, accountId: string): Promise<void> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/friends/${encodeURIComponent(accountId)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  await throwWithBody(res)
+}
+
 function toPresenceWebSocketUrl(): string {
   const url = new URL(`${SERVER_CENTRAL_URL}/api/presence/ws`)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -399,6 +408,7 @@ type PresenceSocketFrame =
   | { type: 'friend.request'; request: FriendRequest }
   | { type: 'friend.request.removed'; id: string }
   | { type: 'friend.accepted'; requestId?: string; accountId: string; displayName?: string }
+  | { type: 'friend.removed'; accountId: string }
   | { type: 'error'; error: string }
 
 export function decodePresenceSocketFrame(raw: string): PresenceSocketFrame | null {
@@ -410,6 +420,7 @@ export function decodePresenceSocketFrame(raw: string): PresenceSocketFrame | nu
       parsed.type === 'friend.request' ||
       parsed.type === 'friend.request.removed' ||
       parsed.type === 'friend.accepted' ||
+      parsed.type === 'friend.removed' ||
       parsed.type === 'error'
     ) {
       return parsed as PresenceSocketFrame

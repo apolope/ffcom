@@ -15,6 +15,12 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## client v0.22.0 · 2026-10-03
+- Dá para desfazer uma amizade: botão direito no amigo, na lista de Amigos, e "Remover amigo". Ele some da sua lista e da dele, e a conversa aberta fecha nos dois lados. As mensagens ficam guardadas e voltam a aparecer se vocês forem amigos de novo.
+
+## central v0.14.0 · 2026-10-03
+- Desfazer amizade (`DELETE /api/friends/{accountId}`), por qualquer um dos dois lados, avisando os dois na hora. Depois disso qualquer um pode pedir amizade de novo.
+
 ## client v0.21.0 · 2026-10-02
 - A chamada de voz não cai mais ao abrir um canal de texto, um fórum, outro servidor ou os Amigos: no pé da lista de canais aparece "Voz conectada", com o canal da chamada, o botão de mutar, o de sair e o atalho para voltar a ele.
 - Os atalhos de mutar e de **apertar para falar** funcionam com qualquer tela aberta durante a chamada.

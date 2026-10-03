@@ -160,6 +160,18 @@ type friendAcceptedEnvelope struct {
 	Name      *string `json:"displayName,omitempty"`
 }
 
+type friendRemovedEnvelope struct {
+	Type      string `json:"type"`
+	AccountID string `json:"accountId"`
+}
+
+// EncodeFriendRemoved serializa "friend.removed", enviado aos dois lados
+// quando uma amizade aceita é desfeita; accountID é o ex-amigo do ponto de
+// vista de quem recebe o frame.
+func EncodeFriendRemoved(accountID string) ([]byte, error) {
+	return json.Marshal(friendRemovedEnvelope{Type: "friend.removed", AccountID: accountID})
+}
+
 // EncodeFriendRequest serializa "friend.request", enviado a quem recebeu
 // um pedido de amizade novo (ver docs/architecture.md, "Decisão: pedido de
 // amizade pela lista de membros").

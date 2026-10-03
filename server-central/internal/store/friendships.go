@@ -78,6 +78,21 @@ func (s *FriendshipStore) DeletePending(ctx context.Context, id, accountID strin
 	return s.scanOne(ctx, query, id, accountID)
 }
 
+// DeleteAccepted desfaz a amizade aceita entre accountA e accountB, em
+// qualquer direção. Apaga a linha em vez de marcar um status: qualquer um
+// dos dois pode pedir amizade de novo depois, e as DMs trocadas continuam no
+// banco (só voltam a ser acessíveis se a amizade voltar, ver AreFriends).
+// Devolve ErrNotFound se os dois não forem amigos.
+func (s *FriendshipStore) DeleteAccepted(ctx context.Context, accountA, accountB string) (Friendship, error) {
+	const query = `
+		DELETE FROM friendships
+		WHERE status = 'accepted'
+		AND ((requester_id = $1 AND addressee_id = $2) OR (requester_id = $2 AND addressee_id = $1))
+		RETURNING id, requester_id, addressee_id, status, created_at, updated_at
+	`
+	return s.scanOne(ctx, query, accountA, accountB)
+}
+
 // PendingForAccount lista os pedidos pendentes em que accountID participa,
 // recebidos e enviados, do mais recente para o mais antigo.
 func (s *FriendshipStore) PendingForAccount(ctx context.Context, accountID string) ([]Friendship, error) {

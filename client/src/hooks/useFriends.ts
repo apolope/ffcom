@@ -3,6 +3,7 @@ import {
   acceptFriendRequest,
   createFriendInvite,
   decodePresenceSocketFrame,
+  deleteFriend,
   deleteFriendRequest,
   fetchFriendRequests,
   fetchFriends,
@@ -23,6 +24,9 @@ export type FriendsStatus = 'loading' | 'ready' | 'error'
 export type FriendEvent =
   | { kind: 'request-received'; request: FriendRequest }
   | { kind: 'accepted'; accountId: string; displayName?: string }
+  // Amizade desfeita por qualquer um dos lados; sem aviso na tela, só para
+  // App.tsx fechar a DM se ela estiver aberta.
+  | { kind: 'removed'; accountId: string }
 
 interface UseFriendsResult {
   friends: Friend[]
@@ -38,6 +42,8 @@ interface UseFriendsResult {
   acceptRequest: (id: string) => Promise<void>
   // Recusa um pedido recebido ou cancela um enviado.
   removeRequest: (id: string) => Promise<void>
+  // Desfaz uma amizade aceita.
+  removeFriend: (accountId: string) => Promise<void>
   // Conexão WebSocket de presença, exposta para hooks/useDirectMessages.ts
   // anexar um listener extra nela (ver docs/architecture.md, "Decisão: DMs
   // entregues no mesmo WebSocket de presença") em vez de abrir uma segunda
@@ -152,6 +158,10 @@ export function useFriends(accessToken: string, onEvent?: (event: FriendEvent) =
         }
         // Amigo novo: lista, chave de E2E e presença vêm do servidor.
         void loadRef.current()
+      } else if (frame.type === 'friend.removed') {
+        // Chega aos dois lados (e a todas as abas de quem removeu).
+        setRemoteFriends((prev) => prev.filter((f) => f.accountId !== frame.accountId))
+        onEventRef.current?.({ kind: 'removed', accountId: frame.accountId })
       }
     }
 
@@ -206,6 +216,14 @@ export function useFriends(accessToken: string, onEvent?: (event: FriendEvent) =
     [accessToken],
   )
 
+  const removeFriend = useCallback(
+    async (accountId: string) => {
+      await deleteFriend(accessToken, accountId)
+      setRemoteFriends((prev) => prev.filter((f) => f.accountId !== accountId))
+    },
+    [accessToken],
+  )
+
   const friends = remoteFriends.map((f) => toFriend(f, statusById.get(f.accountId) ?? 'offline'))
 
   return {
@@ -219,6 +237,7 @@ export function useFriends(accessToken: string, onEvent?: (event: FriendEvent) =
     sendRequest,
     acceptRequest,
     removeRequest,
+    removeFriend,
     socket,
   }
 }

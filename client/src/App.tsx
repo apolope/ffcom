@@ -88,12 +88,16 @@ function App() {
   )
   const { servers, addServer, removeServer, saveOrder: saveServerOrder } = useKnownServers(accessToken ?? '', onServerOrderSaveError)
   const serverIds = useMemo(() => servers.map((s) => s.id), [servers])
+  const [selectedFriendId, setSelectedFriendId] = useState<string>()
   // Pedido de amizade recebido ou aceito chega pelo WebSocket de presença,
   // com a pessoa em qualquer tela: vira aviso no canto (ver
   // docs/architecture.md, "Decisão: pedido de amizade pela lista de membros").
   const onFriendEvent = useCallback(
     (event: FriendEvent) => {
-      if (event.kind === 'request-received') {
+      if (event.kind === 'removed') {
+        // Desfeita pelo outro lado com a DM aberta: volta para a lista.
+        setSelectedFriendId((prev) => (prev === event.accountId ? undefined : prev))
+      } else if (event.kind === 'request-received') {
         notify(`${friendRequestName(event.request)} te enviou um pedido de amizade. Veja em Amigos.`)
       } else {
         notify(`${friendRequestName(event)} aceitou seu pedido de amizade.`, 'success')
@@ -110,6 +114,7 @@ function App() {
     sendRequest: sendFriendRequest,
     acceptRequest: acceptFriendRequest,
     removeRequest: removeFriendRequest,
+    removeFriend,
     socket: presenceSocket,
   } = useFriends(accessToken ?? '', onFriendEvent)
   const e2eKeys = useE2EKeys(accessToken ?? '', accountSub)
@@ -123,7 +128,6 @@ function App() {
   const [showEditNickname, setShowEditNickname] = useState(false)
   const [showEditDisplayName, setShowEditDisplayName] = useState(false)
   const [showMyAvatar, setShowMyAvatar] = useState(false)
-  const [selectedFriendId, setSelectedFriendId] = useState<string>()
   // Diálogos de estrutura: undefined = fechado; id ausente = criar.
   const [categoryDialog, setCategoryDialog] = useState<{ id?: string }>()
   const [channelDialog, setChannelDialog] = useState<{ id?: string; categoryId?: string }>()
@@ -556,6 +560,10 @@ function App() {
                         removeFriendRequest(id).catch((err: unknown) =>
                           notify(err instanceof Error ? err.message : 'Falha ao remover o pedido.', 'error'),
                         )
+                      }}
+                      onRemoveFriend={async (id) => {
+                        await removeFriend(id)
+                        setSelectedFriendId((prev) => (prev === id ? undefined : prev))
                       }}
                     />
                   ) : server ? (

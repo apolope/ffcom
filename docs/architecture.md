@@ -1835,6 +1835,20 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Escopo aceito:** no celular a barra fica dentro da gaveta de navegação, então com o painel do canal de texto na frente não há indicador visível da chamada até abrir a gaveta. Ser expulso do servidor da chamada não derruba a sala pelo client: isso fica com o LiveKit/`server-channel`.
 
+## Decisão: desfazer amizade apagando a linha
+
+**Contexto:** não havia como sair de uma amizade aceita. O schema já previa o status `blocked`, mas ninguém pediu bloqueio, só "remover dos amigos".
+
+**Alternativas consideradas:** marcar a linha com um status novo (ex. `removed`) ou `blocked`; apagar as DMs junto.
+
+**Decisão:** `DELETE /api/friends/{accountId}` (`handleDeleteFriend`), aceito de qualquer um dos dois lados, apaga a linha `accepted` (`FriendshipStore.DeleteAccepted`) e manda `friend.removed` pelo WebSocket de presença para os dois, com o `accountId` do ex-amigo de quem recebe. As DMs ficam no banco. No client, "Remover amigo" fica no botão direito do amigo na lista de Amigos (`FriendMenu` em `FriendsView.tsx`), com a confirmação dentro do próprio menu, no lugar de um `confirm()`; quem está com a DM aberta, de qualquer lado, volta para a lista.
+
+**Razão:** apagar a linha devolve as duas contas ao estado de quem nunca foi amigo, então qualquer um pode pedir de novo ou resgatar um convite sem caso especial em `Request`/`CreateAccepted`. Presença e DM já são checadas a cada evento por `AreFriends`/`AcceptedFriendIDs`, então param de fluir no mesmo instante, sem limpar nada no hub. Guardar as DMs evita perder histórico por um clique errado: elas voltam a aparecer se a amizade voltar. Além disso, são cifradas ponta a ponta e o servidor não as lê.
+
+**Consequências:** não há bloqueio: quem foi removido pode mandar outro pedido logo em seguida. Não há aviso para quem foi removido; o amigo só some da lista.
+
+**Revisitar quando:** aparecer pedido insistente depois de uma remoção (aí entra o `blocked`), ou alguém pedir para apagar o histórico junto.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.
