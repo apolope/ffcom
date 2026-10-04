@@ -27,10 +27,12 @@
     "@noble/hashes": "^2.4.0",
     "@sapphi-red/web-noise-suppressor": "0.4.1",
     "electron-updater": "^6.8.9",
+    "i18next": "^26.4.2",
     "livekit-client": "^2.22.3",
     "oidc-client-ts": "^3.5.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-i18next": "^17.0.15",
     "tweetnacl": "^1.0.3",
     "uiohook-napi": "^1.5.5"
   },

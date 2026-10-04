@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
+import { applyAccountLanguage, changeLanguage, type Language } from '../i18n'
 import { invalidateAvatar } from '../lib/avatarCache'
 import {
   deleteMyAvatar,
   fetchMyProfile,
   setMyDisplayName,
+  setMyLanguage,
   setMyStatus,
   uploadMyAvatar,
   type MyProfile,
@@ -18,6 +20,10 @@ interface UseMyProfileResult {
   setDisplayName: (displayName: string | undefined) => Promise<void>
   // Troca o status escolhido. Aplica na hora e desfaz se o servidor recusar.
   setStatus: (status: ChosenStatus) => Promise<void>
+  // Troca o idioma da interface na hora (e no localStorage) e grava na
+  // conta. Se a gravação falhar, a troca vale só neste dispositivo e o erro
+  // sobe para quem chamou avisar.
+  setLanguage: (language: Language) => Promise<void>
 }
 
 // Perfil da conta autenticada em server-central (nome de exibição, avatar —
@@ -31,7 +37,10 @@ export function useMyProfile(accessToken: string): UseMyProfileResult {
     let cancelled = false
     fetchMyProfile(accessToken)
       .then((p) => {
-        if (!cancelled) setProfile(p)
+        if (cancelled) return
+        setProfile(p)
+        // Idioma salvo na conta vence o localStorage e o navegador.
+        applyAccountLanguage(p.language)
       })
       .catch(() => {
         /* sem perfil ainda não é erro -- fica undefined */
@@ -80,5 +89,14 @@ export function useMyProfile(accessToken: string): UseMyProfileResult {
     [accessToken, profile?.status],
   )
 
-  return { profile, uploadAvatar, removeAvatar, setDisplayName, setStatus }
+  const setLanguage = useCallback(
+    async (language: Language) => {
+      await changeLanguage(language)
+      if (!accessToken) return
+      setProfile(await setMyLanguage(accessToken, language))
+    },
+    [accessToken],
+  )
+
+  return { profile, uploadAvatar, removeAvatar, setDisplayName, setStatus, setLanguage }
 }

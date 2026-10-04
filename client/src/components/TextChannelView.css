@@ -40,6 +40,13 @@
   color: var(--accent);
 }
 
+.message-time {
+  color: var(--text);
+  opacity: 0.5;
+  font-size: 0.75em;
+  flex: 0 0 auto;
+}
+
 .message-content {
   color: var(--text);
   word-break: break-word;

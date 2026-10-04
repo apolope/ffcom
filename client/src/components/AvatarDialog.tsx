@@ -1,4 +1,7 @@
 import { useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import i18n from '../i18n'
+import { errorMessage, LocalizedError } from '../lib/apiError'
 import { AvatarCropper } from './AvatarCropper'
 import { UserAvatar } from './UserAvatar'
 import type { MyProfile } from '../lib/serverCentralApi'
@@ -21,7 +24,8 @@ const MAX_SOURCE_MB = 20
 // recorte do avatar no client"). O servidor reforça o próprio limite
 // (AVATAR_MAX_MB) e não confia no client.
 export function AvatarDialog({ profile, onUpload, onRemove, onClose }: AvatarDialogProps) {
-  const [error, setError] = useState<string>()
+  const { t } = useTranslation()
+  const [error, setError] = useState<unknown>()
   const [busy, setBusy] = useState(false)
   // Imagem escolhida, esperando o recorte.
   const [cropFile, setCropFile] = useState<File>()
@@ -34,7 +38,7 @@ export function AvatarDialog({ profile, onUpload, onRemove, onClose }: AvatarDia
     if (!file) return
 
     if (file.size > MAX_SOURCE_MB * 1024 * 1024) {
-      setError(`imagem maior que o limite de ${MAX_SOURCE_MB}MB`)
+      setError(new LocalizedError(() => i18n.t('profile.avatar.tooLarge', { max: MAX_SOURCE_MB })))
       return
     }
 
@@ -50,7 +54,7 @@ export function AvatarDialog({ profile, onUpload, onRemove, onClose }: AvatarDia
       await onUpload(new File([blob], `avatar.${extension}`, { type: blob.type }))
       setCropFile(undefined)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'falha ao enviar avatar')
+      setError(err instanceof Error ? err : new LocalizedError(() => i18n.t('profile.avatar.uploadFailed')))
     } finally {
       setBusy(false)
     }
@@ -62,7 +66,7 @@ export function AvatarDialog({ profile, onUpload, onRemove, onClose }: AvatarDia
     try {
       await onRemove()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'falha ao remover avatar')
+      setError(err instanceof Error ? err : new LocalizedError(() => i18n.t('profile.avatar.removeFailed')))
     } finally {
       setBusy(false)
     }
@@ -72,16 +76,16 @@ export function AvatarDialog({ profile, onUpload, onRemove, onClose }: AvatarDia
     return (
       <div className="dialog-overlay" onClick={busy ? undefined : () => setCropFile(undefined)}>
         <div className="dialog-card avatar-dialog-cropping" onClick={(e) => e.stopPropagation()}>
-          <h2>Recortar avatar</h2>
+          <h2>{t('profile.avatar.cropTitle')}</h2>
           <AvatarCropper
             file={cropFile}
             busy={busy}
             onCancel={() => setCropFile(undefined)}
             onConfirm={(blob) => void handleCropped(blob)}
           />
-          {error && <p className="dialog-error">{error}</p>}
+          {error !== undefined && <p className="dialog-error">{errorMessage(error, '')}</p>}
           {cropFile.type === 'image/gif' && (
-            <p className="hint">GIF animado vira uma imagem parada no recorte.</p>
+            <p className="hint">{t('profile.avatar.gifHint')}</p>
           )}
         </div>
       </div>
@@ -91,7 +95,7 @@ export function AvatarDialog({ profile, onUpload, onRemove, onClose }: AvatarDia
   return (
     <div className="dialog-overlay" onClick={onClose}>
       <div className="dialog-card" onClick={(e) => e.stopPropagation()}>
-        <h2>Seu avatar</h2>
+        <h2>{t('profile.avatar.title')}</h2>
         <div className="avatar-dialog-preview">
           <UserAvatar avatarUrl={profile?.avatarUrl} displayName={displayName || '?'} size={72} />
         </div>
@@ -102,15 +106,15 @@ export function AvatarDialog({ profile, onUpload, onRemove, onClose }: AvatarDia
           onChange={handleFileChange}
           disabled={busy}
         />
-        {error && <p className="dialog-error">{error}</p>}
+        {error !== undefined && <p className="dialog-error">{errorMessage(error, '')}</p>}
         <div className="dialog-actions">
           {profile?.avatarUrl && (
             <button type="button" onClick={handleRemove} disabled={busy}>
-              Remover avatar
+              {t('profile.avatar.remove')}
             </button>
           )}
           <button type="button" onClick={onClose} disabled={busy}>
-            Fechar
+            {t('common.close')}
           </button>
         </div>
       </div>

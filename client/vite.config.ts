@@ -1,6 +1,8 @@
 import { execFileSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { defineConfig, searchForWorkspaceRoot } from 'vite'
 import electron from 'vite-plugin-electron/simple'
 import { VitePWA } from 'vite-plugin-pwa'
 import { thirdPartyLicenses } from './vite-plugin-third-party-licenses.ts'
@@ -22,6 +24,15 @@ function appVersion(): string {
   }
 }
 
+// Arquivos de idioma (`import ptBR from '@locales/pt-BR.json'`). A fonte é
+// locales/ na raiz do repositório, compartilhada com o site e os servidores
+// (ver docs/architecture.md, "Decisão: internacionalização"). No build da
+// imagem Docker o contexto é só client/, então o workflow copia locales/ para
+// client/locales/ (fora do git) e o alias cai nela. O tsconfig.app.json tem
+// o mesmo par de caminhos em `paths`.
+const rootLocales = fileURLToPath(new URL('../locales', import.meta.url))
+const localesDir = existsSync(rootLocales) ? rootLocales : fileURLToPath(new URL('./locales', import.meta.url))
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
   // Explícito porque o vite-plugin-electron troca a base padrão por './'
@@ -33,7 +44,14 @@ export default defineConfig(({ mode }) => ({
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(appVersion()),
   },
+  resolve: {
+    alias: { '@locales': localesDir },
+  },
   server: {
+    fs: {
+      // ../locales fica fora de client/, que é a raiz que o dev server serve.
+      allow: [searchForWorkspaceRoot(process.cwd()), localesDir],
+    },
     watch: {
       // Saída do electron-builder: no Windows, o watcher do dev server
       // segura a pasta e o `npm run package:win` falha com EPERM ao renomear
@@ -51,7 +69,13 @@ export default defineConfig(({ mode }) => ({
           // Fora do main.js, carregados de node_modules em runtime: o
           // uiohook-napi por ser nativo (.node), o electron-updater por ler
           // arquivos do próprio pacote.
-          vite: { build: { rolldownOptions: { external: ['uiohook-napi', 'electron-updater'] } } },
+          // O alias @locales vai de novo aqui: o vite-plugin-electron monta
+          // a config do main com configFile false, sem herdar a raiz, e o
+          // main embute os arquivos de idioma (electron/i18n.ts).
+          vite: {
+            resolve: { alias: { '@locales': localesDir } },
+            build: { rolldownOptions: { external: ['uiohook-napi', 'electron-updater'] } },
+          },
         },
         preload: {
           input: 'electron/preload.ts',

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { fetchMe, HttpError, updateMyNickname, updateMyProfileName, type Me } from '../lib/serverChannelApi'
+import { ApiError } from '../lib/apiError'
+import { fetchMe, updateMyNickname, updateMyProfileName, type Me } from '../lib/serverChannelApi'
 
 interface UseMeResult {
   me: Me | undefined
@@ -70,7 +71,7 @@ export function useMe(
       .catch((err: unknown) => {
         // Outros erros (servidor fora do ar, rede) não dizem nada sobre ser
         // membro: fica sem permissão de admin nenhuma, como antes.
-        if (cancelled || !(err instanceof HttpError) || err.status !== 403) return
+        if (cancelled || !(err instanceof ApiError) || err.status !== 403) return
         setMe(undefined)
         setNotMember(true)
       })

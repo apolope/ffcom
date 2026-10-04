@@ -43,14 +43,25 @@ jobs:
     runs-on: [self-hosted, a3s-network]
     steps:
       - uses: actions/checkout@v7
-      - name: Conferir CHANGELOG.md
+      - name: Conferir CHANGELOG.md e CHANGELOG.en.md
         env:
           TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
         run: bash scripts/check-changelog.sh "$TAG"
 
+  locales:
+    name: Arquivos de idioma
+    runs-on: [self-hosted, a3s-network]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Conferir locales/
+        run: node scripts/check-locales.mjs
+
   build-push-deploy:
     name: Build, push e deploy
-    needs: [lint-dockerfile, security-scan, changelog]
+    needs: [lint-dockerfile, security-scan, changelog, locales]
     runs-on: [self-hosted, a3s-network]
 
     steps:
@@ -71,6 +82,9 @@ jobs:
       - name: Build e push da imagem
         working-directory: client
         run: |
+          # Arquivos de idioma ficam na raiz do repositório, fora do contexto
+          # do Docker (ver client/Dockerfile e o alias @locales do vite.config.ts).
+          rm -rf locales && cp -r ../locales locales
           VERSION="${{ steps.version.outputs.value }}"
           TAGS=(-t "${IMAGE}:$(git rev-parse --short HEAD)")
           if [ "$VERSION" != "dev" ]; then
@@ -112,7 +126,7 @@ jobs:
   # electron-builder no Linux exigiria wine. Só em tag.
   desktop-windows:
     name: App desktop Windows
-    needs: [security-scan, changelog]
+    needs: [security-scan, changelog, locales]
     if: startsWith(github.ref, 'refs/tags/client-v')
     runs-on: windows-latest
     permissions:
@@ -159,8 +173,9 @@ jobs:
           grep -q "url: ${BASE}/${FILE}" latest.yml && grep -q "path: ${BASE}/${FILE}" latest.yml
           cp "${FILE}" FFCom-Setup.exe
 
-      # Descrição da release = entrada da versão no CHANGELOG.md, o mesmo
-      # texto da home page (scripts/changelog-notes.sh).
+      # Descrição da release = entrada da versão no CHANGELOG.md e no
+      # CHANGELOG.en.md (português primeiro, inglês embaixo), o mesmo texto
+      # da home page (scripts/changelog-notes.sh).
       - name: Notas da versão
         run: bash scripts/changelog-notes.sh "client-${{ steps.version.outputs.tag }}" > "$RUNNER_TEMP/release-notes.md"
 

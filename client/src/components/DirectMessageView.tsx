@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useDirectMessages } from '../hooks/useDirectMessages'
 import type { E2EKeyPair } from '../crypto/e2e'
 import type { Friend } from '../types'
@@ -18,6 +19,7 @@ interface DirectMessageViewProps {
 // as mesmas classes CSS — ver docs/architecture.md sobre reuso de estilo
 // genérico já registrado para Dialog.css).
 export function DirectMessageView({ peer, accessToken, socket, myKeyPair }: DirectMessageViewProps) {
+  const { t } = useTranslation()
   const [draft, setDraft] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
 
@@ -46,45 +48,42 @@ export function DirectMessageView({ peer, accessToken, socket, myKeyPair }: Dire
       <div className="channel-content">
         <div className="text-channel">
           <div className="message-list" ref={listRef}>
-            {status === 'loading' && <p className="placeholder">Carregando conversa…</p>}
+            {status === 'loading' && <p className="placeholder">{t('dm.loadingConversation')}</p>}
             {messages.map((m) => (
               <div
                 key={m.id}
                 className={m.senderId === peer.accountId ? 'message' : 'message message-self'}
               >
                 <span className="message-author">
-                  {m.senderId === peer.accountId ? peer.displayName : 'você'}
+                  {m.senderId === peer.accountId ? peer.displayName : t('common.you')}
                 </span>
                 {m.content !== null ? (
                   <span className="message-content">{m.content}</span>
                 ) : (
                   <span className="message-content message-content-undecryptable">
-                    mensagem não pôde ser decifrada neste dispositivo
+                    {t('dm.undecryptable')}
                   </span>
                 )}
               </div>
             ))}
             {messages.length === 0 && status === 'ready' && (
-              <p className="placeholder">Nenhuma mensagem ainda. Diga oi para {peer.displayName}.</p>
+              <p className="placeholder">{t('dm.emptyConversation', { name: peer.displayName })}</p>
             )}
           </div>
           {error && <div className="message-error">{error}</div>}
           {!peer.e2ePublicKey && (
-            <p className="placeholder">
-              {peer.displayName} ainda não criou a frase de recuperação da criptografia. Não é possível
-              enviar mensagens até isso acontecer.
-            </p>
+<p className="placeholder">{t('dm.peerHasNoKey', { name: peer.displayName })}</p>
           )}
           <form className="message-form" onSubmit={handleSubmit}>
             <input
               type="text"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder={`Enviar mensagem para ${peer.displayName}`}
+              placeholder={t('dm.inputPlaceholder', { name: peer.displayName })}
               disabled={!canSend}
             />
             <button type="submit" disabled={!canSend || draft.trim() === ''}>
-              Enviar
+              {t('common.send')}
             </button>
           </form>
         </div>

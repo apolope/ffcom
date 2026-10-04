@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
+import { errorMessage } from '../lib/apiError'
 import type { ChannelType } from '../types'
 import './Dialog.css'
 
@@ -8,10 +11,17 @@ import './Dialog.css'
 // docs/permissions.md). Ver docs/architecture.md, "Decisão: gerenciar
 // categorias e canais".
 
-const CHANNEL_TYPE_LABEL: Record<ChannelType, string> = {
-  text: 'Texto',
-  voice: 'Voz',
-  forum: 'Fórum',
+const CHANNEL_TYPES: ChannelType[] = ['text', 'voice', 'forum']
+
+function channelTypeLabel(t: TFunction, type: ChannelType): string {
+  switch (type) {
+    case 'text':
+      return t('channels.types.text')
+    case 'voice':
+      return t('channels.types.voice')
+    case 'forum':
+      return t('channels.types.forum')
+  }
 }
 
 // Mesmo limite de server-channel (maxStructureNameLength).
@@ -28,6 +38,7 @@ interface CategoryDialogProps {
 }
 
 export function CategoryDialog({ category, canRename, onSave, onDelete, onClose }: CategoryDialogProps) {
+  const { t } = useTranslation()
   const nameEditable = !category || canRename
   const [name, setName] = useState(category?.name ?? '')
   const { error, busy, run } = useAsyncAction(onClose)
@@ -43,9 +54,9 @@ export function CategoryDialog({ category, canRename, onSave, onDelete, onClose 
           if (nameEditable && !busy && name.trim()) run(() => onSave(name.trim()))
         }}
       >
-        <h2>{category ? 'Editar categoria' : 'Nova categoria'}</h2>
+        <h2>{category ? t('channels.editCategory') : t('channels.dialog.newCategory')}</h2>
         <label>
-          Nome
+          {t('channels.dialog.name')}
           <input
             type="text"
             value={name}
@@ -59,8 +70,9 @@ export function CategoryDialog({ category, canRename, onSave, onDelete, onClose 
           <DeleteButton
             confirming={confirmingDelete}
             busy={busy}
-            label="Apagar categoria"
-            warning="Os canais desta categoria não são apagados: ficam sem categoria."
+            label={t('channels.dialog.deleteCategory')}
+            confirmLabel={t('channels.dialog.confirmDeleteCategory')}
+            warning={t('channels.dialog.deleteCategoryWarning')}
             onAsk={() => setConfirmingDelete(true)}
             onConfirm={() => run(onDelete)}
           />
@@ -68,11 +80,11 @@ export function CategoryDialog({ category, canRename, onSave, onDelete, onClose 
         {error && <p className="dialog-error">{error}</p>}
         <div className="dialog-actions">
           <button type="button" onClick={onClose} disabled={busy}>
-            {nameEditable ? 'Cancelar' : 'Fechar'}
+            {nameEditable ? t('common.cancel') : t('common.close')}
           </button>
           {nameEditable && (
             <button type="submit" className="dialog-submit" disabled={busy || !name.trim()}>
-              {busy ? 'Salvando…' : category ? 'Salvar' : 'Criar'}
+              {busy ? t('common.saving') : category ? t('common.save') : t('common.create')}
             </button>
           )}
         </div>
@@ -112,6 +124,7 @@ export function ChannelDialog({
   onDelete,
   onClose,
 }: ChannelDialogProps) {
+  const { t } = useTranslation()
   const nameEditable = !channel || canRename
   const categoryEditable = !channel || canMove
   const canSave = nameEditable || categoryEditable
@@ -133,9 +146,9 @@ export function ChannelDialog({
           }
         }}
       >
-        <h2>{channel ? 'Editar canal' : 'Novo canal'}</h2>
+        <h2>{channel ? t('channels.editChannel') : t('channels.dialog.newChannel')}</h2>
         <label>
-          Nome
+          {t('channels.dialog.name')}
           <input
             type="text"
             value={name}
@@ -146,21 +159,21 @@ export function ChannelDialog({
           />
         </label>
         <label>
-          Tipo
+          {t('channels.dialog.type')}
           {/* O tipo não muda depois de criado (ver server-channel,
               handleUpdateChannel), então na edição só é exibido. */}
           <select value={type} onChange={(e) => setType(e.target.value as ChannelType)} disabled={!!channel}>
-            {(Object.keys(CHANNEL_TYPE_LABEL) as ChannelType[]).map((t) => (
-              <option key={t} value={t}>
-                {CHANNEL_TYPE_LABEL[t]}
+            {CHANNEL_TYPES.map((value) => (
+              <option key={value} value={value}>
+                {channelTypeLabel(t, value)}
               </option>
             ))}
           </select>
         </label>
         <label>
-          Categoria
+          {t('channels.dialog.category')}
           <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} disabled={!categoryEditable}>
-            <option value="">(sem categoria)</option>
+            <option value="">{t('channels.dialog.noCategory')}</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -172,8 +185,9 @@ export function ChannelDialog({
           <DeleteButton
             confirming={confirmingDelete}
             busy={busy}
-            label="Apagar canal"
-            warning="Todas as mensagens, threads e anexos deste canal serão apagados. Não dá para desfazer."
+            label={t('channels.dialog.deleteChannel')}
+            confirmLabel={t('channels.dialog.confirmDeleteChannel')}
+            warning={t('channels.dialog.deleteChannelWarning')}
             onAsk={() => setConfirmingDelete(true)}
             onConfirm={() => run(onDelete)}
           />
@@ -181,11 +195,11 @@ export function ChannelDialog({
         {error && <p className="dialog-error">{error}</p>}
         <div className="dialog-actions">
           <button type="button" onClick={onClose} disabled={busy}>
-            {canSave ? 'Cancelar' : 'Fechar'}
+            {canSave ? t('common.cancel') : t('common.close')}
           </button>
           {canSave && (
             <button type="submit" className="dialog-submit" disabled={busy || !name.trim()}>
-              {busy ? 'Salvando…' : channel ? 'Salvar' : 'Criar'}
+              {busy ? t('common.saving') : channel ? t('common.save') : t('common.create')}
             </button>
           )}
         </div>
@@ -200,6 +214,7 @@ function DeleteButton({
   confirming,
   busy,
   label,
+  confirmLabel,
   warning,
   onAsk,
   onConfirm,
@@ -207,6 +222,7 @@ function DeleteButton({
   confirming: boolean
   busy: boolean
   label: string
+  confirmLabel: string
   warning: string
   onAsk: () => void
   onConfirm: () => void
@@ -222,7 +238,7 @@ function DeleteButton({
     <div className="dialog-danger-zone">
       <p>{warning}</p>
       <button type="button" className="dialog-danger" onClick={onConfirm} disabled={busy}>
-        Confirmar: {label.toLowerCase()}
+        {confirmLabel}
       </button>
     </div>
   )
@@ -231,7 +247,8 @@ function DeleteButton({
 // Roda uma ação assíncrona do diálogo, fecha no sucesso e mostra o erro do
 // servidor (ex. 403 sem a permissão) sem fechar na falha.
 function useAsyncAction(onDone: () => void) {
-  const [error, setError] = useState<string>()
+  const { t } = useTranslation()
+  const [error, setError] = useState<unknown>()
   const [busy, setBusy] = useState(false)
 
   async function run(action: () => Promise<void>) {
@@ -241,11 +258,13 @@ function useAsyncAction(onDone: () => void) {
       await action()
       onDone()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'falha ao salvar')
+      setError(err)
     } finally {
       setBusy(false)
     }
   }
 
-  return { error, busy, run }
+  // Traduzido no render: acompanha a troca de idioma.
+  const errorText = error === undefined ? undefined : errorMessage(error, t('channels.dialog.saveFailed'))
+  return { error: errorText, busy, run }
 }

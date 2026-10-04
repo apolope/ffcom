@@ -1,5 +1,8 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
+import i18n from '../i18n'
+import { errorMessage, LocalizedError } from '../lib/apiError'
 import { parseInviteLink } from '../lib/inviteLink'
 import './Dialog.css'
 
@@ -41,10 +44,11 @@ function isAddressSecure(address: string): boolean {
 // link válido e o resto do código iria parar no fim do endereço. Ver
 // docs/architecture.md, "Decisão: convite auto-contido".
 export function AddServerDialog({ onAdd, onClose }: AddServerDialogProps) {
+  const { t } = useTranslation()
   const [address, setAddress] = useState('')
   const [name, setName] = useState('')
   const [inviteCode, setInviteCode] = useState('')
-  const [error, setError] = useState<string>()
+  const [error, setError] = useState<unknown>()
   const [submitting, setSubmitting] = useState(false)
 
   // Devolve o endereço sem o `?invite=` (e preenche o código) quando o
@@ -68,7 +72,7 @@ export function AddServerDialog({ onAdd, onClose }: AddServerDialogProps) {
     const code = parsed?.inviteCode ?? inviteCode
     const serverName = name.trim() || parsed?.name || ''
     if (!isAddressSecure(trimmedAddress)) {
-      setError('Endereço precisa usar https:// (http:// só é aceito para localhost)')
+      setError(new LocalizedError(() => i18n.t('server.add.insecureAddress')))
       return
     }
     setSubmitting(true)
@@ -76,7 +80,7 @@ export function AddServerDialog({ onAdd, onClose }: AddServerDialogProps) {
       await onAdd(trimmedAddress, serverName, code.trim() || undefined)
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'falha ao adicionar servidor')
+      setError(err)
     } finally {
       setSubmitting(false)
     }
@@ -89,12 +93,12 @@ export function AddServerDialog({ onAdd, onClose }: AddServerDialogProps) {
         onClick={(e) => e.stopPropagation()}
         onSubmit={handleSubmit}
       >
-        <h2>Adicionar servidor</h2>
+        <h2>{t('server.add.title')}</h2>
         <label>
-          Endereço
+          {t('server.add.address')}
           <input
             type="text"
-            placeholder="https://… ou um link de convite"
+            placeholder={t('server.add.addressPlaceholder')}
             value={address}
             onChange={(e) => setAddress(e.target.value)}
             onPaste={(e) => {
@@ -110,31 +114,31 @@ export function AddServerDialog({ onAdd, onClose }: AddServerDialogProps) {
           />
         </label>
         <label>
-          Nome
+          {t('server.add.name')}
           <input
             type="text"
-            placeholder="Nome do servidor"
+            placeholder={t('server.add.namePlaceholder')}
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
           />
         </label>
         <label>
-          Código de convite
+          {t('server.add.inviteCode')}
           <input
             type="text"
-            placeholder="Deixe em branco se você for o dono deste servidor"
+            placeholder={t('server.add.inviteCodePlaceholder')}
             value={inviteCode}
             onChange={(e) => setInviteCode(e.target.value)}
           />
         </label>
-        {error && <p className="dialog-error">{error}</p>}
+        {error !== undefined && <p className="dialog-error">{errorMessage(error, t('server.add.failed'))}</p>}
         <div className="dialog-actions">
           <button type="button" onClick={onClose} disabled={submitting}>
-            Cancelar
+            {t('common.cancel')}
           </button>
           <button type="submit" className="dialog-submit" disabled={submitting}>
-            {submitting ? 'Adicionando…' : 'Adicionar'}
+            {submitting ? t('server.add.adding') : t('common.add')}
           </button>
         </div>
       </form>

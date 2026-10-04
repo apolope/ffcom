@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import './AvatarCropper.css'
 
 // Quadro onde a imagem inteira aparece e o círculo do avatar dentro dele: o
@@ -49,7 +50,9 @@ export function AvatarCropper({ file, busy, onCancel, onConfirm }: AvatarCropper
   const [src, setSrc] = useState<string>()
   const [natural, setNatural] = useState<{ w: number; h: number }>()
   const [view, setView] = useState<View>({ zoom: 1, x: 0, y: 0 })
-  const [error, setError] = useState<string>()
+  const { t } = useTranslation()
+  // Qual falha mostrar; o texto sai do arquivo de idioma no render.
+  const [error, setError] = useState<'render' | 'open'>()
   const imgRef = useRef<HTMLImageElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ pointerId: number; startX: number; startY: number; view: View }>(undefined)
@@ -160,7 +163,7 @@ export function AvatarCropper({ file, busy, onCancel, onConfirm }: AvatarCropper
     canvas.height = out
     const ctx = canvas.getContext('2d')
     if (!ctx) {
-      setError('o navegador não conseguiu gerar a imagem recortada')
+      setError('render')
       return
     }
     ctx.imageSmoothingQuality = 'high'
@@ -169,7 +172,7 @@ export function AvatarCropper({ file, busy, onCancel, onConfirm }: AvatarCropper
     canvas.toBlob(
       (blob) => {
         if (blob) onConfirm(blob)
-        else setError('o navegador não conseguiu gerar a imagem recortada')
+        else setError('render')
       },
       'image/webp',
       0.9,
@@ -189,7 +192,7 @@ export function AvatarCropper({ file, busy, onCancel, onConfirm }: AvatarCropper
           style={{ width: STAGE, height: STAGE }}
           tabIndex={0}
           role="application"
-          aria-label="Área de recorte do avatar: arraste para posicionar, setas movem, + e - dão zoom"
+          aria-label={t('profile.avatar.cropArea')}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
@@ -203,7 +206,7 @@ export function AvatarCropper({ file, busy, onCancel, onConfirm }: AvatarCropper
               alt=""
               draggable={false}
               onLoad={handleLoad}
-              onError={() => setError('não foi possível abrir essa imagem')}
+              onError={() => setError('open')}
               style={imageStyle}
             />
           )}
@@ -213,7 +216,7 @@ export function AvatarCropper({ file, busy, onCancel, onConfirm }: AvatarCropper
             aria-hidden="true"
           />
         </div>
-        <div className="avatar-cropper-previews" aria-label="Como vai ficar">
+        <div className="avatar-cropper-previews" aria-label={t('profile.avatar.preview')}>
           {PREVIEW_SIZES.map((size) => {
             const k = size / CROP
             return (
@@ -237,7 +240,7 @@ export function AvatarCropper({ file, busy, onCancel, onConfirm }: AvatarCropper
         </div>
       </div>
       <label className="avatar-cropper-zoom">
-        Zoom
+        {t('profile.avatar.zoom')}
         <input
           type="range"
           min={1}
@@ -248,13 +251,17 @@ export function AvatarCropper({ file, busy, onCancel, onConfirm }: AvatarCropper
           disabled={!natural}
         />
       </label>
-      {error && <p className="dialog-error">{error}</p>}
+      {error && (
+        <p className="dialog-error">
+          {error === 'render' ? t('profile.avatar.renderFailed') : t('profile.avatar.openFailed')}
+        </p>
+      )}
       <div className="dialog-actions">
         <button type="button" onClick={onCancel} disabled={busy}>
-          Cancelar
+          {t('common.cancel')}
         </button>
         <button type="button" onClick={handleConfirm} disabled={busy || !natural}>
-          {busy ? 'Enviando…' : 'Salvar avatar'}
+          {busy ? t('profile.avatar.sending') : t('profile.avatar.save')}
         </button>
       </div>
     </div>

@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { errorMessage } from '../lib/apiError'
 import './Dialog.css'
 
 interface NicknameDialogProps {
@@ -12,8 +14,9 @@ interface NicknameDialogProps {
 // server-channel/internal/httpapi/me.go) — sem apelido, a lista cai no
 // UUID truncado do membro (ver hooks/useServerMembers.ts).
 export function NicknameDialog({ currentNickname, onSave, onClose }: NicknameDialogProps) {
+  const { t } = useTranslation()
   const [value, setValue] = useState(currentNickname ?? '')
-  const [error, setError] = useState<string>()
+  const [error, setError] = useState<unknown>()
   const [saving, setSaving] = useState(false)
 
   async function handleSave() {
@@ -23,7 +26,7 @@ export function NicknameDialog({ currentNickname, onSave, onClose }: NicknameDia
       await onSave(value.trim() || undefined)
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'falha ao salvar apelido')
+      setError(err)
     } finally {
       setSaving(false)
     }
@@ -32,22 +35,24 @@ export function NicknameDialog({ currentNickname, onSave, onClose }: NicknameDia
   return (
     <div className="dialog-overlay" onClick={onClose}>
       <div className="dialog-card" onClick={(e) => e.stopPropagation()}>
-        <h2>Seu apelido neste servidor</h2>
+        <h2>{t('profile.nickname.title')}</h2>
         <input
           type="text"
           value={value}
           maxLength={64}
-          placeholder="Como os outros membros vão te ver"
+          placeholder={t('profile.nickname.placeholder')}
           onChange={(e) => setValue(e.target.value)}
           autoFocus
         />
-        {error && <p className="dialog-error">{error}</p>}
+        {error !== undefined && (
+          <p className="dialog-error">{errorMessage(error, t('profile.nickname.saveFailed'))}</p>
+        )}
         <div className="dialog-actions">
           <button type="button" onClick={onClose} disabled={saving}>
-            Cancelar
+            {t('common.cancel')}
           </button>
           <button type="button" onClick={handleSave} disabled={saving}>
-            {saving ? 'Salvando…' : 'Salvar'}
+            {saving ? t('common.saving') : t('common.save')}
           </button>
         </div>
       </div>

@@ -1,5 +1,8 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
+import { errorMessage } from '../lib/apiError'
 import { PERMISSIONS } from '../lib/permissions'
 import type { Ban, Member, Role } from '../types'
 import './Dialog.css'
@@ -28,29 +31,34 @@ interface ManageRolesDialogProps {
   onClose: () => void
 }
 
-const PERMISSION_LABELS: { bit: number; label: string }[] = [
-  { bit: PERMISSIONS.ViewChannels, label: 'Ver canais' },
-  { bit: PERMISSIONS.SendMessages, label: 'Enviar mensagens' },
-  { bit: PERMISSIONS.Voice, label: 'Conectar e falar em voz' },
-  { bit: PERMISSIONS.CreateInvites, label: 'Criar convites' },
-  { bit: PERMISSIONS.ManageInvites, label: 'Gerenciar convites (criar, listar e revogar de qualquer um)' },
-  { bit: PERMISSIONS.ManageRoles, label: 'Gerenciar roles' },
-  { bit: PERMISSIONS.ManageChannels, label: 'Gerenciar categorias e canais (tudo, inclusive renomear)' },
-  { bit: PERMISSIONS.CreateCategories, label: 'Criar categorias' },
-  { bit: PERMISSIONS.ReorderCategories, label: 'Ordenar categorias' },
-  { bit: PERMISSIONS.DeleteCategories, label: 'Excluir categorias' },
-  { bit: PERMISSIONS.CreateChannels, label: 'Criar canais' },
-  { bit: PERMISSIONS.ReorderChannels, label: 'Ordenar e mover canais entre categorias' },
-  { bit: PERMISSIONS.DeleteChannels, label: 'Excluir canais' },
-  { bit: PERMISSIONS.KickMembers, label: 'Expulsar membros' },
-  { bit: PERMISSIONS.BanMembers, label: 'Banir membros' },
-  { bit: PERMISSIONS.Administrator, label: 'Administrador (ignora tudo acima)' },
-]
+// Rótulos no idioma ativo; os bits (PERMISSIONS) continuam sendo os
+// identificadores.
+function permissionOptions(t: TFunction): { bit: number; label: string }[] {
+  return [
+    { bit: PERMISSIONS.ViewChannels, label: t('roles.permissions.viewChannels') },
+    { bit: PERMISSIONS.SendMessages, label: t('roles.permissions.sendMessages') },
+    { bit: PERMISSIONS.Voice, label: t('roles.permissions.voice') },
+    { bit: PERMISSIONS.CreateInvites, label: t('roles.permissions.createInvites') },
+    { bit: PERMISSIONS.ManageInvites, label: t('roles.permissions.manageInvites') },
+    { bit: PERMISSIONS.ManageRoles, label: t('roles.permissions.manageRoles') },
+    { bit: PERMISSIONS.ManageChannels, label: t('roles.permissions.manageChannels') },
+    { bit: PERMISSIONS.CreateCategories, label: t('roles.permissions.createCategories') },
+    { bit: PERMISSIONS.ReorderCategories, label: t('roles.permissions.reorderCategories') },
+    { bit: PERMISSIONS.DeleteCategories, label: t('roles.permissions.deleteCategories') },
+    { bit: PERMISSIONS.CreateChannels, label: t('roles.permissions.createChannels') },
+    { bit: PERMISSIONS.ReorderChannels, label: t('roles.permissions.reorderChannels') },
+    { bit: PERMISSIONS.DeleteChannels, label: t('roles.permissions.deleteChannels') },
+    { bit: PERMISSIONS.KickMembers, label: t('roles.permissions.kickMembers') },
+    { bit: PERMISSIONS.BanMembers, label: t('roles.permissions.banMembers') },
+    { bit: PERMISSIONS.Administrator, label: t('roles.permissions.administrator') },
+  ]
+}
 
 function PermissionCheckboxes({ mask, onToggle }: { mask: number; onToggle: (bit: number) => void }) {
+  const { t } = useTranslation()
   return (
     <div className="permission-checkboxes">
-      {PERMISSION_LABELS.map(({ bit, label }) => (
+      {permissionOptions(t).map(({ bit, label }) => (
         <label key={bit}>
           <input type="checkbox" checked={(mask & bit) !== 0} onChange={() => onToggle(bit)} />
           {label}
@@ -87,14 +95,15 @@ export function ManageRolesDialog({
   onUnban,
   onClose,
 }: ManageRolesDialogProps) {
+  const { t } = useTranslation()
   const [name, setName] = useState('')
   const [permMask, setPermMask] = useState(0)
   const [creating, setCreating] = useState(false)
-  const [error, setError] = useState<string>()
-  const [actionError, setActionError] = useState<string>()
+  const [error, setError] = useState<unknown>()
+  const [actionError, setActionError] = useState<unknown>()
   const [editing, setEditing] = useState<{ roleId: string; mask: number }>()
   const [saving, setSaving] = useState(false)
-  const [editError, setEditError] = useState<string>()
+  const [editError, setEditError] = useState<unknown>()
 
   const assignableRoles = roles.filter((r) => !r.isDefault)
 
@@ -104,7 +113,7 @@ export function ManageRolesDialog({
   function runAction(action: () => Promise<void>) {
     setActionError(undefined)
     action().catch((err) => {
-      setActionError(err instanceof Error ? err.message : 'falha ao aplicar mudança')
+      setActionError(err)
     })
   }
 
@@ -117,7 +126,7 @@ export function ManageRolesDialog({
       setName('')
       setPermMask(0)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'falha ao criar role')
+      setError(err)
     } finally {
       setCreating(false)
     }
@@ -136,7 +145,7 @@ export function ManageRolesDialog({
       })
       setEditing(undefined)
     } catch (err) {
-      setEditError(err instanceof Error ? err.message : 'falha ao salvar role')
+      setEditError(err)
     } finally {
       setSaving(false)
     }
@@ -149,12 +158,14 @@ export function ManageRolesDialog({
   return (
     <div className="dialog-overlay" onClick={onClose}>
       <div className="dialog-card manage-roles-card" onClick={(e) => e.stopPropagation()}>
-        <h2>Gerenciar membros</h2>
+        <h2>{t('roles.manage.title')}</h2>
 
         {canManageRoles && (
           <section className="manage-roles-section">
-            <h3>Roles</h3>
-            {editError && <p className="dialog-error">{editError}</p>}
+            <h3>{t('roles.title')}</h3>
+            {editError !== undefined && (
+              <p className="dialog-error">{errorMessage(editError, t('roles.manage.saveFailed'))}</p>
+            )}
             <ul className="role-list">
               {editableRoles.map((role) => {
                 const isEditing = editing?.roleId === role.id
@@ -172,11 +183,11 @@ export function ManageRolesDialog({
                             setEditing(isEditing ? undefined : { roleId: role.id, mask: role.permissions })
                           }}
                         >
-                          {isEditing ? 'Cancelar' : 'Editar'}
+                          {isEditing ? t('common.cancel') : t('common.edit')}
                         </button>
                         {!role.isDefault && (
                           <button type="button" onClick={() => runAction(() => onDeleteRole(role.id))}>
-                            Remover
+                            {t('common.remove')}
                           </button>
                         )}
                       </div>
@@ -193,7 +204,7 @@ export function ManageRolesDialog({
                           disabled={saving || editing.mask === role.permissions}
                           onClick={() => handleSaveEdit(role)}
                         >
-                          {saving ? 'Salvando…' : 'Salvar'}
+                          {saving ? t('common.saving') : t('common.save')}
                         </button>
                       </div>
                     )}
@@ -201,30 +212,34 @@ export function ManageRolesDialog({
                 )
               })}
               {assignableRoles.length === 0 && (
-                <li className="hint">Nenhuma role além de "@everyone" ainda.</li>
+                <li className="hint">{t('roles.manage.noExtraRoles')}</li>
               )}
             </ul>
 
             <form onSubmit={handleCreate} className="create-role-form">
               <input
                 type="text"
-                placeholder="Nome da nova role"
+                placeholder={t('roles.manage.newRolePlaceholder')}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
               />
               <PermissionCheckboxes mask={permMask} onToggle={(bit) => setPermMask((prev) => toggleBit(prev, bit))} />
-              {error && <p className="dialog-error">{error}</p>}
+              {error !== undefined && (
+                <p className="dialog-error">{errorMessage(error, t('roles.manage.createFailed'))}</p>
+              )}
               <button type="submit" className="dialog-submit" disabled={creating || !name.trim()}>
-                {creating ? 'Criando…' : 'Criar role'}
+                {creating ? t('roles.manage.creating') : t('roles.manage.createRole')}
               </button>
             </form>
           </section>
         )}
 
         <section className="manage-roles-section">
-          <h3>Membros</h3>
-          {actionError && <p className="dialog-error">{actionError}</p>}
+          <h3>{t('members.title')}</h3>
+          {actionError !== undefined && (
+            <p className="dialog-error">{errorMessage(actionError, t('roles.manage.actionFailed'))}</p>
+          )}
           <ul className="member-role-list">
             {members.map((member) => {
               const isSelf = member.id === currentMemberId
@@ -233,7 +248,7 @@ export function ManageRolesDialog({
                   <span className="member-role-name">
                     <MemberAvatar member={member} size={24} />
                     {member.nickname}
-                    {member.isOwner && ' (dono)'}
+                    {member.isOwner && t('roles.manage.ownerSuffix')}
                   </span>
                   {!member.isOwner && canManageRoles && (
                     <div className="member-role-toggles">
@@ -260,12 +275,12 @@ export function ManageRolesDialog({
                     <div className="member-moderation-actions">
                       {canKick && (
                         <button type="button" onClick={() => runAction(() => onKick(member.id))}>
-                          Expulsar
+                          {t('roles.manage.kick')}
                         </button>
                       )}
                       {canBan && (
                         <button type="button" onClick={() => runAction(() => onBan(member.id))}>
-                          Banir
+                          {t('roles.manage.ban')}
                         </button>
                       )}
                     </div>
@@ -278,7 +293,7 @@ export function ManageRolesDialog({
 
         {canBan && (
           <section className="manage-roles-section">
-            <h3>Banidos</h3>
+            <h3>{t('roles.manage.banned')}</h3>
             <ul className="member-role-list">
               {bans.map((ban) => (
                 <li key={ban.oidcSubject}>
@@ -287,18 +302,18 @@ export function ManageRolesDialog({
                     {ban.reason && ` — ${ban.reason}`}
                   </span>
                   <button type="button" onClick={() => runAction(() => onUnban(ban.oidcSubject))}>
-                    Revogar
+                    {t('roles.manage.unban')}
                   </button>
                 </li>
               ))}
-              {bans.length === 0 && <li className="hint">Ninguém banido.</li>}
+              {bans.length === 0 && <li className="hint">{t('roles.manage.noBans')}</li>}
             </ul>
           </section>
         )}
 
         <div className="dialog-actions">
           <button type="button" onClick={onClose}>
-            Fechar
+            {t('common.close')}
           </button>
         </div>
       </div>

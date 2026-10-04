@@ -15,6 +15,8 @@ import {
   type FriendRequest,
   type RemoteFriend,
 } from '../lib/serverCentralApi'
+import { LocalizedError, useErrorText, type DisplayError } from '../lib/apiError'
+import i18n from '../i18n'
 import type { Friend, PresenceStatus } from '../types'
 
 export type FriendsStatus = 'loading' | 'ready' | 'error'
@@ -73,7 +75,7 @@ export function useFriends(accessToken: string, onEvent?: (event: FriendEvent) =
   const [outgoingRequests, setOutgoingRequests] = useState<FriendRequest[]>([])
   const [statusById, setStatusById] = useState<Map<string, PresenceStatus>>(new Map())
   const [status, setStatus] = useState<FriendsStatus>('loading')
-  const [error, setError] = useState<string>()
+  const [error, setError] = useState<DisplayError>()
   const [socket, setSocket] = useState<WebSocket | null>(null)
 
   const load = useCallback(() => {
@@ -99,7 +101,7 @@ export function useFriends(accessToken: string, onEvent?: (event: FriendEvent) =
       })
       .catch((err) => {
         setStatus('error')
-        setError(err instanceof Error ? err.message : 'falha ao carregar amigos')
+        setError(err instanceof Error ? err : new LocalizedError(() => i18n.t('friends.loadFailed')))
       })
   }, [accessToken])
 
@@ -224,12 +226,13 @@ export function useFriends(accessToken: string, onEvent?: (event: FriendEvent) =
     [accessToken],
   )
 
+  const errorText = useErrorText(error)
   const friends = remoteFriends.map((f) => toFriend(f, statusById.get(f.accountId) ?? 'offline'))
 
   return {
     friends,
     status,
-    error,
+    error: errorText,
     createInvite,
     redeemInvite,
     incomingRequests,

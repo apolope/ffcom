@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import i18n from '../i18n'
+import { LocalizedError, problemFromFrame, useErrorText, type DisplayError } from '../lib/apiError'
 import { createReconnectingSocket, type ChannelConnectionStatus, type ReconnectingSocket } from '../lib/reconnectingSocket'
 import {
   decodeChannelSocketFrame,
@@ -45,7 +47,7 @@ export function useForumChannel(
 ): UseForumChannelResult {
   const [threads, setThreads] = useState<RemoteThread[]>([])
   const [status, setStatus] = useState<ForumConnectionStatus>('loading')
-  const [error, setError] = useState<string>()
+  const [error, setError] = useState<DisplayError>()
   const [activeThreadId, setActiveThreadId] = useState<string>()
   const [posts, setPosts] = useState<ChannelMessage[]>([])
   const [postsLoading, setPostsLoading] = useState(false)
@@ -82,6 +84,7 @@ export function useForumChannel(
 
     const connection = createReconnectingSocket({
       label: 'canal forum',
+      failureMessage: () => i18n.t('forum.connectFailed'),
       connect: () => openChannelSocket(serverBaseUrl, channelId, accessTokenRef.current),
       sync: async () => {
         const remoteThreads = await fetchForumThreads(serverBaseUrl, channelId, accessTokenRef.current)
@@ -110,7 +113,7 @@ export function useForumChannel(
             setPosts((prev) => (prev.some((m) => m.id === frame.message.id) ? prev : [...prev, frame.message]))
           }
         } else if (frame.type === 'error') {
-          setError(frame.error)
+          setError(problemFromFrame(frame))
         }
       },
     })
@@ -135,7 +138,7 @@ export function useForumChannel(
         if (activeThreadIdRef.current === threadId) setPosts(history)
       })
       .catch((err) => {
-        setError(err instanceof Error ? err.message : 'falha ao carregar posts')
+        setError(err instanceof Error ? err : new LocalizedError(() => i18n.t('forum.postsLoadFailed')))
       })
       .finally(() => setPostsLoading(false))
   }
@@ -153,10 +156,12 @@ export function useForumChannel(
     sendCreatePost(socket, threadId, content)
   }
 
+  const errorText = useErrorText(error)
+
   return {
     threads,
     status,
-    error,
+    error: errorText,
     activeThreadId,
     posts,
     postsLoading,

@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
+import { errorMessage } from '../lib/apiError'
 import { PERMISSIONS } from '../lib/permissions'
 import type { ChannelOverwrite } from '../lib/serverChannelApi'
 import type { ChannelType, Role } from '../types'
@@ -13,19 +16,16 @@ type BitState = 'inherit' | 'allow' | 'deny'
 // Só os bits que mudam alguma coisa dentro de um canal desse tipo. O
 // servidor aceita qualquer bit no overwrite; os que não aparecem aqui são
 // preservados como estão ao salvar.
-const CHANNEL_BITS: Record<ChannelType, { bit: number; label: string }[]> = {
-  text: [
-    { bit: PERMISSIONS.ViewChannels, label: 'Ver canal' },
-    { bit: PERMISSIONS.SendMessages, label: 'Enviar mensagens' },
-  ],
-  forum: [
-    { bit: PERMISSIONS.ViewChannels, label: 'Ver canal' },
-    { bit: PERMISSIONS.SendMessages, label: 'Criar posts' },
-  ],
-  voice: [
-    { bit: PERMISSIONS.ViewChannels, label: 'Ver canal' },
-    { bit: PERMISSIONS.Voice, label: 'Entrar na voz' },
-  ],
+function channelBits(t: TFunction, type: ChannelType): { bit: number; label: string }[] {
+  const view = { bit: PERMISSIONS.ViewChannels, label: t('channels.overwrites.viewChannel') }
+  switch (type) {
+    case 'text':
+      return [view, { bit: PERMISSIONS.SendMessages, label: t('channels.overwrites.sendMessages') }]
+    case 'forum':
+      return [view, { bit: PERMISSIONS.SendMessages, label: t('channels.overwrites.createPosts') }]
+    case 'voice':
+      return [view, { bit: PERMISSIONS.Voice, label: t('channels.overwrites.joinVoice') }]
+  }
 }
 
 interface ChannelPermissionsDialogProps {
@@ -62,9 +62,11 @@ export function ChannelPermissionsDialog({
   onSaved,
   onClose,
 }: ChannelPermissionsDialogProps) {
+  const { t } = useTranslation()
   const [original, setOriginal] = useState<OverwriteMap>()
   const [draft, setDraft] = useState<OverwriteMap>({})
-  const [error, setError] = useState<string>()
+  // Erro de carga (fallback de carga) ou de gravação, traduzido no render.
+  const [error, setError] = useState<{ err: unknown; loading: boolean }>()
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -78,7 +80,7 @@ export function ChannelPermissionsDialog({
         setDraft(map)
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'falha ao carregar permissões do canal')
+        if (!cancelled) setError({ err, loading: true })
       })
     return () => {
       cancelled = true
@@ -87,7 +89,7 @@ export function ChannelPermissionsDialog({
 
   const isAdmin = isOwner || (myPermissions & PERMISSIONS.Administrator) !== 0
   const canAllow = (bit: number) => isAdmin || (myPermissions & bit) !== 0
-  const bits = CHANNEL_BITS[channel.type]
+  const bits = channelBits(t, channel.type)
   // @everyone primeiro (é o que torna um canal privado), depois pela posição.
   const sortedRoles = [...roles].sort((a, b) =>
     a.isDefault === b.isDefault ? a.position - b.position : a.isDefault ? -1 : 1,
@@ -130,7 +132,7 @@ export function ChannelPermissionsDialog({
     } catch (err) {
       // Parte pode ter sido salva antes do erro: recarregar ao reabrir
       // mostra o estado real do servidor.
-      setError(err instanceof Error ? err.message : 'falha ao salvar')
+      setError({ err, loading: false })
     } finally {
       setBusy(false)
     }
@@ -139,19 +141,17 @@ export function ChannelPermissionsDialog({
   return (
     <div className="dialog-overlay" onClick={onClose}>
       <div className="dialog-card channel-permissions-dialog" onClick={(e) => e.stopPropagation()}>
-        <h2>Permissões de #{channel.name}</h2>
+        <h2>{t('channels.overwrites.title', { channel: channel.name })}</h2>
         <p className="dialog-hint">
-          "Herdar" usa a permissão da role no servidor. Permitir numa role vence Negar em @everyone e em outra
-          role da mesma pessoa, então para um canal privado negue "Ver canal" a @everyone e permita às roles que
-          entram. Quem é Administrador ou dono ignora tudo isto.
-          {!isAdmin && ' Negar "Ver canal" para @everyone também esconde o canal de você, se só @everyone o libera.'}
+          {t('channels.overwrites.hint')}
+          {!isAdmin && ` ${t('channels.overwrites.hintNotAdmin')}`}
         </p>
-        {!original && !error && <p className="dialog-hint">Carregando…</p>}
+        {!original && !error && <p className="dialog-hint">{t('common.loading')}</p>}
         {original && (
           <table className="channel-permissions-table">
             <thead>
               <tr>
-                <th scope="col">Role</th>
+                <th scope="col">{t('channels.overwrites.role')}</th>
                 {bits.map((b) => (
                   <th scope="col" key={b.bit}>
                     {b.label}
@@ -168,16 +168,16 @@ export function ChannelPermissionsDialog({
                     return (
                       <td key={b.bit}>
                         <select
-                          aria-label={`${b.label} para ${role.name}`}
+                          aria-label={t('channels.overwrites.selectLabel', { permission: b.label, role: role.name })}
                           value={state}
                           disabled={busy}
                           onChange={(e) => change(role.id, b.bit, e.target.value as BitState)}
                         >
-                          <option value="inherit">Herdar</option>
+                          <option value="inherit">{t('channels.overwrites.inherit')}</option>
                           <option value="allow" disabled={!canAllow(b.bit) && state !== 'allow'}>
-                            Permitir
+                            {t('channels.overwrites.allow')}
                           </option>
-                          <option value="deny">Negar</option>
+                          <option value="deny">{t('channels.overwrites.deny')}</option>
                         </select>
                       </td>
                     )
@@ -187,10 +187,17 @@ export function ChannelPermissionsDialog({
             </tbody>
           </table>
         )}
-        {error && <p className="dialog-error">{error}</p>}
+        {error && (
+          <p className="dialog-error">
+            {errorMessage(
+              error.err,
+              error.loading ? t('channels.overwrites.loadFailed') : t('channels.dialog.saveFailed'),
+            )}
+          </p>
+        )}
         <div className="dialog-actions">
           <button type="button" onClick={onClose} disabled={busy}>
-            Cancelar
+            {t('common.cancel')}
           </button>
           <button
             type="submit"
@@ -198,7 +205,7 @@ export function ChannelPermissionsDialog({
             onClick={() => void save()}
             disabled={busy || !original || changedRoleIds.length === 0}
           >
-            {busy ? 'Salvando…' : 'Salvar'}
+            {busy ? t('common.saving') : t('common.save')}
           </button>
         </div>
       </div>

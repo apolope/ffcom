@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { participantAudioOf } from '../lib/participantAudio'
+import { formatNumber } from '../lib/format'
 import { formatShortcut } from '../lib/shortcut'
 import { MuteShortcutSetting } from './MuteShortcutSetting'
 import { ParticipantVolumeControls } from './ParticipantVolumeControls'
@@ -47,6 +49,7 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
     shortcutRegisterFailed,
     pushToTalkButtonProps,
   } = useVoiceSession()
+  const { t } = useTranslation()
   const here = target?.serverId === server.id && target.channelId === channel.id
   // Em outro canal, esta tela mostra só o convite para entrar (que troca de
   // canal).
@@ -89,25 +92,26 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
         <div className="voice-channel-prompt">
           {inOtherChannel && target ? (
             <p>
-              Você está em "{target.channelName}"
-              {target.serverId !== server.id ? ` (${target.serverName})` : ''}. Entrar aqui sai de lá.
+              {target.serverId !== server.id
+                ? t('voice.prompt.inOtherChannelServer', { channel: target.channelName, server: target.serverName })
+                : t('voice.prompt.inOtherChannel', { channel: target.channelName })}
             </p>
           ) : (
-            <p>Ninguém conectado ainda em "{channel.name}".</p>
+            <p>{t('voice.prompt.empty', { channel: channel.name })}</p>
           )}
           <button type="button" onClick={join}>
-            Entrar no canal de voz
+            {t('voice.joinChannel')}
           </button>
         </div>
       )}
 
-      {status === 'connecting' && <p className="placeholder">Conectando…</p>}
+      {status === 'connecting' && <p className="placeholder">{t('voice.connecting')}</p>}
 
       {status === 'error' && (
         <div className="voice-channel-prompt">
           <p className="message-error">{error}</p>
           <button type="button" onClick={join}>
-            Tentar novamente
+            {t('voice.retry')}
           </button>
         </div>
       )}
@@ -116,9 +120,9 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
         <>
           {audioPlaybackBlocked && (
             <div className="voice-audio-blocked" role="alert">
-              <span>O navegador bloqueou o som da chamada.</span>
+              <span>{t('voice.audioBlocked')}</span>
               <button type="button" onClick={startAudio}>
-                Ativar som
+                {t('voice.enableAudio')}
               </button>
             </div>
           )}
@@ -134,8 +138,7 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
                       {p.micEnabled ? '🎤' : '🔇'}
                     </span>
                     <span>
-                      {p.name}
-                      {p.isLocal ? ' (você)' : ''}
+                      {p.isLocal ? t('voice.selfName', { name: p.name }) : p.name}
                       {p.cameraEnabled ? ' 📷' : ''}
                       {p.screenSharing ? ' 🖥️' : ''}
                       {p.screenShareAudio ? ' 🔊' : ''}
@@ -143,18 +146,20 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
                     {!p.isLocal && (
                       <>
                         {audio.muted ? (
-                          <span className="voice-volume-badge">silenciado para você</span>
+                          <span className="voice-volume-badge">{t('voice.mutedForYou')}</span>
                         ) : (
                           audio.voice !== 1 && (
-                            <span className="voice-volume-badge">{Math.round(audio.voice * 100)}%</span>
+                            <span className="voice-volume-badge">
+                              {formatNumber(audio.voice, { style: 'percent', maximumFractionDigits: 0 })}
+                            </span>
                           )
                         )}
                         <button
                           type="button"
                           className="voice-volume-toggle"
                           aria-expanded={volumeOpen}
-                          aria-label={`Volume de ${p.name}`}
-                          title="Volume"
+                          aria-label={t('voice.volumeOf', { name: p.name })}
+                          title={t('voice.volume')}
                           onClick={() => setVolumeOpenFor(volumeOpen ? undefined : p.identity)}
                         >
                           {audio.muted ? '🔕' : '🔉'}
@@ -178,10 +183,10 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
           {screenSharing && !screenShareAudio && (
             <p className="voice-media-hint">
               {!electronBridge
-                ? 'Compartilhando sem áudio. Para enviar o som, pare e compartilhe de novo marcando "Compartilhar áudio" no seletor (Chrome e Edge; em tela inteira, só no Windows). Firefox e Safari não enviam áudio de tela.'
+                ? t('voice.screenNoAudio.browser')
                 : electronBridge.canShareSystemAudio
-                  ? 'Compartilhando sem áudio. Para enviar o som, pare e compartilhe de novo marcando "Compartilhar áudio do computador" no seletor.'
-                  : 'Compartilhando sem áudio: neste sistema o app desktop não envia o som da tela.'}
+                  ? t('voice.screenNoAudio.desktop')
+                  : t('voice.screenNoAudio.unsupported')}
             </p>
           )}
           {pickingScreen && electronBridge && (
@@ -199,15 +204,15 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
                 aria-pressed={micEnabled}
                 {...pushToTalkButtonProps}
               >
-                {micEnabled ? 'Falando…' : 'Segure para falar'}
+                {micEnabled ? t('voice.talking') : t('voice.holdToTalk')}
               </button>
             ) : (
               <button type="button" onClick={toggleMic}>
-                {micEnabled ? 'Silenciar microfone' : 'Ativar microfone'}
+                {micEnabled ? t('voice.muteMic') : t('voice.unmuteMic')}
               </button>
             )}
             <button type="button" onClick={toggleCamera}>
-              {cameraEnabled ? 'Desligar câmera' : 'Ligar câmera'}
+              {cameraEnabled ? t('voice.cameraOff') : t('voice.cameraOn')}
             </button>
             {/* Chrome no Android não tem getDisplayMedia: sem ele o botão só daria erro. */}
             {(electronBridge || screenSharing || !!navigator.mediaDevices?.getDisplayMedia) && (
@@ -215,15 +220,15 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
                 type="button"
                 onClick={electronBridge && !screenSharing ? () => setPickingScreen(true) : toggleScreenShare}
               >
-                {screenSharing ? 'Parar compartilhamento' : 'Compartilhar tela'}
+                {screenSharing ? t('voice.stopScreenShare') : t('voice.shareScreen')}
               </button>
             )}
             <button type="button" onClick={leave}>
-              Sair do canal de voz
+              {t('voice.leaveChannel')}
             </button>
           </div>
           <div className="voice-prefs">
-            <div className="voice-pref voice-mode" role="radiogroup" aria-label="Modo do microfone">
+            <div className="voice-pref voice-mode" role="radiogroup" aria-label={t('voice.micMode')}>
               <label className="voice-pref">
                 <input
                   type="radio"
@@ -231,7 +236,7 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
                   checked={!voicePrefs.pushToTalk}
                   onChange={() => updateVoicePrefs({ pushToTalk: false })}
                 />
-                Microfone aberto
+                {t('voice.openMic')}
               </label>
               <label className="voice-pref">
                 <input
@@ -240,19 +245,16 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
                   checked={voicePrefs.pushToTalk}
                   onChange={() => updateVoicePrefs({ pushToTalk: true })}
                 />
-                Apertar para falar
+                {t('voice.pushToTalk')}
               </label>
             </div>
-            <label
-              className="voice-pref"
-              title="Filtra teclado, ventilador e barulho de fundo com o RNNoise, no lugar da supressão do navegador. Usa um pouco mais de processamento."
-            >
+            <label className="voice-pref" title={t('voice.enhancedNoiseSuppressionHint')}>
               <input
                 type="checkbox"
                 checked={voicePrefs.enhancedNoiseSuppression}
                 onChange={() => updateVoicePrefs({ enhancedNoiseSuppression: !voicePrefs.enhancedNoiseSuppression })}
               />
-              Supressão de ruído reforçada
+              {t('voice.enhancedNoiseSuppression')}
             </label>
             {noiseSuppressionError && <span className="voice-shortcut-hint">{noiseSuppressionError}</span>}
             <label className="voice-pref">
@@ -261,7 +263,7 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
                 checked={voicePrefs.micToggleSound}
                 onChange={() => updateVoicePrefs({ micToggleSound: !voicePrefs.micToggleSound })}
               />
-              {voicePrefs.pushToTalk ? 'Som ao apertar e soltar' : 'Som ao mutar'}
+              {voicePrefs.pushToTalk ? t('voice.soundOnPushToTalk') : t('voice.soundOnMute')}
             </label>
             <label className="voice-pref">
               <input
@@ -269,12 +271,12 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
                 checked={voicePrefs.presenceSound}
                 onChange={() => updateVoicePrefs({ presenceSound: !voicePrefs.presenceSound })}
               />
-              Som ao entrar e sair
+              {t('voice.soundOnJoinLeave')}
             </label>
             {voicePrefs.pushToTalk ? (
               <>
                 <MuteShortcutSetting
-                  label="Tecla para falar"
+                  label={t('voice.shortcut.pushToTalkLabel')}
                   allowSingleKey
                   shortcut={voicePrefs.pushToTalkKey}
                   onChange={setPushToTalkKey}
@@ -283,11 +285,9 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
                 />
                 <span className="voice-prefs-note">
                   {voicePrefs.pushToTalkKey
-                    ? `Segure ${formatShortcut(voicePrefs.pushToTalkKey)} ou o botão "Segure para falar". `
-                    : 'Sem tecla definida, segure o botão "Segure para falar". '}
-                  {window.ffcomElectron
-                    ? 'A tecla funciona também com o app em segundo plano, sem bloquear a tecla nos outros programas.'
-                    : 'No navegador, só funciona com esta janela em foco.'}
+                    ? t('voice.pushToTalkHint.withKey', { key: formatShortcut(voicePrefs.pushToTalkKey) })
+                    : t('voice.pushToTalkHint.noKey')}{' '}
+                  {window.ffcomElectron ? t('voice.pushToTalkHint.desktop') : t('voice.pushToTalkHint.browser')}
                 </span>
               </>
             ) : (
@@ -300,11 +300,11 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
                 />
                 {shortcutRegisterFailed && (
                   <span className="voice-shortcut-hint">
-                    O atalho não pôde ser registrado: outro programa já usa essa combinação. Escolha outra.
+                    {t('voice.shortcut.registerFailed')}
                   </span>
                 )}
                 {!window.ffcomElectron && voicePrefs.muteShortcut && (
-                  <span className="voice-prefs-note">No navegador o atalho só funciona com esta janela em foco.</span>
+                  <span className="voice-prefs-note">{t('voice.shortcut.browserFocusOnly')}</span>
                 )}
               </>
             )}

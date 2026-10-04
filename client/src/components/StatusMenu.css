@@ -65,3 +65,11 @@
 .status-menu-legal a:focus-visible {
   color: var(--text-h);
 }
+
+.status-menu-section {
+  display: block;
+  padding: 4px 10px 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}

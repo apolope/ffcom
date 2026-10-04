@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import i18n from '../i18n'
+import { ApiError, LocalizedError, useErrorText, type DisplayError } from '../lib/apiError'
 import {
   UNCATEGORIZED_ID,
   fetchCategories,
   fetchChannels,
   groupIntoCategories,
-  HttpError,
   reorderCategories,
   reorderChannels,
   type ChannelOrderGroup,
@@ -65,7 +66,7 @@ export function useServerStructure(
 ): UseServerStructureResult {
   const [loaded, setLoaded] = useState<Category[]>([])
   const [status, setStatus] = useState<ServerStructureStatus>('loading')
-  const [error, setError] = useState<string>()
+  const [error, setError] = useState<DisplayError>()
   const [refreshToken, setRefreshToken] = useState(0)
   const refresh = useCallback(() => setRefreshToken((n) => n + 1), [])
 
@@ -95,10 +96,10 @@ export function useServerStructure(
         })
         .catch((err) => {
           if (cancelled) return
-          if (err instanceof HttpError && err.status === 403) onForbiddenRef.current?.()
+          if (err instanceof ApiError && err.status === 403) onForbiddenRef.current?.()
           if (!isFirstLoad) return
           setStatus('error')
-          setError(err instanceof Error ? err.message : 'falha ao carregar categorias/canais')
+          setError(err instanceof Error ? err : new LocalizedError(() => i18n.t('channels.loadFailed')))
         })
     }
 
@@ -193,7 +194,9 @@ export function useServerStructure(
 
   const categories = useMemo(() => applyPendingOrder(loaded, pending), [loaded, pending])
 
-  return { categories, status, error, refresh, saveCategoryOrder, saveChannelOrder }
+  const errorText = useErrorText(error)
+
+  return { categories, status, error: errorText, refresh, saveCategoryOrder, saveChannelOrder }
 }
 
 // Aplica a ordem pendente sobre a estrutura vinda do servidor. Canal ou
@@ -218,7 +221,7 @@ function applyPendingOrder(categories: Category[], pending: PendingOrder): Categ
     const uncategorized = groupByCategory.get(UNCATEGORIZED_ID)
     if (uncategorized && !result.some((c) => c.id === UNCATEGORIZED_ID)) {
       const channels = uncategorized.ids.map((id) => channelById.get(id)).filter((ch) => ch !== undefined)
-      if (channels.length > 0) result = [{ id: UNCATEGORIZED_ID, name: 'Canais', channels }, ...result]
+      if (channels.length > 0) result = [{ id: UNCATEGORIZED_ID, name: '', channels }, ...result]
     }
   }
   if (pending.categoryIds) {

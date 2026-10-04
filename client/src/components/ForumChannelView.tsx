@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthProvider'
 import { useForumChannel } from '../hooks/useForumChannel'
+import { formatDateTime, formatMessageTime } from '../lib/format'
 import { fetchMe } from '../lib/serverChannelApi'
+import { MessageTime } from './TextChannelView'
 import type { Channel } from '../types'
 import './ForumChannelView.css'
 
@@ -11,6 +14,7 @@ interface ForumChannelViewProps {
 }
 
 export function ForumChannelView({ serverBaseUrl, channel }: ForumChannelViewProps) {
+  const { t } = useTranslation()
   const { accessToken } = useAuth()
   const [selfMemberId, setSelfMemberId] = useState<string>()
   const [composing, setComposing] = useState(false)
@@ -43,7 +47,7 @@ export function ForumChannelView({ serverBaseUrl, channel }: ForumChannelViewPro
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
   }, [posts])
 
-  const activeThread = threads.find((t) => t.id === activeThreadId)
+  const activeThread = threads.find((thread) => thread.id === activeThreadId)
 
   function handleCreateThread(e: FormEvent) {
     e.preventDefault()
@@ -69,12 +73,12 @@ export function ForumChannelView({ serverBaseUrl, channel }: ForumChannelViewPro
       <div className="forum-channel">
         <div className="forum-thread-header">
           <button className="forum-back" onClick={() => openThread(undefined)}>
-            ← Threads
+            {t('forum.back')}
           </button>
-          <span className="forum-thread-title">{activeThread?.title ?? 'Thread'}</span>
+          <span className="forum-thread-title">{activeThread?.title ?? t('forum.threadFallback')}</span>
         </div>
         <div className="message-list" ref={listRef}>
-          {postsLoading && <p className="placeholder">Carregando posts…</p>}
+          {postsLoading && <p className="placeholder">{t('forum.loadingPosts')}</p>}
           {!postsLoading &&
             posts.map((m) => (
               <div
@@ -82,24 +86,25 @@ export function ForumChannelView({ serverBaseUrl, channel }: ForumChannelViewPro
                 className={m.authorMemberId === selfMemberId ? 'message message-self' : 'message'}
               >
                 <span className="message-author">
-                  {m.authorMemberId === selfMemberId ? 'você' : m.authorMemberId.slice(0, 8)}
+                  {m.authorMemberId === selfMemberId ? t('common.you') : m.authorMemberId.slice(0, 8)}
                 </span>
+                <MessageTime createdAt={m.createdAt} />
                 <span className="message-content">{m.content}</span>
               </div>
             ))}
         </div>
-        {status === 'reconnecting' && <div className="message-status">Reconectando…</div>}
-      {error && <div className="message-error">{error}</div>}
+        {status === 'reconnecting' && <div className="message-status">{t('chat.reconnecting')}</div>}
+        {error && <div className="message-error">{error}</div>}
         <form className="message-form" onSubmit={handleReply}>
           <input
             type="text"
             value={reply}
             onChange={(e) => setReply(e.target.value)}
-            placeholder="Responder na thread"
+            placeholder={t('forum.replyPlaceholder')}
             disabled={status !== 'open'}
           />
           <button type="submit" disabled={status !== 'open' || reply.trim() === ''}>
-            Enviar
+            {t('common.send')}
           </button>
         </form>
       </div>
@@ -109,20 +114,24 @@ export function ForumChannelView({ serverBaseUrl, channel }: ForumChannelViewPro
   return (
     <div className="forum-channel">
       <div className="forum-thread-list">
-        {status === 'loading' && <p className="placeholder">Carregando threads…</p>}
+        {status === 'loading' && <p className="placeholder">{t('forum.loadingThreads')}</p>}
         {status !== 'loading' && threads.length === 0 && !composing && (
-          <p className="placeholder">Nenhum post ainda. Seja o primeiro a abrir uma thread.</p>
+          <p className="placeholder">{t('forum.empty')}</p>
         )}
-        {threads.map((t) => (
-          <button key={t.id} className="forum-thread-item" onClick={() => openThread(t.id)}>
-            <span className="forum-thread-item-title">{t.title}</span>
+        {threads.map((thread) => (
+          <button key={thread.id} className="forum-thread-item" onClick={() => openThread(thread.id)}>
+            <span className="forum-thread-item-title">{thread.title}</span>
             <span className="forum-thread-item-meta">
-              {t.authorMemberId === selfMemberId ? 'você' : t.authorMemberId.slice(0, 8)}
+              {thread.authorMemberId === selfMemberId ? t('common.you') : thread.authorMemberId.slice(0, 8)}
+              {' · '}
+              <time dateTime={thread.createdAt} title={formatDateTime(thread.createdAt)}>
+                {formatMessageTime(thread.createdAt)}
+              </time>
             </span>
           </button>
         ))}
       </div>
-      {status === 'reconnecting' && <div className="message-status">Reconectando…</div>}
+      {status === 'reconnecting' && <div className="message-status">{t('chat.reconnecting')}</div>}
       {error && <div className="message-error">{error}</div>}
       {composing ? (
         <form className="forum-new-thread-form" onSubmit={handleCreateThread}>
@@ -130,33 +139,33 @@ export function ForumChannelView({ serverBaseUrl, channel }: ForumChannelViewPro
             type="text"
             value={draftTitle}
             onChange={(e) => setDraftTitle(e.target.value)}
-            placeholder="Título do post"
+            placeholder={t('forum.titlePlaceholder')}
             disabled={status !== 'open'}
             autoFocus
           />
           <textarea
             value={draftContent}
             onChange={(e) => setDraftContent(e.target.value)}
-            placeholder="Conteúdo do post inicial"
+            placeholder={t('forum.contentPlaceholder')}
             disabled={status !== 'open'}
             rows={3}
           />
           <div className="forum-new-thread-actions">
             <button type="button" className="forum-cancel" onClick={() => setComposing(false)}>
-              Cancelar
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
               disabled={status !== 'open' || draftTitle.trim() === '' || draftContent.trim() === ''}
             >
-              Publicar
+              {t('forum.publish')}
             </button>
           </div>
         </form>
       ) : (
         <div className="forum-new-thread-trigger">
           <button onClick={() => setComposing(true)} disabled={status !== 'open'}>
-            Novo post
+            {t('forum.newPost')}
           </button>
         </div>
       )}

@@ -10,6 +10,12 @@
 
     /* Bundler mode */
     "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    /* Arquivos de idioma: ../locales no repositório, ./locales no build
+       Docker (ver o alias @locales em vite.config.ts). */
+    "paths": {
+      "@locales/*": ["../locales/*", "./locales/*"]
+    },
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",

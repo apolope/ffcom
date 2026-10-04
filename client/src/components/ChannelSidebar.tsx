@@ -1,4 +1,5 @@
 import { Fragment, useState, type DragEvent } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import type { Category, ChannelType, KnownServer, Member } from '../types'
 import { UNCATEGORIZED_ID, type ChannelOrderGroup, type VoiceParticipant } from '../lib/serverChannelApi'
 import type { StructurePermissions } from '../lib/permissions'
@@ -78,6 +79,7 @@ export function ChannelSidebar({
   onReorderCategories,
   onReorderChannels,
 }: ChannelSidebarProps) {
+  const { t } = useTranslation()
   const memberById = new Map(members.map((m) => [m.id, m]))
   const canEditChannel = structure.rename || structure.reorderChannels || structure.deleteChannels
   const canEditCategory = structure.rename || structure.deleteCategories
@@ -132,18 +134,21 @@ export function ChannelSidebar({
   }
 
   return (
-    <nav className="channel-sidebar" aria-label="Canais">
+    <nav className="channel-sidebar" aria-label={t('channels.title')}>
       <div className="server-name">
         <span>{server.name}</span>
       </div>
       <div className="category-list">
         {structure.createChannels && categories.length === 0 && (
           <p className="structure-empty-hint">
-            Servidor sem canais. Crie uma categoria abaixo ou{' '}
-            <button type="button" className="structure-inline-link" onClick={() => onCreateChannel(undefined)}>
-              um canal sem categoria
-            </button>
-            .
+            <Trans
+              i18nKey="channels.emptyServer"
+              components={{
+                link: (
+                  <button type="button" className="structure-inline-link" onClick={() => onCreateChannel(undefined)} />
+                ),
+              }}
+            />
           </p>
         )}
         {categories.map((category) => {
@@ -164,7 +169,7 @@ export function ChannelSidebar({
               <div
                 className={draggable ? 'category-name draggable' : 'category-name'}
                 draggable={draggable}
-                title={draggable ? 'Arraste para reordenar' : undefined}
+                title={draggable ? t('channels.dragToReorder') : undefined}
                 onDragStart={(event) => {
                   event.dataTransfer.effectAllowed = 'move'
                   // Firefox só inicia o arraste com algum dado no dataTransfer.
@@ -173,13 +178,17 @@ export function ChannelSidebar({
                 }}
                 onDragEnd={endDrag}
               >
-                <span className="category-title">{category.name}</span>
+                {/* A sintética "sem categoria" vem com nome fixo da API; o rótulo
+                    sai do idioma ativo. */}
+                <span className="category-title">
+                  {category.id === UNCATEGORIZED_ID ? t('channels.uncategorized') : category.name}
+                </span>
                 {canEditCategory && category.id !== UNCATEGORIZED_ID && (
                   <span className="structure-actions">
                     <button
                       type="button"
-                      title="Editar categoria"
-                      aria-label={`Editar categoria ${category.name}`}
+                      title={t('channels.editCategory')}
+                      aria-label={t('channels.editCategoryNamed', { name: category.name })}
                       onClick={() => onEditCategory(category.id)}
                     >
                       ✎
@@ -190,8 +199,10 @@ export function ChannelSidebar({
                   <button
                     type="button"
                     className="category-add-channel"
-                    title="Novo canal nesta categoria"
-                    aria-label={`Novo canal em ${category.name}`}
+                    title={t('channels.newChannelHere')}
+                    aria-label={t('channels.newChannelIn', {
+                      name: category.id === UNCATEGORIZED_ID ? t('channels.uncategorized') : category.name,
+                    })}
                     onClick={() => onCreateChannel(category.id === UNCATEGORIZED_ID ? undefined : category.id)}
                   >
                     +
@@ -232,7 +243,7 @@ export function ChannelSidebar({
                           </span>
                           {channel.name}
                           {unreadChannelIds.has(channel.id) && (
-                            <span className="unread-dot" aria-label="mensagens não lidas" />
+                            <span className="unread-dot" aria-label={t('channels.unread')} />
                           )}
                         </button>
                         {(canManageRoles || canEditChannel) && (
@@ -241,8 +252,8 @@ export function ChannelSidebar({
                               <button
                                 type="button"
                                 className="channel-edit-button"
-                                title="Permissões do canal"
-                                aria-label={`Permissões do canal ${channel.name}`}
+                                title={t('channels.permissions')}
+                                aria-label={t('channels.permissionsNamed', { name: channel.name })}
                                 onClick={() => onEditChannelPermissions(channel.id)}
                               >
                                 🔒
@@ -252,8 +263,8 @@ export function ChannelSidebar({
                               <button
                                 type="button"
                                 className="channel-edit-button"
-                                title="Editar canal"
-                                aria-label={`Editar canal ${channel.name}`}
+                                title={t('channels.editChannel')}
+                                aria-label={t('channels.editChannelNamed', { name: channel.name })}
                                 onClick={() => onEditChannel(channel.id)}
                               >
                                 ✎
@@ -264,7 +275,7 @@ export function ChannelSidebar({
                       </li>
                       {channel.type === 'voice' && voiceParticipants[channel.id] && (
                         <li>
-                          <ul className="voice-participants" aria-label={`Na sala ${channel.name}`}>
+                          <ul className="voice-participants" aria-label={t('channels.voiceRoom', { name: channel.name })}>
                             {voiceParticipants[channel.id].map((p) => (
                               <li key={p.memberId} className="sidebar-voice-participant">
                                 <VoiceParticipantAvatar
@@ -272,7 +283,7 @@ export function ChannelSidebar({
                                   fallbackName={p.name || p.memberId.slice(0, 8)}
                                 />
                                 {memberById.get(p.memberId)?.nickname ?? (p.name || p.memberId.slice(0, 8))}
-                                {p.memberId === selfMemberId && <span className="voice-participant-self">(você)</span>}
+                                {p.memberId === selfMemberId && <span className="voice-participant-self">{t('channels.youSuffix')}</span>}
                               </li>
                             ))}
                           </ul>
@@ -289,12 +300,12 @@ export function ChannelSidebar({
           <button
             type="button"
             className="create-category-card"
-            aria-label="Criar nova categoria"
+            aria-label={t('channels.createCategory')}
             onClick={onCreateCategory}
           >
             <span aria-hidden="true">+</span>
             <span className="create-category-label" aria-hidden="true">
-              Criar nova categoria
+              {t('channels.createCategory')}
             </span>
           </button>
         )}

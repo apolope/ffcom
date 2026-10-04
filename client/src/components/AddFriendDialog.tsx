@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
+import { errorMessage } from '../lib/apiError'
 import './Dialog.css'
 import './InviteCode.css'
 
@@ -14,13 +16,14 @@ interface AddFriendDialogProps {
 // de AddServerDialog para server-channel). Duas ações independentes: gerar
 // um código para compartilhar, ou resgatar um código que alguém te deu.
 export function AddFriendDialog({ onCreateInvite, onRedeemInvite, onClose }: AddFriendDialogProps) {
+  const { t } = useTranslation()
   const [invite, setInvite] = useState<string>()
-  const [inviteError, setInviteError] = useState<string>()
+  const [inviteError, setInviteError] = useState<unknown>()
   const [generating, setGenerating] = useState(false)
   const [copied, setCopied] = useState(false)
 
   const [code, setCode] = useState('')
-  const [redeemError, setRedeemError] = useState<string>()
+  const [redeemError, setRedeemError] = useState<unknown>()
   const [redeeming, setRedeeming] = useState(false)
 
   async function handleGenerateInvite() {
@@ -31,7 +34,7 @@ export function AddFriendDialog({ onCreateInvite, onRedeemInvite, onClose }: Add
       setInvite(newCode)
       setCopied(false)
     } catch (err) {
-      setInviteError(err instanceof Error ? err.message : 'falha ao gerar convite')
+      setInviteError(err)
     } finally {
       setGenerating(false)
     }
@@ -55,7 +58,7 @@ export function AddFriendDialog({ onCreateInvite, onRedeemInvite, onClose }: Add
       await onRedeemInvite(code.trim())
       onClose()
     } catch (err) {
-      setRedeemError(err instanceof Error ? err.message : 'falha ao adicionar amigo')
+      setRedeemError(err)
     } finally {
       setRedeeming(false)
     }
@@ -64,43 +67,47 @@ export function AddFriendDialog({ onCreateInvite, onRedeemInvite, onClose }: Add
   return (
     <div className="dialog-overlay" onClick={onClose}>
       <div className="dialog-card" onClick={(e) => e.stopPropagation()}>
-        <h2>Adicionar amigo</h2>
+        <h2>{t('friends.addFriend')}</h2>
 
         <section className="invite-section">
-          <p className="invite-hint">Gere um código e compartilhe com quem você quer adicionar.</p>
+          <p className="invite-hint">{t('friends.addDialog.hint')}</p>
           {invite ? (
             <div className="invite-code">
               <code>{invite}</code>
               <button type="button" onClick={handleCopyInvite}>
-                {copied ? 'Copiado!' : 'Copiar'}
+                {copied ? t('friends.addDialog.copied') : t('common.copy')}
               </button>
             </div>
           ) : (
             <button type="button" onClick={handleGenerateInvite} disabled={generating}>
-              {generating ? 'Gerando…' : 'Gerar código de convite'}
+              {generating ? t('friends.addDialog.generating') : t('friends.addDialog.generate')}
             </button>
           )}
-          {inviteError && <p className="dialog-error">{inviteError}</p>}
+          {inviteError !== undefined && (
+            <p className="dialog-error">{errorMessage(inviteError, t('friends.addDialog.generateFailed'))}</p>
+          )}
         </section>
 
         <form className="invite-section" onSubmit={handleRedeem}>
           <label>
-            Já tenho um código
+            {t('friends.addDialog.haveCode')}
             <input
               type="text"
-              placeholder="Código de convite"
+              placeholder={t('friends.addDialog.codePlaceholder')}
               value={code}
               onChange={(e) => setCode(e.target.value)}
               required
             />
           </label>
-          {redeemError && <p className="dialog-error">{redeemError}</p>}
+          {redeemError !== undefined && (
+            <p className="dialog-error">{errorMessage(redeemError, t('friends.addDialog.addFailed'))}</p>
+          )}
           <div className="dialog-actions">
             <button type="button" onClick={onClose}>
-              Fechar
+              {t('common.close')}
             </button>
             <button type="submit" className="dialog-submit" disabled={redeeming || !code.trim()}>
-              {redeeming ? 'Adicionando…' : 'Adicionar'}
+              {redeeming ? t('friends.addDialog.adding') : t('common.add')}
             </button>
           </div>
         </form>

@@ -1,17 +1,14 @@
 import { useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
+import { SUPPORTED_LANGUAGES, type Language } from '../i18n'
 import { useMenuDismiss } from '../hooks/useMenuDismiss'
 import type { ChosenStatus } from '../types'
-import { STATUS_LABELS } from './PresenceContext'
+import { statusLabel } from './PresenceContext'
 import './RailMenu.css'
 import { UserAvatar } from './UserAvatar'
 import './StatusMenu.css'
 
-const OPTIONS: { status: ChosenStatus; hint?: string }[] = [
-  { status: 'online' },
-  { status: 'busy', hint: 'Notificações ficam desativadas' },
-  { status: 'away' },
-  { status: 'invisible', hint: 'Aparece offline para os amigos' },
-]
+const OPTIONS: ChosenStatus[] = ['online', 'busy', 'away', 'invisible']
 
 // Quem está logado, para o cabeçalho do menu.
 export interface AccountIdentity {
@@ -32,6 +29,8 @@ interface StatusMenuProps {
   identity: AccountIdentity
   chosen: ChosenStatus
   onChoose: (status: ChosenStatus) => void
+  // Troca o idioma da interface (na hora, sem fechar o menu) e grava na conta.
+  onChooseLanguage: (language: Language) => void
   onEditAvatar: () => void
   // Nome de exibição da conta, em server-central.
   onEditDisplayName?: () => void
@@ -52,12 +51,25 @@ export function StatusMenu({
   identity,
   chosen,
   onChoose,
+  onChooseLanguage,
   onEditAvatar,
   onEditDisplayName,
   onEditNickname,
   onClose,
 }: StatusMenuProps) {
   const ref = useRef<HTMLDivElement>(null)
+  const { t, i18n } = useTranslation()
+  const hints: Partial<Record<ChosenStatus, string>> = {
+    busy: t('profile.statusMenu.busyHint'),
+    invisible: t('profile.statusMenu.invisibleHint'),
+  }
+  const serverName = identity.serverName ?? t('profile.statusMenu.thisServer')
+  // O nome de cada idioma fica no próprio idioma (igual nos dois arquivos),
+  // para quem caiu num idioma que não lê achar o seu.
+  const languageNames: Record<Language, string> = {
+    'pt-BR': t('settings.languageNames.pt-BR'),
+    en: t('settings.languageNames.en'),
+  }
 
   useMenuDismiss(ref, anchor, onClose)
   useEffect(() => {
@@ -71,7 +83,7 @@ export function StatusMenu({
       ref={ref}
       className="rail-menu"
       role="menu"
-      aria-label="Seu status"
+      aria-label={t('profile.statusMenu.label')}
       style={{ left: rect.right + 8, bottom: Math.max(8, window.innerHeight - rect.bottom) }}
     >
       <div className="status-menu-identity">
@@ -81,14 +93,14 @@ export function StatusMenu({
           {identity.username && <span title={identity.username}>@{identity.username}</span>}
           {identity.email && <span title={identity.email}>{identity.email}</span>}
           {identity.nickname && (
-            <span title={`Apelido em ${identity.serverName ?? 'este servidor'}`}>
-              Apelido em {identity.serverName ?? 'este servidor'}: {identity.nickname}
+            <span title={t('profile.statusMenu.nicknameIn', { server: serverName })}>
+              {t('profile.statusMenu.nicknameInValue', { server: serverName, nickname: identity.nickname })}
             </span>
           )}
         </div>
       </div>
       <hr />
-      {OPTIONS.map(({ status, hint }) => (
+      {OPTIONS.map((status) => (
         <button
           key={status}
           type="button"
@@ -102,8 +114,8 @@ export function StatusMenu({
         >
           <span className={`status-menu-dot presence-${status === 'invisible' ? 'offline' : status}`} aria-hidden="true" />
           <span>
-            {STATUS_LABELS[status]}
-            {hint && <span className="status-menu-hint">{hint}</span>}
+            {statusLabel(t, status)}
+            {hints[status] && <span className="status-menu-hint">{hints[status]}</span>}
           </span>
         </button>
       ))}
@@ -118,7 +130,7 @@ export function StatusMenu({
             onClose()
           }}
         >
-          Alterar nome de exibição
+          {t('profile.statusMenu.editDisplayName')}
         </button>
       )}
       {onEditNickname && (
@@ -131,7 +143,7 @@ export function StatusMenu({
             onClose()
           }}
         >
-          Alterar apelido
+          {t('profile.statusMenu.editNickname')}
         </button>
       )}
       <button
@@ -143,22 +155,41 @@ export function StatusMenu({
           onClose()
         }}
       >
-        Alterar avatar
+        {t('profile.statusMenu.editAvatar')}
       </button>
+      <hr />
+      <div role="group" aria-labelledby="status-menu-language">
+        <span id="status-menu-language" className="status-menu-section">
+          {t('settings.language')}
+        </span>
+        {SUPPORTED_LANGUAGES.map((language) => (
+          <button
+            key={language}
+            type="button"
+            role="menuitemradio"
+            aria-checked={i18n.resolvedLanguage === language}
+            className="rail-menu-item"
+            lang={language}
+            onClick={() => onChooseLanguage(language)}
+          >
+            {languageNames[language]}
+          </button>
+        ))}
+      </div>
       <hr />
       {/* Aviso de licença: o código é AGPL e o bundle leva código de
           terceiros (arquivo gerado no build por
           vite-plugin-third-party-licenses.ts). */}
       <p className="status-menu-legal">
         <a href="https://github.com/apolope/ffcom" target="_blank" rel="noreferrer">
-          Código-fonte (AGPL-3.0)
+          {t('profile.statusMenu.sourceCode')}
         </a>
         <a href={`${import.meta.env.BASE_URL}third-party-licenses.txt`} target="_blank" rel="noreferrer">
-          Licenças de terceiros
+          {t('profile.statusMenu.thirdPartyLicenses')}
         </a>
         {/* Tag do deploy (client-vX.Y.Z), embutida no build pelo workflow;
             ausente em build local. */}
-        {import.meta.env.VITE_APP_VERSION && <span>Versão {import.meta.env.VITE_APP_VERSION}</span>}
+        {import.meta.env.VITE_APP_VERSION && <span>{t('profile.statusMenu.version', { version: import.meta.env.VITE_APP_VERSION })}</span>}
       </p>
     </div>
   )

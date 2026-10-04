@@ -32,6 +32,9 @@ import { NotMemberPanel } from './components/NotMemberPanel'
 import { useMe } from './hooks/useMe'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { useMyProfile } from './hooks/useMyProfile'
+import { useTranslation } from 'react-i18next'
+import i18n from './i18n'
+import { errorMessage } from './lib/apiError'
 import { useServerMembers } from './hooks/useServerMembers'
 import { useUnread } from './hooks/useUnread'
 import { useVoiceParticipants } from './hooks/useVoiceParticipants'
@@ -62,6 +65,7 @@ import './App.css'
 
 function App() {
   const { status, user, accessToken, redirecting, signOut } = useAuth()
+  const { t } = useTranslation()
   // `sub` do OIDC: chave de E2E e cursores de não lida em localStorage são
   // por conta, não por navegador (ver crypto/e2e.ts, lib/unread.ts).
   const accountSub = user?.profile.sub ?? ''
@@ -78,12 +82,13 @@ function App() {
     removeAvatar,
     setDisplayName: setMyDisplayName,
     setStatus: setMyStatus,
+    setLanguage: setMyLanguage,
   } = useMyProfile(accessToken ?? '')
   // Mensagens na tela (components/NotificationStack.tsx); desligadas com o
   // status "Ocupado" escolhido pela própria pessoa.
   const { notifications, notify, dismiss: dismissNotification } = useNotificationCenter(myProfile?.status === 'busy')
   const onServerOrderSaveError = useCallback(
-    () => notify('Falha ao salvar a ordem dos servidores. Tentando de novo…', 'error'),
+    () => notify(i18n.t('notifications.serverOrderSaveFailed'), 'error'),
     [notify],
   )
   const { servers, addServer, removeServer, saveOrder: saveServerOrder } = useKnownServers(accessToken ?? '', onServerOrderSaveError)
@@ -98,9 +103,9 @@ function App() {
         // Desfeita pelo outro lado com a DM aberta: volta para a lista.
         setSelectedFriendId((prev) => (prev === event.accountId ? undefined : prev))
       } else if (event.kind === 'request-received') {
-        notify(`${friendRequestName(event.request)} te enviou um pedido de amizade. Veja em Amigos.`)
+        notify(i18n.t('notifications.friendRequestReceived', { name: friendRequestName(event.request) }))
       } else {
-        notify(`${friendRequestName(event)} aceitou seu pedido de amizade.`, 'success')
+        notify(i18n.t('notifications.friendRequestAccepted', { name: friendRequestName(event) }), 'success')
       }
     },
     [notify],
@@ -173,7 +178,7 @@ function App() {
     const incomingByAccount = new Map(incomingRequests.map((r) => [r.accountId, r]))
     const outgoingIds = new Set(outgoingRequests.map((r) => r.accountId))
     const fail = (err: unknown) =>
-      notify(err instanceof Error ? err.message : 'Falha ao atualizar a amizade.', 'error')
+      notify(errorMessage(err, i18n.t('notifications.friendshipUpdateFailed')), 'error')
     return {
       relationOf: (accountId) => {
         if (accountId === myProfile?.accountId) return 'self'
@@ -187,8 +192,8 @@ function App() {
           .then((result) =>
             notify(
               result === 'accepted'
-                ? `Você e ${nickname} agora são amigos.`
-                : `Pedido de amizade enviado para ${nickname}.`,
+                ? i18n.t('notifications.nowFriends', { name: nickname })
+                : i18n.t('notifications.friendRequestSent', { name: nickname }),
               'success',
             ),
           )
@@ -312,7 +317,7 @@ function App() {
   }, [friends, myProfile, ownStatus, accountsBySubject])
 
   const onStructureSaveError = useCallback(
-    () => notify('Falha ao salvar a ordem das categorias e canais. Tentando de novo…', 'error'),
+    () => notify(i18n.t('notifications.structureOrderSaveFailed'), 'error'),
     [notify],
   )
   const {
@@ -518,6 +523,9 @@ function App() {
                       /* setStatus já desfez a troca otimista */
                     })
                   }}
+                  onSetLanguage={(next) => {
+                    setMyLanguage(next).catch(() => notify(i18n.t('settings.languageSaveFailed'), 'error'))
+                  }}
                   onSelectServer={(id) => {
                     setShowFriends(false)
                     setSelectedServerId(id)
@@ -553,12 +561,12 @@ function App() {
                       outgoingRequests={outgoingRequests}
                       onAcceptRequest={(id) => {
                         acceptFriendRequest(id).catch((err: unknown) =>
-                          notify(err instanceof Error ? err.message : 'Falha ao aceitar o pedido.', 'error'),
+                          notify(errorMessage(err, t('notifications.acceptRequestFailed')), 'error'),
                         )
                       }}
                       onRemoveRequest={(id) => {
                         removeFriendRequest(id).catch((err: unknown) =>
-                          notify(err instanceof Error ? err.message : 'Falha ao remover o pedido.', 'error'),
+                          notify(errorMessage(err, t('notifications.removeRequestFailed')), 'error'),
                         )
                       }}
                       onRemoveFriend={async (id) => {
@@ -604,7 +612,7 @@ function App() {
                     <section className="main-panel">
                       <header className="channel-header">
                         <MobileNavButton />
-                        <span className="channel-title">Mensagens diretas</span>
+                        <span className="channel-title">{t('dm.title')}</span>
                       </header>
                       <E2EKeyPanel e2e={e2eKeys} />
                     </section>
@@ -621,7 +629,7 @@ function App() {
                   />
                 ) : (
                   <div className="empty-state">
-                    <p>Selecione um amigo para conversar.</p>
+                    <p>{t('friends.selectPrompt')}</p>
                   </div>
                 )
               ) : server && notMember ? (
@@ -645,7 +653,7 @@ function App() {
                 </>
               ) : (
                 <div className="empty-state">
-                  <p>Nenhum servidor ainda. Adicione um pelo botão "+" na barra lateral.</p>
+                  <p>{t('server.noneYet')}</p>
                 </div>
               )}
               {showAddServer && (

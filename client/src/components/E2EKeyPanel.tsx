@@ -1,4 +1,7 @@
 import { useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
+import i18n from '../i18n'
+import { errorMessage, LocalizedError } from '../lib/apiError'
 import { MIN_PASSPHRASE_LENGTH } from '../crypto/keyBackup'
 import type { E2EKeysResult } from '../hooks/useE2EKeys'
 import './Dialog.css'
@@ -16,16 +19,17 @@ type Mode = 'setup' | 'unlock' | 'reset'
 // hooks/useE2EKeys.ts e docs/architecture.md, "Decisão: backup da chave de
 // E2E com frase de recuperação").
 export function E2EKeyPanel({ e2e }: E2EKeyPanelProps) {
+  const { t } = useTranslation()
   const [forgot, setForgot] = useState(false)
   const [passphrase, setPassphrase] = useState('')
   const [confirmation, setConfirmation] = useState('')
-  const [error, setError] = useState<string>()
+  const [error, setError] = useState<unknown>()
   const [busy, setBusy] = useState(false)
 
   if (e2e.status === 'loading' || e2e.status === 'ready') {
     return (
       <div className="empty-state">
-        <p>Preparando a chave de criptografia…</p>
+        <p>{t('e2e.preparing')}</p>
       </div>
     )
   }
@@ -34,11 +38,11 @@ export function E2EKeyPanel({ e2e }: E2EKeyPanelProps) {
     return (
       <div className="empty-state">
         <div className="dialog-card e2e-key-card">
-          <h2>Criptografia indisponível</h2>
+          <h2>{t('e2e.unavailable')}</h2>
           <p className="dialog-error">{e2e.error}</p>
           <div className="dialog-actions">
             <button type="button" className="dialog-submit" onClick={e2e.retry}>
-              Tentar de novo
+              {t('common.retry')}
             </button>
           </div>
         </div>
@@ -54,11 +58,11 @@ export function E2EKeyPanel({ e2e }: E2EKeyPanelProps) {
     setError(undefined)
     if (choosing) {
       if (passphrase.trim().length < MIN_PASSPHRASE_LENGTH) {
-        setError(`A frase precisa ter pelo menos ${MIN_PASSPHRASE_LENGTH} caracteres.`)
+        setError(new LocalizedError(() => i18n.t('e2e.phraseTooShort', { min: MIN_PASSPHRASE_LENGTH })))
         return
       }
       if (passphrase !== confirmation) {
-        setError('As duas frases não são iguais.')
+        setError(new LocalizedError(() => i18n.t('e2e.phrasesDontMatch')))
         return
       }
     }
@@ -68,7 +72,7 @@ export function E2EKeyPanel({ e2e }: E2EKeyPanelProps) {
       else if (mode === 'reset') await e2e.resetWithNewPassphrase(passphrase)
       else await e2e.unlock(passphrase)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao preparar a chave.')
+      setError(err)
       setPassphrase('')
       setConfirmation('')
     } finally {
@@ -88,42 +92,32 @@ export function E2EKeyPanel({ e2e }: E2EKeyPanelProps) {
       <form className="dialog-card e2e-key-card" onSubmit={handleSubmit}>
         {mode === 'setup' && (
           <>
-            <h2>Crie sua frase de recuperação</h2>
-            <p>
-              Ela protege a chave que cifra suas mensagens diretas. Você vai digitá-la uma vez em cada
-              dispositivo novo para ler o seu histórico. Ninguém consegue recuperá-la por você, nem quem
-              administra o FFCom: se esquecer, as mensagens antigas ficam ilegíveis.
-            </p>
+            <h2>{t('e2e.setupTitle')}</h2>
+            <p>{t('e2e.setupBody')}</p>
             {e2e.publishedElsewhere && (
               <div className="dialog-danger-zone">
-                <p>
-                  Sua chave atual foi criada em outro dispositivo. Para manter o histórico, crie a frase
-                  naquele dispositivo. Se criar aqui, as mensagens antigas ficam ilegíveis.
-                </p>
+                <p>{t('e2e.publishedElsewhere')}</p>
               </div>
             )}
           </>
         )}
         {mode === 'unlock' && (
           <>
-            <h2>Digite sua frase de recuperação</h2>
-            <p>Ela libera neste dispositivo a chave das suas mensagens diretas.</p>
+            <h2>{t('e2e.unlockTitle')}</h2>
+            <p>{t('e2e.unlockBody')}</p>
           </>
         )}
         {mode === 'reset' && (
           <>
-            <h2>Criar uma chave nova</h2>
+            <h2>{t('e2e.resetTitle')}</h2>
             <div className="dialog-danger-zone">
-              <p>
-                Sem a frase antiga, o histórico de mensagens diretas fica ilegível em todos os dispositivos,
-                e os outros dispositivos vão pedir a frase nova. Mensagens novas funcionam normalmente.
-              </p>
+              <p>{t('e2e.resetBody')}</p>
             </div>
           </>
         )}
 
         <label>
-          {choosing ? 'Frase de recuperação' : 'Frase'}
+          {choosing ? t('e2e.recoveryPhrase') : t('e2e.phrase')}
           <input
             type="password"
             value={passphrase}
@@ -135,7 +129,7 @@ export function E2EKeyPanel({ e2e }: E2EKeyPanelProps) {
         </label>
         {choosing && (
           <label>
-            Repita a frase
+            {t('e2e.repeatPhrase')}
             <input
               type="password"
               value={confirmation}
@@ -145,24 +139,24 @@ export function E2EKeyPanel({ e2e }: E2EKeyPanelProps) {
             />
           </label>
         )}
-        {error && <p className="dialog-error">{error}</p>}
+        {error !== undefined && <p className="dialog-error">{errorMessage(error, t('e2e.prepareKeyFailed'))}</p>}
 
         {mode !== 'setup' && (
           <button type="button" className="dialog-danger-link" onClick={toggleForgot} disabled={busy}>
-            {mode === 'unlock' ? 'Esqueci a frase' : 'Voltar e digitar a frase'}
+            {mode === 'unlock' ? t('e2e.forgotPhrase') : t('e2e.backToPhrase')}
           </button>
         )}
         <div className="dialog-actions">
           <button type="submit" className="dialog-submit" disabled={busy || passphrase === ''}>
             {busy
               ? mode === 'unlock'
-                ? 'Desbloqueando…'
-                : 'Protegendo a chave…'
+                ? t('e2e.unlocking')
+                : t('e2e.protecting')
               : mode === 'setup'
-                ? 'Criar frase'
+                ? t('e2e.createPhrase')
                 : mode === 'reset'
-                  ? 'Criar chave nova'
-                  : 'Desbloquear'}
+                  ? t('e2e.createNewKey')
+                  : t('e2e.unlock')}
           </button>
         </div>
       </form>

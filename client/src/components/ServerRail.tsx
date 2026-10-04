@@ -1,8 +1,10 @@
 import { useCallback, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ChosenStatus, KnownServer, PresenceStatus } from '../types'
+import type { Language } from '../i18n'
 import type { MyProfile } from '../lib/serverCentralApi'
 import { AvatarWithStatus } from './AvatarWithStatus'
-import { STATUS_LABELS } from './PresenceContext'
+import { statusLabel } from './PresenceContext'
 import { ServerMenu, type ServerMenuActions } from './ServerMenu'
 import { StatusMenu, type AccountIdentity } from './StatusMenu'
 import { UpdateButton } from './UpdateButton'
@@ -28,6 +30,7 @@ interface ServerRailProps {
   // Como a pessoa aparece para os amigos agora (escolha + ociosidade).
   myStatus: PresenceStatus
   onSetStatus: (status: ChosenStatus) => void
+  onSetLanguage: (language: Language) => void
   onSelectServer: (serverId: string) => void
   // Ordem nova completa do rail depois de arrastar um ícone.
   onReorderServers: (serverIds: string[]) => void
@@ -56,6 +59,7 @@ export function ServerRail({
   account,
   myStatus,
   onSetStatus,
+  onSetLanguage,
   onSelectServer,
   onReorderServers,
   serverMenuActions,
@@ -66,6 +70,7 @@ export function ServerRail({
   onEditNickname,
   onSignOut,
 }: ServerRailProps) {
+  const { t } = useTranslation()
   // Âncora do menu de status (undefined = fechado).
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement>()
   const closeMenu = useCallback(() => setMenuAnchor(undefined), [])
@@ -107,12 +112,12 @@ export function ServerRail({
     // Três faixas: Amigos fixo no topo, servidores rolando no meio e
     // adicionar servidor, conta e sair fixos embaixo, para nunca saírem da
     // tela com muitos servidores.
-    <nav className="server-rail" aria-label="Servidores">
+    <nav className="server-rail" aria-label={t('server.rail.label')}>
       <button
         type="button"
         className={friendsSelected ? 'server-icon active' : 'server-icon'}
         onClick={onSelectFriends}
-        title={friendsUnread ? 'Amigos (mensagens não lidas)' : 'Amigos'}
+        title={friendsUnread ? t('server.rail.friendsUnread') : t('server.rail.friends')}
       >
         {friendsUnread && <span className="rail-unread-pill" aria-hidden="true" />}
         <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">
@@ -126,8 +131,8 @@ export function ServerRail({
           <button
             type="button"
             className="rail-scroll-hint up"
-            title="Ir para o topo da lista"
-            aria-label="Ir para o topo da lista de servidores"
+            title={t('server.rail.scrollTop')}
+            aria-label={t('server.rail.scrollTopLabel')}
             onClick={() => scrollToEdge('top')}
           >
             <DoubleChevron />
@@ -181,7 +186,7 @@ export function ServerRail({
                     onSelectServer(server.id)
                     setServerMenu({ anchor: button, server })
                   }}
-                  title={unreadServerIds.has(server.id) ? `${server.name} (mensagens não lidas)` : server.name}
+                  title={unreadServerIds.has(server.id) ? t('server.rail.serverUnread', { name: server.name }) : server.name}
                 >
                   {unreadServerIds.has(server.id) && <span className="rail-unread-pill" aria-hidden="true" />}
                   {server.initials}
@@ -202,8 +207,8 @@ export function ServerRail({
           <button
             type="button"
             className="rail-scroll-hint down"
-            title="Ir para o fim da lista"
-            aria-label="Ir para o fim da lista de servidores"
+            title={t('server.rail.scrollBottom')}
+            aria-label={t('server.rail.scrollBottomLabel')}
             onClick={() => scrollToEdge('bottom')}
           >
             <DoubleChevron />
@@ -214,7 +219,7 @@ export function ServerRail({
         <button
           type="button"
           className="server-icon add-server"
-          title="Adicionar servidor"
+          title={t('server.rail.addServer')}
           onClick={onAddServer}
         >
           +
@@ -223,7 +228,7 @@ export function ServerRail({
         <button
           type="button"
           className="account-button"
-          title={`Seu status: ${STATUS_LABELS[chosen]}`}
+          title={t('server.rail.myStatus', { status: statusLabel(t, chosen) })}
           aria-haspopup="menu"
           aria-expanded={!!menuAnchor}
           onClick={(event) => {
@@ -249,13 +254,14 @@ export function ServerRail({
             }}
             chosen={chosen}
             onChoose={onSetStatus}
+            onChooseLanguage={onSetLanguage}
             onEditAvatar={onOpenMyAvatar}
             onEditDisplayName={onEditDisplayName}
             onEditNickname={onEditNickname}
             onClose={closeMenu}
           />
         )}
-        <button type="button" className="sign-out-button" title="Sair" aria-label="Sair" onClick={onSignOut}>
+        <button type="button" className="sign-out-button" title={t('auth.signOut')} aria-label={t('auth.signOut')} onClick={onSignOut}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
             <path d="M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5v-2H5V5h5V3zm6.6 4.6-1.4 1.4 2 2H9v2h8.2l-2 2 1.4 1.4L21 12l-4.4-4.4z" />
           </svg>

@@ -1,4 +1,6 @@
 import { useId } from 'react'
+import { useTranslation } from 'react-i18next'
+import { formatNumber } from '../lib/format'
 import { DEFAULT_PARTICIPANT_AUDIO, MAX_VOLUME, type ParticipantAudio } from '../lib/participantAudio'
 
 interface ParticipantVolumeControlsProps {
@@ -14,6 +16,7 @@ interface ParticipantVolumeControlsProps {
 // dispositivo (lib/participantAudio.ts).
 export function ParticipantVolumeControls({ name, audio, screenShareAudio, onChange }: ParticipantVolumeControlsProps) {
   const id = useId()
+  const { t } = useTranslation()
   // O controle da tela só aparece quando há o que ajustar: a pessoa está
   // mandando áudio de tela ou já tem um volume de tela escolhido antes.
   const showScreen = screenShareAudio || audio.screen !== DEFAULT_PARTICIPANT_AUDIO.screen
@@ -21,10 +24,10 @@ export function ParticipantVolumeControls({ name, audio, screenShareAudio, onCha
     audio.voice === DEFAULT_PARTICIPANT_AUDIO.voice && audio.screen === DEFAULT_PARTICIPANT_AUDIO.screen && !audio.muted
 
   return (
-    <div className="voice-volume-panel" role="group" aria-label={`Volume de ${name}`}>
+    <div className="voice-volume-panel" role="group" aria-label={t('voice.volumeOf', { name })}>
       <VolumeSlider
         id={`${id}-voice`}
-        label="Voz"
+        label={t('voice.volumePanel.voice')}
         value={audio.voice}
         disabled={audio.muted}
         onChange={(voice) => onChange({ voice })}
@@ -32,7 +35,7 @@ export function ParticipantVolumeControls({ name, audio, screenShareAudio, onCha
       {showScreen && (
         <VolumeSlider
           id={`${id}-screen`}
-          label="Áudio da tela"
+          label={t('voice.volumePanel.screenAudio')}
           value={audio.screen}
           disabled={audio.muted}
           onChange={(screen) => onChange({ screen })}
@@ -41,11 +44,11 @@ export function ParticipantVolumeControls({ name, audio, screenShareAudio, onCha
       <div className="voice-volume-actions">
         <label className="voice-pref">
           <input type="checkbox" checked={audio.muted} onChange={() => onChange({ muted: !audio.muted })} />
-          Silenciar para mim
+          {t('voice.volumePanel.muteForMe')}
         </label>
         {!isDefault && (
           <button type="button" onClick={() => onChange(DEFAULT_PARTICIPANT_AUDIO)}>
-            Restaurar
+            {t('voice.volumePanel.reset')}
           </button>
         )}
       </div>
@@ -76,7 +79,7 @@ function VolumeSlider({ id, label, value, disabled, onChange }: VolumeSliderProp
         disabled={disabled}
         onChange={(event) => onChange(Number(event.target.value) / 100)}
       />
-      <output htmlFor={id}>{percent}%</output>
+      <output htmlFor={id}>{formatNumber(value, { style: 'percent', maximumFractionDigits: 0 })}</output>
     </div>
   )
 }

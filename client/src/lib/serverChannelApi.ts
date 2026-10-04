@@ -4,6 +4,7 @@
 // para operações CRUD/stateless, WebSocket para tempo real.
 
 import type { Category, ChannelType } from '../types'
+import { apiErrorFromResponse } from './apiError'
 
 export interface RemoteCategory {
   id: string
@@ -76,24 +77,11 @@ export interface Me {
   roleIds?: string[]
 }
 
-// Erro de resposta HTTP não-2xx. A mensagem continua no formato de antes
-// ("403 Forbidden: ..."); status fica exposto para quem precisa decidir se
-// vale tentar de novo (ver lib/reconnectingSocket.ts).
-export class HttpError extends Error {
-  readonly status: number
-
-  constructor(status: number, message: string) {
-    super(message)
-    this.name = 'HttpError'
-    this.status = status
-  }
-}
-
+// Resposta fora de 2xx vira ApiError (lib/apiError.ts): status para quem
+// decide se vale tentar de novo (lib/reconnectingSocket.ts) e a mensagem
+// traduzida pelo code do servidor.
 async function parseJsonOrThrow<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new HttpError(res.status, `${res.status} ${res.statusText}${text ? `: ${text}` : ''}`)
-  }
+  if (!res.ok) throw await apiErrorFromResponse(res)
   return res.json() as Promise<T>
 }
 
@@ -474,7 +462,8 @@ export function groupIntoCategories(
     categories.map((c) => [c.id, { id: c.id, name: c.name, channels: [] }]),
   )
 
-  const uncategorized: Category = { id: UNCATEGORIZED_ID, name: 'Canais', channels: [] }
+  // Sem nome próprio: quem mostra usa t('channels.uncategorized') pelo id.
+  const uncategorized: Category = { id: UNCATEGORIZED_ID, name: '', channels: [] }
   let hasUncategorized = false
 
   for (const channel of channels) {
@@ -692,9 +681,7 @@ export async function fetchAttachmentBlob(
   const res = await fetch(`${baseUrl}${attachment.url}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
-  if (!res.ok) {
-    throw new Error(`${res.status} ${res.statusText}`)
-  }
+  if (!res.ok) throw await apiErrorFromResponse(res)
   return res.blob()
 }
 
@@ -743,9 +730,15 @@ interface PostCreatedFrame {
   message: ChannelMessage
 }
 
+// Frame `error` (docs/protocol.md, "Frame `error` do WebSocket"): `error`
+// repete `message` para clients antigos; servidor anterior ao code só manda
+// `error`.
 interface ErrorFrame {
   type: 'error'
-  error: string
+  code?: string
+  message?: string
+  params?: Record<string, unknown>
+  error?: string
 }
 
 export type ChannelSocketFrame =

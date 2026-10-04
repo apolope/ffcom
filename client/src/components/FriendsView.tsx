@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
+import { errorMessage } from '../lib/apiError'
 import { useMenuDismiss } from '../hooks/useMenuDismiss'
 import { friendRequestName, type FriendRequest } from '../lib/serverCentralApi'
 import type { Friend } from '../types'
@@ -46,13 +48,14 @@ export function FriendsView({
   const online = friends.filter((f) => f.online)
   const offline = friends.filter((f) => !f.online)
   const [menu, setMenu] = useState<{ friend: Friend; anchor: HTMLElement; x: number; y: number }>()
+  const { t } = useTranslation()
 
   return (
-    <nav className="friends-view" aria-label="Amigos">
+    <nav className="friends-view" aria-label={t('friends.title')}>
       <header className="friends-header">
-        <h1>Amigos</h1>
+        <h1>{t('friends.title')}</h1>
         <button type="button" onClick={onAddFriend}>
-          Adicionar amigo
+          {t('friends.addFriend')}
         </button>
       </header>
 
@@ -60,14 +63,16 @@ export function FriendsView({
         <div className="friends-list friends-requests">
           {incomingRequests.length > 0 && (
             <div className="friends-group">
-              <div className="friends-group-name">Pedidos recebidos — {incomingRequests.length}</div>
+              <div className="friends-group-name">
+                {t('friends.incomingRequests', { total: incomingRequests.length })}
+              </div>
               {incomingRequests.map((request) => (
-                <FriendRequestRow key={request.id} request={request} hint="Quer ser seu amigo">
+                <FriendRequestRow key={request.id} request={request} hint={t('friends.wantsToBeFriends')}>
                   <button
                     type="button"
                     className="friend-request-action accept"
-                    title="Aceitar"
-                    aria-label={`Aceitar pedido de ${friendRequestName(request)}`}
+                    title={t('friends.accept')}
+                    aria-label={t('friends.acceptRequestFrom', { name: friendRequestName(request) })}
                     onClick={() => onAcceptRequest(request.id)}
                   >
                     ✓
@@ -75,8 +80,8 @@ export function FriendsView({
                   <button
                     type="button"
                     className="friend-request-action decline"
-                    title="Recusar"
-                    aria-label={`Recusar pedido de ${friendRequestName(request)}`}
+                    title={t('friends.decline')}
+                    aria-label={t('friends.declineRequestFrom', { name: friendRequestName(request) })}
                     onClick={() => onRemoveRequest(request.id)}
                   >
                     ✕
@@ -87,14 +92,16 @@ export function FriendsView({
           )}
           {outgoingRequests.length > 0 && (
             <div className="friends-group">
-              <div className="friends-group-name">Pedidos enviados — {outgoingRequests.length}</div>
+              <div className="friends-group-name">
+                {t('friends.outgoingRequests', { total: outgoingRequests.length })}
+              </div>
               {outgoingRequests.map((request) => (
-                <FriendRequestRow key={request.id} request={request} hint="Aguardando resposta">
+                <FriendRequestRow key={request.id} request={request} hint={t('friends.awaitingResponse')}>
                   <button
                     type="button"
                     className="friend-request-action decline"
-                    title="Cancelar pedido"
-                    aria-label={`Cancelar pedido para ${friendRequestName(request)}`}
+                    title={t('friends.cancelRequest')}
+                    aria-label={t('friends.cancelRequestTo', { name: friendRequestName(request) })}
                     onClick={() => onRemoveRequest(request.id)}
                   >
                     ✕
@@ -108,13 +115,13 @@ export function FriendsView({
 
       {friends.length === 0 ? (
         <div className="friends-empty">
-          <p>Você ainda não tem amigos adicionados. Use "Adicionar amigo" para gerar ou resgatar um convite.</p>
+          <p>{t('friends.empty')}</p>
         </div>
       ) : (
         <div className="friends-list">
           {online.length > 0 && (
             <div className="friends-group">
-              <div className="friends-group-name">Online — {online.length}</div>
+              <div className="friends-group-name">{t('friends.onlineGroup', { total: online.length })}</div>
               {online.map((friend) => (
                 <FriendRow
                   key={friend.accountId}
@@ -129,7 +136,7 @@ export function FriendsView({
           )}
           {offline.length > 0 && (
             <div className="friends-group">
-              <div className="friends-group-name">Offline — {offline.length}</div>
+              <div className="friends-group-name">{t('friends.offlineGroup', { total: offline.length })}</div>
               {offline.map((friend) => (
                 <FriendRow
                   key={friend.accountId}
@@ -174,6 +181,7 @@ function FriendRow({
   onSelect: (accountId: string) => void
   onContextMenu: (anchor: HTMLElement, x: number, y: number) => void
 }) {
+  const { t } = useTranslation()
   return (
     <button
       type="button"
@@ -199,7 +207,7 @@ function FriendRow({
         size={24}
       />
       {friend.displayName}
-      {unread && <span className="unread-dot" aria-label="mensagens não lidas" />}
+      {unread && <span className="unread-dot" aria-label={t('friends.unreadMessages')} />}
     </button>
   )
 }
@@ -234,7 +242,8 @@ function FriendMenu({
   useMenuDismiss(ref, anchor, onClose)
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string>()
+  const [error, setError] = useState<unknown>()
+  const { t } = useTranslation()
   useEffect(() => {
     ref.current?.querySelector<HTMLButtonElement>('button')?.focus()
   }, [confirming])
@@ -246,7 +255,7 @@ function FriendMenu({
       await onRemove()
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'falha ao remover amigo')
+      setError(err)
       setBusy(false)
     }
   }
@@ -256,7 +265,7 @@ function FriendMenu({
       ref={ref}
       className="rail-menu friend-menu"
       role="menu"
-      aria-label={`Ações para ${friend.displayName}`}
+      aria-label={t('friends.actionsFor', { name: friend.displayName })}
       style={{
         left: Math.max(8, Math.min(x, window.innerWidth - MENU_WIDTH)),
         top: Math.max(8, Math.min(y, window.innerHeight - MENU_HEIGHT)),
@@ -264,11 +273,10 @@ function FriendMenu({
     >
       {confirming ? (
         <>
-          <span className="rail-menu-empty">
-            Remover {friend.displayName} dos amigos? As mensagens ficam guardadas, mas só voltam a aparecer se vocês
-            forem amigos de novo.
-          </span>
-          {error && <span className="friend-menu-error">{error}</span>}
+          <span className="rail-menu-empty">{t('friends.removeConfirm', { name: friend.displayName })}</span>
+          {error !== undefined && (
+            <span className="friend-menu-error">{errorMessage(error, t('friends.removeFailed'))}</span>
+          )}
           <button
             type="button"
             role="menuitem"
@@ -276,10 +284,10 @@ function FriendMenu({
             disabled={busy}
             onClick={() => void remove()}
           >
-            {busy ? 'Removendo…' : 'Confirmar remoção'}
+            {busy ? t('friends.removing') : t('friends.confirmRemove')}
           </button>
           <button type="button" role="menuitem" className="rail-menu-item" disabled={busy} onClick={onClose}>
-            Cancelar
+            {t('common.cancel')}
           </button>
         </>
       ) : (
@@ -293,7 +301,7 @@ function FriendMenu({
               onClose()
             }}
           >
-            Enviar mensagem
+            {t('friends.sendMessage')}
           </button>
           <button
             type="button"
@@ -301,7 +309,7 @@ function FriendMenu({
             className="rail-menu-item friend-menu-danger"
             onClick={() => setConfirming(true)}
           >
-            Remover amigo
+            {t('friends.removeFriend')}
           </button>
         </>
       )}

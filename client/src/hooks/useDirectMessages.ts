@@ -5,6 +5,8 @@ import {
   sendDirectMessageFrame,
   type RemoteDirectMessage,
 } from '../lib/serverCentralApi'
+import { LocalizedError, problemFromFrame, useErrorText, type DisplayError } from '../lib/apiError'
+import i18n from '../i18n'
 import { decryptDM, encryptDM, type E2EKeyPair } from '../crypto/e2e'
 import type { Friend } from '../types'
 
@@ -40,7 +42,7 @@ export function useDirectMessages(
 ): UseDirectMessagesResult {
   const [messages, setMessages] = useState<DecryptedDirectMessage[]>([])
   const [status, setStatus] = useState<DirectMessagesStatus>('loading')
-  const [error, setError] = useState<string>()
+  const [error, setError] = useState<DisplayError>()
 
   const peerId = peer?.accountId
   const peerPublicKey = peer?.e2ePublicKey
@@ -70,7 +72,7 @@ export function useDirectMessages(
       .catch((err) => {
         if (cancelled) return
         setStatus('error')
-        setError(err instanceof Error ? err.message : 'falha ao carregar conversa')
+        setError(err instanceof Error ? err : new LocalizedError(() => i18n.t('dm.loadFailed')))
       })
 
     return () => {
@@ -89,7 +91,7 @@ export function useDirectMessages(
         if (m.senderId !== peerId && m.recipientId !== peerId) return
         setMessages((prev) => [...prev, decrypt(m)])
       } else if (frame.type === 'error') {
-        setError(frame.error)
+        setError(problemFromFrame(frame))
       }
     }
 
@@ -101,7 +103,7 @@ export function useDirectMessages(
     (content: string) => {
       if (!socket || socket.readyState !== WebSocket.OPEN || !peerId) return
       if (!peerPublicKey) {
-        setError('amigo ainda não criou a frase de recuperação da criptografia')
+        setError(new LocalizedError(() => i18n.t('dm.peerHasNoKeyError')))
         return
       }
       const { ciphertext, nonce } = encryptDM(content, peerPublicKey, myKeyPair.secretKey)
@@ -110,5 +112,7 @@ export function useDirectMessages(
     [socket, peerId, peerPublicKey, myKeyPair],
   )
 
-  return { messages, status, error, sendMessage }
+  const errorText = useErrorText(error)
+
+  return { messages, status, error: errorText, sendMessage }
 }

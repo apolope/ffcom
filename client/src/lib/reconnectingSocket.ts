@@ -1,4 +1,4 @@
-import { HttpError } from './serverChannelApi'
+import { ApiError, LocalizedError } from './apiError'
 
 // Mantém o WebSocket de um canal (texto ou forum) aberto enquanto o job
 // existir, reconectando quando ele cai — ex. close 1001 na troca de versão
@@ -45,15 +45,19 @@ export function reconnectDelay(failures: number, random: () => number = Math.ran
 }
 
 export function isPermanentConnectionError(err: unknown): boolean {
-  return err instanceof HttpError && PERMANENT_HTTP_STATUS.has(err.status)
+  return err instanceof ApiError && PERMANENT_HTTP_STATUS.has(err.status)
 }
 
 export function createReconnectingSocket(options: {
+  // Só para os logs de console.
   label: string
+  // Texto da falha definitiva sem um Error por trás, traduzido a cada
+  // leitura (LocalizedError) para acompanhar a troca de idioma.
+  failureMessage: () => string
   connect: () => WebSocket
   sync: () => Promise<void>
   onMessage: (data: string) => void
-  onStatus: (status: ChannelConnectionStatus, error?: string) => void
+  onStatus: (status: ChannelConnectionStatus, error?: Error) => void
 }): ReconnectingSocket {
   let socket: WebSocket | null = null
   let done = false
@@ -64,7 +68,7 @@ export function createReconnectingSocket(options: {
     done = true
     socket?.close()
     socket = null
-    options.onStatus('error', err instanceof Error ? err.message : `falha ao conectar em ${options.label}`)
+    options.onStatus('error', err instanceof Error ? err : new LocalizedError(options.failureMessage))
   }
 
   function scheduleRetry() {

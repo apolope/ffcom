@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { errorMessage } from '../lib/apiError'
 import './Dialog.css'
 import './InviteCode.css'
 
@@ -32,8 +34,9 @@ export function InviteServerDialog({
   onCreateInvite,
   onClose,
 }: InviteServerDialogProps) {
+  const { t } = useTranslation()
   const [invite, setInvite] = useState<string>()
-  const [error, setError] = useState<string>()
+  const [error, setError] = useState<unknown>()
   const [generating, setGenerating] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -45,7 +48,7 @@ export function InviteServerDialog({
       setInvite(buildInviteLink(serverBaseUrl, code, serverName))
       setCopied(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'falha ao gerar convite')
+      setError(err)
     } finally {
       setGenerating(false)
     }
@@ -64,31 +67,30 @@ export function InviteServerDialog({
   return (
     <div className="dialog-overlay" onClick={onClose}>
       <div className="dialog-card" onClick={(e) => e.stopPropagation()}>
-        <h2>Convidar para {serverName}</h2>
+        <h2>{t('server.invite.title', { server: serverName })}</h2>
 
         <section className="invite-section">
-          <p className="invite-hint">
-            Gere um link e compartilhe com quem você quer convidar. O link já leva o endereço
-            deste servidor, então basta colar em "Adicionar servidor".
-          </p>
+          <p className="invite-hint">{t('server.invite.hint')}</p>
           {invite ? (
             <div className="invite-code link">
               <code>{invite}</code>
               <button type="button" onClick={handleCopyInvite}>
-                {copied ? 'Copiado!' : 'Copiar'}
+                {copied ? t('server.invite.copied') : t('common.copy')}
               </button>
             </div>
           ) : (
             <button type="button" onClick={handleGenerateInvite} disabled={generating}>
-              {generating ? 'Gerando…' : 'Gerar código de convite'}
+              {generating ? t('server.invite.generating') : t('server.invite.generate')}
             </button>
           )}
-          {error && <p className="dialog-error">{error}</p>}
+          {error !== undefined && (
+            <p className="dialog-error">{errorMessage(error, t('server.invite.failed'))}</p>
+          )}
         </section>
 
         <div className="dialog-actions">
           <button type="button" onClick={onClose}>
-            Fechar
+            {t('common.close')}
           </button>
         </div>
       </div>

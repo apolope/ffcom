@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useMenuDismiss } from '../hooks/useMenuDismiss'
 import './RailMenu.css'
 
@@ -22,6 +23,7 @@ interface ServerMenuProps {
 // Mesma posição fixa e fechamento do StatusMenu, mas alinhado pelo topo do
 // ícone, já que os servidores ficam no alto do rail.
 export function ServerMenu({ anchor, serverName, actions, onClose }: ServerMenuProps) {
+  const { t } = useTranslation()
   const ref = useRef<HTMLDivElement>(null)
   useMenuDismiss(ref, anchor, onClose)
   useEffect(() => {
@@ -30,21 +32,21 @@ export function ServerMenu({ anchor, serverName, actions, onClose }: ServerMenuP
 
   const rect = anchor.getBoundingClientRect()
   const items: { label: string; run: () => void }[] = []
-  if (actions.onManageMembers) items.push({ label: 'Membros', run: actions.onManageMembers })
-  if (actions.onInvite) items.push({ label: 'Convidar', run: actions.onInvite })
+  if (actions.onManageMembers) items.push({ label: t('server.menu.members'), run: actions.onManageMembers })
+  if (actions.onInvite) items.push({ label: t('server.menu.invite'), run: actions.onInvite })
 
   return (
     <div
       ref={ref}
       className="rail-menu"
       role="menu"
-      aria-label={`Configurações de ${serverName}`}
+      aria-label={t('server.menu.label', { server: serverName })}
       style={{ left: rect.right + 8, top: rect.top }}
     >
       {actions.loading ? (
-        <span className="rail-menu-empty">Carregando…</span>
+        <span className="rail-menu-empty">{t('common.loading')}</span>
       ) : items.length === 0 ? (
-        <span className="rail-menu-empty">Nenhuma ação disponível</span>
+        <span className="rail-menu-empty">{t('server.menu.noActions')}</span>
       ) : (
         items.map(({ label, run }) => (
           <button

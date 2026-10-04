@@ -13,11 +13,17 @@ import {
   type RemoteParticipant,
   type TrackPublication,
 } from 'livekit-client'
+import i18n from '../i18n'
+import { LocalizedError, useErrorText, type DisplayError } from '../lib/apiError'
 import { playMicToggleSound, playPushToTalkSound, primeMicToggleSound } from '../lib/micToggleSound'
 import { playPresenceSound } from '../lib/presenceSound'
 import { participantAudioOf, type ParticipantAudioMap } from '../lib/participantAudio'
 import { fetchVoiceToken } from '../lib/serverChannelApi'
 import { setVoiceConnected } from '../lib/voiceActivity'
+
+// Atualiza os textos de uma tile de vídeo (montada fora do React) no idioma
+// ativo; chamado ao criar a tile e de novo a cada troca de idioma.
+const tileTextUpdaters = new WeakMap<HTMLElement, () => void>()
 
 export type VoiceChannelStatus = 'idle' | 'connecting' | 'connected' | 'error'
 
@@ -202,12 +208,12 @@ export function useVoiceChannel(
   const videoContainerElRef = useRef<HTMLDivElement | null>(null)
   const videoTilesRef = useRef<Map<string, HTMLDivElement>>(new Map())
   const [status, setStatus] = useState<VoiceChannelStatus>('idle')
-  const [error, setError] = useState<string>()
+  const [error, setError] = useState<DisplayError>()
   const [participants, setParticipants] = useState<VoiceParticipant[]>([])
   const [micEnabled, setMicEnabled] = useState(false)
-  const [cameraError, setCameraError] = useState<string>()
+  const [cameraError, setCameraError] = useState<DisplayError>()
   const [audioPlaybackBlocked, setAudioPlaybackBlocked] = useState(false)
-  const [noiseSuppressionError, setNoiseSuppressionError] = useState<string>()
+  const [noiseSuppressionError, setNoiseSuppressionError] = useState<DisplayError>()
 
   const cleanupAudioEls = useCallback(() => {
     audioElsRef.current.forEach((el) => el.remove())
@@ -284,12 +290,10 @@ export function useVoiceChannel(
     const name = participant.name || participant.identity
     const label = document.createElement('span')
     label.className = 'video-tile-label'
-    if (participant.isLocal) {
-      label.textContent = `${name} (você)`
-    } else if (publication.source === Track.Source.ScreenShare) {
-      label.textContent = `${name} (tela)`
-    } else {
-      label.textContent = name
+    const labelText = () => {
+      if (participant.isLocal) return i18n.t('voice.selfName', { name })
+      if (publication.source === Track.Source.ScreenShare) return i18n.t('voice.tile.screen', { name })
+      return name
     }
     const tile = document.createElement('div')
     tile.className = participant.isLocal ? 'video-tile local' : 'video-tile'
@@ -299,7 +303,6 @@ export function useVoiceChannel(
     // (removida) ou é escondida (câmera desligada) desfaz o layout sozinha,
     // porque o seletor é :has(.video-tile.focused:not(.muted)).
     tile.tabIndex = 0
-    tile.title = 'Clique para ampliar'
     const toggleFocus = () => {
       const focusing = !tile.classList.contains('focused')
       videoTilesRef.current.forEach((t) => t.classList.remove('focused'))
@@ -314,8 +317,14 @@ export function useVoiceChannel(
     const fullscreen = document.createElement('button')
     fullscreen.type = 'button'
     fullscreen.className = 'video-tile-fullscreen'
-    fullscreen.title = 'Tela cheia'
-    fullscreen.setAttribute('aria-label', `Tela cheia: ${label.textContent}`)
+    const updateTexts = () => {
+      label.textContent = labelText()
+      tile.title = i18n.t('voice.tile.clickToEnlarge')
+      fullscreen.title = i18n.t('voice.tile.fullscreen')
+      fullscreen.setAttribute('aria-label', i18n.t('voice.tile.fullscreenOf', { name: label.textContent }))
+    }
+    updateTexts()
+    tileTextUpdaters.set(tile, updateTexts)
     fullscreen.textContent = '⛶'
     fullscreen.addEventListener('click', (event) => {
       event.stopPropagation()
@@ -333,6 +342,13 @@ export function useVoiceChannel(
     tile.appendChild(fullscreen)
     videoTilesRef.current.set(publication.trackSid, tile)
     videoContainerElRef.current?.appendChild(tile)
+  }, [])
+
+  // Tiles já montadas acompanham a troca de idioma.
+  useEffect(() => {
+    const onLanguageChanged = () => videoTilesRef.current.forEach((tile) => tileTextUpdaters.get(tile)?.())
+    i18n.on('languageChanged', onLanguageChanged)
+    return () => i18n.off('languageChanged', onLanguageChanged)
   }, [])
 
   const removeVideoTile = useCallback((trackSid: string) => {
@@ -430,7 +446,7 @@ export function useVoiceChannel(
             failed = true
             console.warn('[ffcom] supressão de ruído reforçada', err)
             if (roomRef.current === room) {
-              setNoiseSuppressionError('A supressão de ruído reforçada não funcionou aqui; usando a do navegador.')
+              setNoiseSuppressionError(new LocalizedError(() => i18n.t('voice.noiseSuppressionFailed')))
             }
           }
         }
@@ -593,7 +609,7 @@ export function useVoiceChannel(
       if (seq !== joinSeqRef.current) return
       disconnect(roomRef.current)
       setStatus('error')
-      setError(err instanceof Error ? err.message : 'falha ao conectar à voz')
+      setError(err instanceof Error ? err : new LocalizedError(() => i18n.t('voice.connectFailed')))
     }
   }, [
     accessToken,
@@ -760,19 +776,24 @@ export function useVoiceChannel(
   const screenSharing = participants.some((p) => p.isLocal && p.screenSharing)
   const screenShareAudio = participants.some((p) => p.isLocal && p.screenShareAudio)
   const cameraEnabled = participants.some((p) => p.isLocal && p.cameraEnabled)
+  // Erros guardados como Error/LocalizedError e traduzidos aqui, no idioma
+  // ativo (useErrorText renderiza de novo quando ele muda).
+  const errorText = useErrorText(error)
+  const cameraErrorText = useErrorText(cameraError)
+  const noiseSuppressionErrorText = useErrorText(noiseSuppressionError)
 
   return {
     target,
     status,
-    error,
+    error: errorText,
     participants,
     micEnabled,
     cameraEnabled,
-    cameraError,
+    cameraError: cameraErrorText,
     screenSharing,
     screenShareAudio,
     audioPlaybackBlocked,
-    noiseSuppressionError,
+    noiseSuppressionError: noiseSuppressionErrorText,
     startAudio,
     videoContainerRef,
     join,
@@ -784,10 +805,12 @@ export function useVoiceChannel(
   }
 }
 
-function cameraErrorMessage(err: unknown): string {
+function cameraErrorMessage(err: unknown): DisplayError {
   const name = err instanceof Error ? err.name : ''
-  if (name === 'NotAllowedError') return 'Permissão da câmera negada pelo navegador.'
-  if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'Nenhuma câmera encontrada.'
-  if (name === 'NotReadableError') return 'A câmera está em uso por outro aplicativo.'
-  return err instanceof Error ? err.message : 'falha ao ligar a câmera'
+  if (name === 'NotAllowedError') return new LocalizedError(() => i18n.t('voice.camera.permissionDenied'))
+  if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+    return new LocalizedError(() => i18n.t('voice.camera.notFound'))
+  }
+  if (name === 'NotReadableError') return new LocalizedError(() => i18n.t('voice.camera.inUse'))
+  return err instanceof Error ? err : new LocalizedError(() => i18n.t('voice.camera.failed'))
 }

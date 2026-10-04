@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next'
+
 interface UpdateButtonProps {
   onUpdate: () => void
 }
@@ -5,16 +7,13 @@ interface UpdateButtonProps {
 // Botão de atualizar o client no ServerRail, como o do Discord: só aparece
 // quando hooks/useAppUpdate.ts avisa que há versão nova esperando.
 export function UpdateButton({ onUpdate }: UpdateButtonProps) {
+  const { t } = useTranslation()
   return (
     <button
       type="button"
       className="update-button"
-      title={
-        window.ffcomElectron
-          ? 'Nova versão disponível. Clique para instalar (o FFCom fecha, atualiza e abre de novo, saindo da chamada de voz).'
-          : 'Nova versão disponível. Clique para atualizar (recarrega a página e sai da chamada de voz).'
-      }
-      aria-label="Atualizar o FFCom para a nova versão"
+      title={window.ffcomElectron ? t('update.availableDesktop') : t('update.availableWeb')}
+      aria-label={t('update.label')}
       onClick={onUpdate}
     >
       <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">

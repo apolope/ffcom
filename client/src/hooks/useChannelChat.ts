@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import i18n from '../i18n'
+import { LocalizedError, problemFromFrame, useErrorText, type DisplayError } from '../lib/apiError'
 import { createReconnectingSocket, type ChannelConnectionStatus, type ReconnectingSocket } from '../lib/reconnectingSocket'
 import {
   decodeChannelSocketFrame,
@@ -38,7 +40,7 @@ export function useChannelChat(
 ): UseChannelChatResult {
   const [messages, setMessages] = useState<ChannelMessage[]>([])
   const [status, setStatus] = useState<ChatConnectionStatus>('loading')
-  const [error, setError] = useState<string>()
+  const [error, setError] = useState<DisplayError>()
   const connectionRef = useRef<ReconnectingSocket | null>(null)
 
   // O token fica fora das dependências do efeito da conexão: renovar o
@@ -57,6 +59,7 @@ export function useChannelChat(
 
     const connection = createReconnectingSocket({
       label: 'canal de texto',
+      failureMessage: () => i18n.t('chat.connectFailed'),
       connect: () => openChannelSocket(serverBaseUrl, channelId, accessTokenRef.current),
       sync: async () => {
         const history = await fetchChannelHistory(serverBaseUrl, channelId, accessTokenRef.current, HISTORY_LIMIT)
@@ -80,7 +83,7 @@ export function useChannelChat(
         } else if (frame.type === 'message.deleted') {
           setMessages((prev) => prev.filter((m) => m.id !== frame.id))
         } else if (frame.type === 'error') {
-          setError(frame.error)
+          setError(problemFromFrame(frame))
         }
       },
     })
@@ -108,7 +111,7 @@ export function useChannelChat(
     try {
       await sendMessageWithAttachment(serverBaseUrl, channelId, accessToken, content, file)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'falha ao enviar anexo')
+      setError(err instanceof Error ? err : new LocalizedError(() => i18n.t('chat.attachmentSendFailed')))
     }
   }
 
@@ -124,5 +127,7 @@ export function useChannelChat(
     sendDeleteMessage(socket, id)
   }
 
-  return { messages, status, error, sendMessage, sendMessageWithFile, editMessage, deleteMessage }
+  const errorText = useErrorText(error)
+
+  return { messages, status, error: errorText, sendMessage, sendMessageWithFile, editMessage, deleteMessage }
 }

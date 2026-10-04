@@ -1,5 +1,7 @@
 import nacl from 'tweetnacl'
 import { scryptAsync } from '@noble/hashes/scrypt.js'
+import i18n from '../i18n'
+import { LocalizedError } from '../lib/apiError'
 
 // Backup da chave privada de E2E, cifrado com a frase de recuperação -- ver
 // docs/architecture.md, "Decisão: backup da chave de E2E com frase de
@@ -76,7 +78,7 @@ export async function decryptKeyBackup(backupB64: string, passphrase: string): P
   // Teto no N para um backup adulterado não travar o dispositivo pedindo
   // gigabytes de memória.
   if (stored.v !== 1 || stored.kdf !== 'scrypt' || stored.N > 2 ** 20 || stored.r > 16 || stored.p > 4) {
-    throw new Error('formato de backup de chave desconhecido; atualize o FFCom')
+    throw new LocalizedError(() => i18n.t('e2e.unknownBackupFormat'))
   }
   const key = await deriveKey(passphrase, base64ToBytes(stored.salt), { N: stored.N, r: stored.r, p: stored.p })
   return nacl.secretbox.open(base64ToBytes(stored.box), base64ToBytes(stored.nonce), key)

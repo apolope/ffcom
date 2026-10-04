@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import type { Channel, ChannelType, KnownServer } from '../types'
 import { ForumChannelView } from './ForumChannelView'
 import { TextChannelView } from './TextChannelView'
@@ -18,6 +19,7 @@ interface MainPanelProps {
 }
 
 export function MainPanel({ channel, server, canModerateMessages }: MainPanelProps) {
+  const { t } = useTranslation()
   const serverBaseUrl = server.baseUrl
   return (
     <section className="main-panel">
@@ -29,12 +31,12 @@ export function MainPanel({ channel, server, canModerateMessages }: MainPanelPro
             <span className="channel-title">{channel.name}</span>
           </>
         ) : (
-          <span className="channel-title">Nenhum canal selecionado</span>
+          <span className="channel-title">{t('channels.noneSelected')}</span>
         )}
         <MobileMembersButton />
       </header>
       <div className="channel-content">
-        {!channel && <p className="placeholder">Selecione um canal para começar.</p>}
+        {!channel && <p className="placeholder">{t('channels.selectPrompt')}</p>}
         {channel?.type === 'text' && (
           <TextChannelView
             key={channel.id}

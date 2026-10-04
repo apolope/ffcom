@@ -3,8 +3,18 @@ import type { ReactNode } from 'react'
 import { OidcClient, type User } from 'oidc-client-ts'
 import { externalSignIn, userManager } from './userManager'
 import { AUTH_CALLBACK_PATH } from './config'
+import { currentLanguage } from '../i18n'
 
 type AuthStatus = 'loading' | 'signed-out' | 'signed-in'
+
+// Idioma das telas do Authentik (login, recuperação de senha): ui_locales
+// na URL de autorização, no formato do FFCom (pt-BR, en), que o Authentik
+// aceita como está. Ele grava o cookie authentik_language, então o link
+// "Esqueci minha senha" da tela de login segue no mesmo idioma. Ver
+// docs/architecture.md, "Decisão: internacionalização".
+function signinLocale() {
+  return { extraQueryParams: { ui_locales: currentLanguage() } }
+}
 
 // Redirecionamento ao Authentik em andamento. O oidc-client-ts busca o
 // discovery antes de navegar, e no logout remove o usuário antes disso: sem
@@ -151,6 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .createSigninRequest({
               request_type: 'si:r',
               prompt: readDesktopSignedOut() ? 'login' : undefined,
+              ...signinLocale(),
             })
             .then((request) => window.ffcomElectron?.openExternalSignIn(request.url))
             .then(() => setRedirecting('in-browser'))
@@ -162,7 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         if (redirecting) return
         setRedirecting('signing-in')
-        userManager.signinRedirect().catch((err) => {
+        userManager.signinRedirect(signinLocale()).catch((err) => {
           console.error('ffcom: falha ao abrir o login', err)
           setRedirecting(undefined)
         })

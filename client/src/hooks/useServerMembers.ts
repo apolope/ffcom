@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import i18n from '../i18n'
+import { LocalizedError, useErrorText, type DisplayError } from '../lib/apiError'
 import {
   assignRole,
   banMember,
@@ -92,7 +94,7 @@ export function useServerMembers(
   const [remoteRoles, setRemoteRoles] = useState<RemoteRole[]>([])
   const [remoteBans, setRemoteBans] = useState<RemoteBan[]>([])
   const [status, setStatus] = useState<ServerMembersStatus>('loading')
-  const [error, setError] = useState<string>()
+  const [error, setError] = useState<DisplayError>()
 
   const load = useCallback(() => {
     if (!serverBaseUrl || !accessToken) return Promise.resolve()
@@ -111,7 +113,7 @@ export function useServerMembers(
       })
       .catch((err) => {
         setStatus('error')
-        setError(err instanceof Error ? err.message : 'falha ao carregar membros/roles')
+        setError(err instanceof Error ? err : new LocalizedError(() => i18n.t('members.loadFailed')))
       })
   }, [serverBaseUrl, accessToken, canViewBans])
 
@@ -119,12 +121,14 @@ export function useServerMembers(
     void load()
   }, [load])
 
+  const errorText = useErrorText(error)
+
   return {
     members: remoteMembers.map(toMember),
     roles: remoteRoles.map(toRole),
     bans: remoteBans.map(toBan),
     status,
-    error,
+    error: errorText,
     createRole: async (role) => {
       await createRole(serverBaseUrl, accessToken, role)
       await load()

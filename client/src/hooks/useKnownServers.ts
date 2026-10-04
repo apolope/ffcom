@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import i18n from '../i18n'
+import { LocalizedError, useErrorText, type DisplayError } from '../lib/apiError'
 import {
   addKnownServer,
   fetchKnownServers,
@@ -46,7 +48,7 @@ function toKnownServer(remote: RemoteKnownServer): KnownServer {
 export function useKnownServers(accessToken: string, onSaveError?: () => void): UseKnownServersResult {
   const [loaded, setLoaded] = useState<KnownServer[]>([])
   const [status, setStatus] = useState<KnownServersStatus>('loading')
-  const [error, setError] = useState<string>()
+  const [error, setError] = useState<DisplayError>()
 
   const load = useCallback(() => {
     // accessToken só existe depois que o login OIDC termina (ver
@@ -63,7 +65,7 @@ export function useKnownServers(accessToken: string, onSaveError?: () => void): 
       })
       .catch((err) => {
         setStatus('error')
-        setError(err instanceof Error ? err.message : 'falha ao carregar servidores')
+        setError(err instanceof Error ? err : new LocalizedError(() => i18n.t('server.loadFailed')))
       })
   }, [accessToken])
 
@@ -137,5 +139,7 @@ export function useKnownServers(accessToken: string, onSaveError?: () => void): 
     return [...loaded].sort((a, b) => (rank.get(a.id) ?? -1) - (rank.get(b.id) ?? -1))
   }, [loaded, pendingOrder])
 
-  return { servers, status, error, addServer, removeServer, saveOrder }
+  const errorText = useErrorText(error)
+
+  return { servers, status, error: errorText, addServer, removeServer, saveOrder }
 }

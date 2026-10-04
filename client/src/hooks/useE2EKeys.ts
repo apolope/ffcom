@@ -17,6 +17,8 @@ import {
   setMyE2EKeyBackup,
   type MyProfile,
 } from '../lib/serverCentralApi'
+import { LocalizedError, useErrorText, type DisplayError } from '../lib/apiError'
+import i18n from '../i18n'
 
 // Estado da chave de E2E desta conta neste dispositivo:
 // - needs-setup: a conta ainda não tem frase de recuperação; criar uma
@@ -45,7 +47,7 @@ interface State {
   accountSub: string
   status: E2EKeyStatus
   keyPair: E2EKeyPair | null
-  error?: string
+  error?: DisplayError
   publishedElsewhere: boolean
 }
 
@@ -66,7 +68,7 @@ function localKeyPair(accountSub: string, profile: MyProfile): E2EKeyPair | null
 // e do que este dispositivo tem guardado.
 function resolveState(accountSub: string, profile: MyProfile): State {
   if (profile.hasE2EKeyBackup === undefined) {
-    throw new Error('server-central desatualizado: não informa o backup da chave de E2E')
+    throw new LocalizedError(() => i18n.t('e2e.serverOutdated'))
   }
   const local = localKeyPair(accountSub, profile)
   const localMatches = !!local && publicKeyToBase64(local) === profile.e2ePublicKey
@@ -125,7 +127,7 @@ export function useE2EKeys(accessToken: string, accountSub: string): E2EKeysResu
                 accountSub,
                 status: 'error',
                 keyPair: null,
-                error: err instanceof Error ? err.message : 'falha ao preparar a chave de criptografia',
+                error: err instanceof Error ? err : new LocalizedError(() => i18n.t('e2e.loadFailed')),
                 publishedElsewhere: false,
               },
         )
@@ -162,7 +164,7 @@ export function useE2EKeys(accessToken: string, accountSub: string): E2EKeysResu
         if (err instanceof E2EKeyBackupConflictError) {
           // Outro dispositivo criou a frase enquanto esta tela estava aberta.
           setState({ accountSub, status: 'needs-unlock', keyPair: null, publishedElsewhere: false })
-          throw new Error('Esta conta já tem uma frase de recuperação, criada em outro dispositivo. Digite-a para continuar.')
+          throw new LocalizedError(() => i18n.t('e2e.alreadyHasPhrase'))
         }
         throw err
       }
@@ -174,12 +176,12 @@ export function useE2EKeys(accessToken: string, accountSub: string): E2EKeysResu
     async (passphrase: string) => {
       const { publicKey, backup } = await fetchMyE2EKeyBackup(accessToken)
       const secretKey = await decryptKeyBackup(backup, passphrase)
-      if (!secretKey) throw new Error('Frase de recuperação incorreta.')
+      if (!secretKey) throw new LocalizedError(() => i18n.t('e2e.phraseIncorrect'))
       const keyPair = keyPairFromSecretKey(secretKey)
       // A chave decifrada tem que ser a que a conta publicou; se não for, o
       // backup e a chave pública estão dessincronizados no servidor.
       if (publicKeyToBase64(keyPair) !== publicKey) {
-        throw new Error('O backup não corresponde à chave publicada da conta.')
+        throw new LocalizedError(() => i18n.t('e2e.backupMismatch'))
       }
       storeKeyPair(accountSub, keyPair)
       setState({ accountSub, status: 'ready', keyPair, publishedElsewhere: false })
@@ -195,10 +197,11 @@ export function useE2EKeys(accessToken: string, accountSub: string): E2EKeysResu
   const retry = useCallback(() => setAttempt((n) => n + 1), [])
 
   const current = state?.accountSub === accountSub ? state : undefined
+  const errorText = useErrorText(current?.error)
   return {
     status: current?.status ?? 'loading',
     keyPair: current?.keyPair ?? null,
-    error: current?.error,
+    error: errorText,
     publishedElsewhere: current?.publishedElsewhere ?? false,
     setupPassphrase,
     unlock,

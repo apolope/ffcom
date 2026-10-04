@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthProvider'
 import { AUTH_RECOVERY_URL } from '../auth/config'
 import './LoginScreen.css'
@@ -16,6 +17,7 @@ function LoginBrand() {
 
 export function LoginScreen() {
   const { signIn, redirecting } = useAuth()
+  const { t, i18n } = useTranslation()
 
   // Saindo, o botão nem aparece: clicar nele antes de o Authentik encerrar
   // a sessão entrava de novo na conta que acabou de sair.
@@ -26,7 +28,7 @@ export function LoginScreen() {
           <LoginBrand />
           <p className="placeholder login-status">
             <span className="login-spinner" aria-hidden="true" />
-            Saindo…
+            {t('auth.signingOut')}
           </p>
         </div>
       </div>
@@ -43,10 +45,10 @@ export function LoginScreen() {
         {redirecting === 'in-browser' ? (
           <p className="placeholder login-status">
             <span className="login-spinner" aria-hidden="true" />
-            Continue o login no navegador.
+            {t('auth.continueInBrowser')}
           </p>
         ) : (
-          <p className="placeholder">Entre com sua conta para acessar seus servidores.</p>
+          <p className="placeholder">{t('auth.signInPrompt')}</p>
         )}
         <button
           type="button"
@@ -55,15 +57,22 @@ export function LoginScreen() {
           disabled={redirecting === 'signing-in'}
         >
           {redirecting === 'signing-in'
-            ? 'Abrindo o login…'
+            ? t('auth.openingSignIn')
             : redirecting === 'in-browser'
-              ? 'Abrir o login de novo'
-              : 'Entrar'}
+              ? t('auth.reopenSignIn')
+              : t('auth.signIn')}
         </button>
         {/* Nova aba (no Electron, o navegador do sistema): a tela de login
             fica aqui para entrar depois de definir a senha. */}
-        <a className="login-recovery" href={AUTH_RECOVERY_URL} target="_blank" rel="noreferrer">
-          Esqueci minha senha
+        {/* ?locale= é lido pela página do Authentik (acima do idioma do
+            navegador), que então pede tudo à API nesse idioma. */}
+        <a
+          className="login-recovery"
+          href={`${AUTH_RECOVERY_URL}?locale=${encodeURIComponent(i18n.language)}`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {t('auth.forgotPassword')}
         </a>
       </div>
     </div>

@@ -41,6 +41,10 @@ interface FfcomElectronBridge {
   // Chamado quando chega uma URL de retorno do login; devolve a função que
   // remove o listener. A URL em si vem de takeAuthCallback.
   onAuthCallback(callback: () => void): () => void
+  // Idioma da interface (pt-BR, en), para o main traduzir a barra de menu
+  // e o que mais for nativo. Chamado ao iniciar e a cada troca de idioma;
+  // o main guarda o último para o próximo boot.
+  setLanguage(lang: string): void
   // true no Windows, o único sistema em que o Electron captura o áudio do
   // computador junto com a tela.
   canShareSystemAudio: boolean

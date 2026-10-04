@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react'
+import type { TFunction } from 'i18next'
 import type { AccountSummary } from '../lib/serverCentralApi'
 import type { ChosenStatus, PresenceStatus } from '../types'
 
@@ -31,10 +32,19 @@ export function visibleOwnStatus(chosen: ChosenStatus | undefined, idle: boolean
   return chosen as PresenceStatus
 }
 
-export const STATUS_LABELS: Record<PresenceStatus | 'invisible', string> = {
-  online: 'Online',
-  busy: 'Ocupado',
-  away: 'Ausente',
-  offline: 'Offline',
-  invisible: 'Invisível',
+// Rótulo do status no idioma ativo. Recebe o `t` de useTranslation() para
+// ser chamado no render e acompanhar a troca de idioma.
+export function statusLabel(t: TFunction, status: PresenceStatus | 'invisible'): string {
+  switch (status) {
+    case 'online':
+      return t('presence.online')
+    case 'busy':
+      return t('presence.busy')
+    case 'away':
+      return t('presence.away')
+    case 'offline':
+      return t('presence.offline')
+    case 'invisible':
+      return t('presence.invisible')
+  }
 }

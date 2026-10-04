@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthProvider'
 import { useChannelChat } from '../hooks/useChannelChat'
+import { formatDateTime, formatMessageTime } from '../lib/format'
 import { fetchMe } from '../lib/serverChannelApi'
 import { MessageAttachment } from './MessageAttachment'
 import type { Channel } from '../types'
@@ -14,6 +16,7 @@ interface TextChannelViewProps {
 }
 
 export function TextChannelView({ serverBaseUrl, channel, canModerateMessages }: TextChannelViewProps) {
+  const { t } = useTranslation()
   const { accessToken } = useAuth()
   const [selfMemberId, setSelfMemberId] = useState<string>()
   const [draft, setDraft] = useState('')
@@ -85,12 +88,13 @@ export function TextChannelView({ serverBaseUrl, channel, canModerateMessages }:
   return (
     <div className="text-channel">
       <div className="message-list" ref={listRef}>
-        {status === 'loading' && <p className="placeholder">Carregando histórico…</p>}
+        {status === 'loading' && <p className="placeholder">{t('chat.loadingHistory')}</p>}
         {messages.map((m) => {
           const isSelf = m.authorMemberId === selfMemberId
           return (
             <div key={m.id} className={isSelf ? 'message message-self' : 'message'}>
-              <span className="message-author">{isSelf ? 'você' : m.authorMemberId.slice(0, 8)}</span>
+              <span className="message-author">{isSelf ? t('common.you') : m.authorMemberId.slice(0, 8)}</span>
+              <MessageTime createdAt={m.createdAt} />
               {editingId === m.id ? (
                 <form className="message-edit-form" onSubmit={handleEditSubmit}>
                   <input
@@ -100,26 +104,30 @@ export function TextChannelView({ serverBaseUrl, channel, canModerateMessages }:
                     autoFocus
                   />
                   <button type="submit" disabled={editDraft.trim() === ''}>
-                    Salvar
+                    {t('common.save')}
                   </button>
                   <button type="button" onClick={cancelEditing}>
-                    Cancelar
+                    {t('common.cancel')}
                   </button>
                 </form>
               ) : (
                 <>
                   {m.content && <span className="message-content">{m.content}</span>}
-                  {m.editedAt && <span className="message-edited">(editada)</span>}
+                  {m.editedAt && (
+                    <span className="message-edited" title={formatDateTime(m.editedAt)}>
+                      {t('chat.edited')}
+                    </span>
+                  )}
                   {m.attachments?.map((a) => (
                     <MessageAttachment key={a.id} serverBaseUrl={serverBaseUrl} attachment={a} />
                   ))}
                   {isSelf && (
                     <span className="message-actions">
                       <button type="button" onClick={() => startEditing(m.id, m.content)}>
-                        editar
+                        {t('chat.edit')}
                       </button>
                       <button type="button" onClick={() => deleteMessage(m.id)}>
-                        apagar
+                        {t('chat.delete')}
                       </button>
                     </span>
                   )}
@@ -132,19 +140,19 @@ export function TextChannelView({ serverBaseUrl, channel, canModerateMessages }:
                       {confirmingDeleteId === m.id ? (
                         <>
                           <button type="button" className="message-action-danger" onClick={() => deleteMessage(m.id)}>
-                            confirmar apagar
+                            {t('chat.confirmDelete')}
                           </button>
                           <button type="button" onClick={() => setConfirmingDeleteId(undefined)}>
-                            cancelar
+                            {t('chat.cancel')}
                           </button>
                         </>
                       ) : (
                         <button
                           type="button"
-                          title="Apagar mensagem de outro membro (moderação)"
+                          title={t('chat.moderateDelete')}
                           onClick={() => setConfirmingDeleteId(m.id)}
                         >
-                          apagar
+                          {t('chat.delete')}
                         </button>
                       )}
                     </span>
@@ -155,16 +163,16 @@ export function TextChannelView({ serverBaseUrl, channel, canModerateMessages }:
           )
         })}
         {messages.length === 0 && status === 'open' && (
-          <p className="placeholder">Nenhuma mensagem ainda. Seja o primeiro a escrever.</p>
+          <p className="placeholder">{t('chat.empty')}</p>
         )}
       </div>
-      {status === 'reconnecting' && <div className="message-status">Reconectando…</div>}
+      {status === 'reconnecting' && <div className="message-status">{t('chat.reconnecting')}</div>}
       {error && <div className="message-error">{error}</div>}
       {pendingFile && (
         <div className="pending-attachment">
           <span>{pendingFile.name}</span>
           <button type="button" onClick={clearPendingFile}>
-            remover
+            {t('chat.removeAttachment')}
           </button>
         </div>
       )}
@@ -185,8 +193,8 @@ export function TextChannelView({ serverBaseUrl, channel, canModerateMessages }:
           className="message-attach-button"
           onClick={() => fileInputRef.current?.click()}
           disabled={status !== 'open'}
-          title="Anexar arquivo"
-          aria-label="Anexar arquivo"
+          title={t('chat.attachFile')}
+          aria-label={t('chat.attachFile')}
         >
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
             <path d="M16.5 6.5v10a4.5 4.5 0 0 1-9 0V5a3 3 0 0 1 6 0v10.5a1.5 1.5 0 0 1-3 0V6.5H9v9a3 3 0 0 0 6 0V5a4.5 4.5 0 0 0-9 0v11.5a6 6 0 0 0 12 0v-10h-1.5z" />
@@ -196,13 +204,24 @@ export function TextChannelView({ serverBaseUrl, channel, canModerateMessages }:
           type="text"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder={`Enviar mensagem em #${channel.name}`}
+          placeholder={t('chat.placeholder', { channel: channel.name })}
           disabled={status !== 'open'}
         />
         <button type="submit" disabled={status !== 'open' || (draft.trim() === '' && !pendingFile)}>
-          Enviar
+          {t('common.send')}
         </button>
       </form>
     </div>
+  )
+}
+
+// Hora da mensagem no idioma ativo (só a hora se for de hoje, data e hora
+// se não), com a data completa no title. Também usada pelo fórum.
+export function MessageTime({ createdAt }: { createdAt: string }) {
+  useTranslation()
+  return (
+    <time className="message-time" dateTime={createdAt} title={formatDateTime(createdAt)}>
+      {formatMessageTime(createdAt)}
+    </time>
   )
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { Member, Role } from '../types'
 import { useMenuDismiss } from '../hooks/useMenuDismiss'
 import { MemberAvatar } from './AvatarWithStatus'
@@ -30,14 +31,15 @@ interface MemberListProps {
 // Botão direito num membro abre as ações de amizade (ver docs/architecture.md,
 // "Decisão: pedido de amizade pela lista de membros").
 export function MemberList({ members, roles, friendActions }: MemberListProps) {
+  const { t } = useTranslation()
   const roleById = new Map(roles.map((r) => [r.id, r]))
   const sorted = [...members].sort((a, b) => (a.isOwner === b.isOwner ? 0 : a.isOwner ? -1 : 1))
   const [menu, setMenu] = useState<{ member: Member; anchor: HTMLElement; x: number; y: number }>()
 
   return (
-    <aside className="member-list" aria-label="Membros">
+    <aside className="member-list" aria-label={t('members.title')}>
       <div className="member-group">
-        <div className="member-group-name">Membros — {members.length}</div>
+        <div className="member-group-name">{t('members.header', { total: members.length })}</div>
         {sorted.map((member) => (
           <MemberRow
             key={member.id}
@@ -71,6 +73,7 @@ function MemberRow({
   roleById: Map<string, Role>
   onContextMenu: (anchor: HTMLElement, x: number, y: number) => void
 }) {
+  const { t } = useTranslation()
   const highestRole = member.roleIds
     .map((id) => roleById.get(id))
     .filter((r): r is Role => Boolean(r))
@@ -91,7 +94,7 @@ function MemberRow({
         {member.nickname}
       </span>
       {member.isOwner && (
-        <span className="member-owner-star" title="Dono" role="img" aria-label="Dono">
+        <span className="member-owner-star" title={t('members.owner')} role="img" aria-label={t('members.owner')}>
           ★
         </span>
       )}
@@ -122,6 +125,7 @@ function MemberMenu({
   actions: MemberFriendActions
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const ref = useRef<HTMLDivElement>(null)
   useMenuDismiss(ref, anchor, onClose)
   useEffect(() => {
@@ -135,18 +139,18 @@ function MemberMenu({
   const items: { label: string; run: () => void }[] = []
   let note: string | undefined
   if (!accountId) {
-    note = 'Conta indisponível para amizade'
+    note = t('members.accountUnavailable')
   } else if (relation === 'none') {
-    items.push({ label: 'Adicionar amigo', run: () => actions.onAddFriend(accountId, member.nickname) })
+    items.push({ label: t('members.addFriend'), run: () => actions.onAddFriend(accountId, member.nickname) })
   } else if (relation === 'incoming') {
-    items.push({ label: 'Aceitar pedido de amizade', run: () => actions.onAcceptRequest(accountId) })
-    items.push({ label: 'Recusar pedido de amizade', run: () => actions.onDeclineRequest(accountId) })
+    items.push({ label: t('members.acceptRequest'), run: () => actions.onAcceptRequest(accountId) })
+    items.push({ label: t('members.declineRequest'), run: () => actions.onDeclineRequest(accountId) })
   } else if (relation === 'outgoing') {
-    note = 'Pedido de amizade enviado'
+    note = t('members.requestSent')
   } else if (relation === 'friend') {
-    items.push({ label: 'Enviar mensagem', run: () => actions.onMessage(accountId) })
+    items.push({ label: t('members.sendMessage'), run: () => actions.onMessage(accountId) })
   } else {
-    note = 'Este é você'
+    note = t('members.thisIsYou')
   }
 
   return (
@@ -154,7 +158,7 @@ function MemberMenu({
       ref={ref}
       className="rail-menu"
       role="menu"
-      aria-label={`Ações para ${member.nickname}`}
+      aria-label={t('members.actionsFor', { name: member.nickname })}
       style={{
         left: Math.max(8, Math.min(x, window.innerWidth - MENU_WIDTH)),
         top: Math.max(8, Math.min(y, window.innerHeight - MENU_HEIGHT)),

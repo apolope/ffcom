@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import type { VoiceTarget } from '../hooks/useVoiceChannel'
 import { useVoiceSession } from './VoiceSessionContext'
 import './VoiceConnectionBar.css'
@@ -14,6 +15,7 @@ interface VoiceConnectionBarProps {
 export function VoiceConnectionBar({ onOpen }: VoiceConnectionBarProps) {
   const { target, status, micEnabled, toggleMic, leave, voicePrefs, audioPlaybackBlocked, startAudio } =
     useVoiceSession()
+  const { t } = useTranslation()
   if (!target || (status !== 'connected' && status !== 'connecting')) return null
   const connected = status === 'connected'
 
@@ -21,20 +23,20 @@ export function VoiceConnectionBar({ onOpen }: VoiceConnectionBarProps) {
     <div className="voice-connection-bar" role="status">
       <div className="voice-connection-info">
         <span className={connected ? 'voice-connection-state connected' : 'voice-connection-state'}>
-          {connected ? 'Voz conectada' : 'Conectando…'}
+          {connected ? t('voice.connected') : t('voice.connecting')}
         </span>
         <button
           type="button"
           className="voice-connection-channel"
           onClick={() => onOpen(target)}
-          title="Abrir o canal de voz"
+          title={t('voice.openChannel')}
         >
           🔊 {target.channelName} · {target.serverName}
         </button>
       </div>
       {connected && audioPlaybackBlocked && (
         <button type="button" className="voice-connection-action" onClick={startAudio}>
-          Ativar som
+          {t('voice.enableAudio')}
         </button>
       )}
       {/* No push-to-talk o microfone é da tecla de falar: alternar aqui o
@@ -45,8 +47,8 @@ export function VoiceConnectionBar({ onOpen }: VoiceConnectionBarProps) {
           className="voice-connection-icon"
           onClick={toggleMic}
           aria-pressed={!micEnabled}
-          aria-label={micEnabled ? 'Silenciar microfone' : 'Ativar microfone'}
-          title={micEnabled ? 'Silenciar microfone' : 'Ativar microfone'}
+          aria-label={micEnabled ? t('voice.muteMic') : t('voice.unmuteMic')}
+          title={micEnabled ? t('voice.muteMic') : t('voice.unmuteMic')}
         >
           {micEnabled ? '🎤' : '🔇'}
         </button>
@@ -55,8 +57,8 @@ export function VoiceConnectionBar({ onOpen }: VoiceConnectionBarProps) {
         type="button"
         className="voice-connection-icon leave"
         onClick={leave}
-        aria-label="Sair do canal de voz"
-        title="Sair do canal de voz"
+        aria-label={t('voice.leaveChannel')}
+        title={t('voice.leaveChannel')}
       >
         ✕
       </button>

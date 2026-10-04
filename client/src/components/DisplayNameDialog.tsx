@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { errorMessage } from '../lib/apiError'
 import './Dialog.css'
 
 interface DisplayNameDialogProps {
@@ -15,8 +17,9 @@ interface DisplayNameDialogProps {
 // do Authentik. Ver docs/architecture.md, "Decisão: nome de exibição da
 // conta".
 export function DisplayNameDialog({ currentName, authentikName, onSave, onClose }: DisplayNameDialogProps) {
+  const { t } = useTranslation()
   const [value, setValue] = useState(currentName ?? '')
-  const [error, setError] = useState<string>()
+  const [error, setError] = useState<unknown>()
   const [saving, setSaving] = useState(false)
 
   async function handleSave() {
@@ -26,7 +29,7 @@ export function DisplayNameDialog({ currentName, authentikName, onSave, onClose 
       await onSave(value.trim() || undefined)
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'falha ao salvar o nome')
+      setError(err)
     } finally {
       setSaving(false)
     }
@@ -42,26 +45,28 @@ export function DisplayNameDialog({ currentName, authentikName, onSave, onClose 
           if (!saving) void handleSave()
         }}
       >
-        <h2>Seu nome de exibição</h2>
+        <h2>{t('profile.displayName.title')}</h2>
         <input
           type="text"
           value={value}
           maxLength={64}
-          placeholder={authentikName ?? 'Como seus amigos vão te ver'}
+          placeholder={authentikName ?? t('profile.displayName.placeholder')}
           onChange={(e) => setValue(e.target.value)}
           autoFocus
         />
         <p className="dialog-hint">
-          Aparece para os amigos, nas mensagens diretas e nos servidores onde você não tem apelido.
-          {authentikName && <> Deixe vazio para usar o nome da sua conta ({authentikName}).</>}
+          {t('profile.displayName.hint')}
+          {authentikName && <> {t('profile.displayName.emptyHint', { name: authentikName })}</>}
         </p>
-        {error && <p className="dialog-error">{error}</p>}
+        {error !== undefined && (
+          <p className="dialog-error">{errorMessage(error, t('profile.displayName.saveFailed'))}</p>
+        )}
         <div className="dialog-actions">
           <button type="button" onClick={onClose} disabled={saving}>
-            Cancelar
+            {t('common.cancel')}
           </button>
           <button type="submit" className="dialog-submit" disabled={saving}>
-            {saving ? 'Salvando…' : 'Salvar'}
+            {saving ? t('common.saving') : t('common.save')}
           </button>
         </div>
       </form>

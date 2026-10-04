@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import './Dialog.css'
 import './ScreenSharePicker.css'
 
@@ -17,7 +18,9 @@ export function ScreenSharePicker({ bridge, onShare, onClose }: ScreenSharePicke
   const [sources, setSources] = useState<DisplaySource[]>()
   const [selected, setSelected] = useState<string>()
   const [audio, setAudio] = useState(false)
-  const [error, setError] = useState<string>()
+  // Chave do erro, traduzida no render.
+  const [error, setError] = useState<'listFailed' | 'sourceGone'>()
+  const { t } = useTranslation()
 
   useEffect(() => {
     let cancelled = false
@@ -29,7 +32,7 @@ export function ScreenSharePicker({ bridge, onShare, onClose }: ScreenSharePicke
         setSelected(list.find((s) => s.kind === 'screen')?.id)
       })
       .catch(() => {
-        if (!cancelled) setError('Não foi possível listar as telas e janelas.')
+        if (!cancelled) setError('listFailed')
       })
     return () => {
       cancelled = true
@@ -40,7 +43,7 @@ export function ScreenSharePicker({ bridge, onShare, onClose }: ScreenSharePicke
     if (!id) return
     setError(undefined)
     if (!(await bridge.chooseDisplaySource(id, audio))) {
-      setError('Essa janela não está mais disponível. Feche e abra o seletor de novo.')
+      setError('sourceGone')
       return
     }
     onShare()
@@ -82,26 +85,30 @@ export function ScreenSharePicker({ bridge, onShare, onClose }: ScreenSharePicke
           if (e.key === 'Enter' && e.target instanceof HTMLElement && e.target.tagName !== 'BUTTON') share()
         }}
       >
-        <h2>Compartilhar tela</h2>
-        {!sources && !error && <p className="dialog-hint">Carregando…</p>}
-        {sources && sources.length === 0 && <p className="dialog-hint">Nenhuma tela ou janela encontrada.</p>}
-        {renderGroup('screen', 'Telas')}
-        {renderGroup('window', 'Janelas')}
+        <h2>{t('voice.screenPicker.title')}</h2>
+        {!sources && !error && <p className="dialog-hint">{t('common.loading')}</p>}
+        {sources && sources.length === 0 && <p className="dialog-hint">{t('voice.screenPicker.empty')}</p>}
+        {renderGroup('screen', t('voice.screenPicker.screens'))}
+        {renderGroup('window', t('voice.screenPicker.windows'))}
         {bridge.canShareSystemAudio ? (
           <label className="screen-picker-audio">
             <input type="checkbox" checked={audio} onChange={() => setAudio(!audio)} />
-            Compartilhar áudio do computador
+            {t('voice.screenPicker.shareSystemAudio')}
           </label>
         ) : (
-          <p className="dialog-hint">Neste sistema o app desktop compartilha só a imagem, sem som.</p>
+          <p className="dialog-hint">{t('voice.screenPicker.noSystemAudio')}</p>
         )}
-        {error && <p className="dialog-error">{error}</p>}
+        {error && (
+          <p className="dialog-error">
+            {error === 'listFailed' ? t('voice.screenPicker.listFailed') : t('voice.screenPicker.sourceGone')}
+          </p>
+        )}
         <div className="dialog-actions">
           <button type="button" onClick={onClose}>
-            Cancelar
+            {t('common.cancel')}
           </button>
           <button type="button" className="dialog-submit" onClick={() => share()} disabled={!selected} autoFocus>
-            Compartilhar
+            {t('voice.screenPicker.share')}
           </button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthProvider'
 import { fetchAttachmentBlob, type RemoteAttachment } from '../lib/serverChannelApi'
 import './MessageAttachment.css'
@@ -13,6 +14,7 @@ interface MessageAttachmentProps {
 // dá pra apontar um <img src="..."> direto pra URL do servidor — busca como
 // Blob e gera uma object URL local, revogada quando o componente desmonta.
 export function MessageAttachment({ serverBaseUrl, attachment }: MessageAttachmentProps) {
+  const { t } = useTranslation()
   const { accessToken } = useAuth()
   const [blobUrl, setBlobUrl] = useState<string>()
   const [failed, setFailed] = useState(false)
@@ -46,10 +48,14 @@ export function MessageAttachment({ serverBaseUrl, attachment }: MessageAttachme
   }, [serverBaseUrl, attachment.id])
 
   if (failed) {
-    return <div className="attachment attachment-error">falha ao carregar anexo: {attachment.filename}</div>
+    return (
+      <div className="attachment attachment-error">
+        {t('chat.attachmentLoadFailed', { filename: attachment.filename })}
+      </div>
+    )
   }
   if (!blobUrl) {
-    return <div className="attachment attachment-loading">carregando anexo…</div>
+    return <div className="attachment attachment-loading">{t('chat.attachmentLoading')}</div>
   }
   if (attachment.contentType.startsWith('image/')) {
     return (

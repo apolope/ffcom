@@ -1,4 +1,6 @@
 import { useState, type FormEvent } from 'react'
+import { useTranslation } from 'react-i18next'
+import { errorMessage } from '../lib/apiError'
 import { parseInviteLink } from '../lib/inviteLink'
 import './Dialog.css'
 import './NotMemberPanel.css'
@@ -18,8 +20,9 @@ interface NotMemberPanelProps {
 // vazia, sem canal nem aviso. Ver docs/architecture.md, "Decisão: aviso de
 // membro expulso no lugar da tela vazia".
 export function NotMemberPanel({ serverName, onJoin, onRemove }: NotMemberPanelProps) {
+  const { t } = useTranslation()
   const [invite, setInvite] = useState('')
-  const [error, setError] = useState<string>()
+  const [error, setError] = useState<unknown>()
   const [busy, setBusy] = useState(false)
 
   async function run(action: () => Promise<void>) {
@@ -28,7 +31,7 @@ export function NotMemberPanel({ serverName, onJoin, onRemove }: NotMemberPanelP
     try {
       await action()
     } catch (err) {
-      setError(errorText(err))
+      setError(err)
     } finally {
       setBusy(false)
     }
@@ -45,39 +48,32 @@ export function NotMemberPanel({ serverName, onJoin, onRemove }: NotMemberPanelP
   return (
     <div className="empty-state">
       <form className="dialog-card not-member-card" onSubmit={handleJoin}>
-        <h2>Você não é mais membro de {serverName}</h2>
-        <p>
-          Você foi removido deste servidor, então os canais dele não aparecem mais. Para voltar, cole um convite
-          novo de alguém que ainda está lá. Se não quiser voltar, tire o servidor da sua lista.
-        </p>
+        <h2>{t('server.notMember.title', { server: serverName })}</h2>
+        <p>{t('server.notMember.body')}</p>
         <label>
-          Convite
+          {t('server.notMember.invite')}
           <input
             type="text"
-            placeholder="Link ou código do convite"
+            placeholder={t('server.notMember.invitePlaceholder')}
             value={invite}
             onChange={(e) => setInvite(e.target.value)}
             disabled={busy}
           />
         </label>
-        {error && <p className="dialog-error">{error}</p>}
+        {error !== undefined && (
+          // ApiError já traz a mensagem do servidor traduzida pelo code (ver
+          // lib/apiError.ts).
+          <p className="dialog-error">{errorMessage(error, t('server.notMember.failed'))}</p>
+        )}
         <div className="dialog-actions">
           <button type="button" onClick={() => void run(onRemove)} disabled={busy}>
-            Remover da lista
+            {t('server.notMember.removeFromList')}
           </button>
           <button type="submit" className="dialog-submit" disabled={busy || invite.trim() === ''}>
-            {busy ? 'Entrando…' : 'Entrar com convite'}
+            {busy ? t('server.notMember.joining') : t('server.notMember.join')}
           </button>
         </div>
       </form>
     </div>
   )
-}
-
-// HttpError vem como "403 Forbidden: banido deste servidor"; a parte depois
-// do status é a mensagem do servidor, em português.
-function errorText(err: unknown): string {
-  if (!(err instanceof Error)) return 'Não deu certo. Tente de novo.'
-  const match = /^\d{3} [^:]*: (.+)$/s.exec(err.message)
-  return match ? match[1] : err.message
 }

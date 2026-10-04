@@ -1,5 +1,6 @@
+import { useTranslation } from 'react-i18next'
 import type { Member, PresenceStatus } from '../types'
-import { STATUS_LABELS, usePresence } from './PresenceContext'
+import { statusLabel, usePresence } from './PresenceContext'
 import { UserAvatar } from './UserAvatar'
 import './AvatarWithStatus.css'
 
@@ -15,6 +16,7 @@ interface AvatarWithStatusProps {
 // offline). A borda da bolinha usa --presence-ring, para cada lista casar
 // com a cor do próprio fundo.
 export function AvatarWithStatus({ avatarUrl, displayName, status, size = 32 }: AvatarWithStatusProps) {
+  const { t } = useTranslation()
   const dot = Math.max(8, Math.round(size * 0.32))
   return (
     <span className="avatar-with-status" style={{ width: size, height: size }}>
@@ -22,9 +24,9 @@ export function AvatarWithStatus({ avatarUrl, displayName, status, size = 32 }: 
       <span
         className={`presence-dot presence-${status}`}
         style={{ width: dot, height: dot }}
-        title={STATUS_LABELS[status]}
+        title={statusLabel(t, status)}
         role="img"
-        aria-label={STATUS_LABELS[status]}
+        aria-label={statusLabel(t, status)}
       />
     </span>
   )

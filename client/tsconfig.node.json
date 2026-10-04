@@ -11,6 +11,12 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
+    "resolveJsonModule": true,
+    /* Arquivos de idioma embutidos no main do Electron (electron/i18n.ts);
+       mesmo par de caminhos do tsconfig.app.json. */
+    "paths": {
+      "@locales/*": ["../locales/*", "./locales/*"]
+    },
     "noEmit": true,
 
     /* Linting */

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { formatShortcut, isUsableShortcut, shortcutFromEvent } from '../lib/shortcut'
 
 interface MuteShortcutSettingProps {
@@ -23,10 +24,12 @@ export function MuteShortcutSetting({
   onChange,
   recording,
   onRecordingChange,
-  label = 'Atalho para mutar',
+  label,
   allowSingleKey = false,
 }: MuteShortcutSettingProps) {
-  const [hint, setHint] = useState<string>()
+  const { t } = useTranslation()
+  // Qual aviso mostrar; o texto sai do arquivo de idioma no render.
+  const [hint, setHint] = useState<'unsupported' | 'modifier'>()
 
   useEffect(() => {
     if (!recording) return
@@ -42,12 +45,12 @@ export function MuteShortcutSetting({
       // Só modificadores apertados até agora: espera a tecla principal.
       if (!next) {
         if (!['Control', 'Alt', 'Shift', 'Meta', 'AltGraph'].includes(e.key)) {
-          setHint('Tecla não suportada. Use uma letra, um número, F1-F24 ou espaço.')
+          setHint('unsupported')
         }
         return
       }
       if (!allowSingleKey && !isUsableShortcut(next)) {
-        setHint('Use Ctrl, Alt ou Win junto com a tecla (ou uma tecla F sozinha).')
+        setHint('modifier')
         return
       }
       setHint(undefined)
@@ -63,27 +66,31 @@ export function MuteShortcutSetting({
     <div className="voice-pref voice-shortcut">
       {recording ? (
         <>
-          <span>{allowSingleKey ? 'Aperte a tecla' : 'Aperte a combinação'} (Esc cancela)</span>
+          <span>{allowSingleKey ? t('voice.shortcut.pressKey') : t('voice.shortcut.pressCombo')}</span>
           <button type="button" onClick={() => onRecordingChange(false)}>
-            Cancelar
+            {t('common.cancel')}
           </button>
         </>
       ) : (
         <>
           <span>
-            {label}: {shortcut ? <kbd>{formatShortcut(shortcut)}</kbd> : 'nenhum'}
+            {label ?? t('voice.shortcut.muteLabel')}: {shortcut ? <kbd>{formatShortcut(shortcut)}</kbd> : t('voice.shortcut.none')}
           </span>
           <button type="button" onClick={() => onRecordingChange(true)}>
-            {shortcut ? 'Trocar' : 'Definir atalho'}
+            {shortcut ? t('voice.shortcut.change') : t('voice.shortcut.set')}
           </button>
           {shortcut && (
             <button type="button" onClick={() => onChange(undefined)}>
-              Remover
+              {t('common.remove')}
             </button>
           )}
         </>
       )}
-      {hint && <span className="voice-shortcut-hint">{hint}</span>}
+      {hint && (
+        <span className="voice-shortcut-hint">
+          {hint === 'unsupported' ? t('voice.shortcut.unsupportedKey') : t('voice.shortcut.needsModifier')}
+        </span>
+      )}
     </div>
   )
 }

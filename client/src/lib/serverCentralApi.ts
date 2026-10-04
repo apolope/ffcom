@@ -1,4 +1,5 @@
 import type { ChosenStatus, PresenceStatus } from '../types'
+import { apiErrorFromResponse } from './apiError'
 
 // Cliente HTTP para a API de server-central: diretório de server-channel
 // conhecidos pela conta autenticada. Ver docs/architecture.md, "Decisão:
@@ -22,9 +23,7 @@ export interface RemoteKnownServer {
 }
 
 async function parseJsonOrThrow<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    throw new Error(`server-central: ${res.status} ${res.statusText}`)
-  }
+  if (!res.ok) throw await apiErrorFromResponse(res, 'server-central')
   return res.json() as Promise<T>
 }
 
@@ -50,6 +49,9 @@ export interface MyProfile {
   // Nome escolhido no FFCom; ausente quando displayName é o do Authentik.
   customDisplayName?: string
   avatarUrl?: string
+  // Idioma da interface escolhido na conta (PATCH /api/me); null se nunca
+  // escolheu, ausente em server-central anterior ao campo.
+  language?: string | null
 }
 
 export async function fetchMyProfile(accessToken: string): Promise<MyProfile> {
@@ -67,10 +69,7 @@ export async function uploadMyAvatar(accessToken: string, file: File): Promise<M
     headers: { Authorization: `Bearer ${accessToken}` },
     body: form,
   })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(text || `server-central: ${res.status} ${res.statusText}`)
-  }
+  if (!res.ok) throw await apiErrorFromResponse(res, 'server-central')
   return res.json() as Promise<MyProfile>
 }
 
@@ -82,11 +81,19 @@ export async function setMyDisplayName(accessToken: string, displayName: string 
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ displayName: displayName ?? null }),
   })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(text || `server-central: ${res.status} ${res.statusText}`)
-  }
+  if (!res.ok) throw await apiErrorFromResponse(res, 'server-central')
   return res.json() as Promise<MyProfile>
+}
+
+// PATCH /api/me: grava o idioma da interface na conta, para valer em
+// todos os dispositivos (ver i18n/index.ts). null apaga a escolha.
+export async function setMyLanguage(accessToken: string, language: string | null): Promise<MyProfile> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/me`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ language }),
+  })
+  return parseJsonOrThrow<MyProfile>(res)
 }
 
 export async function deleteMyAvatar(accessToken: string): Promise<MyProfile> {
@@ -94,10 +101,7 @@ export async function deleteMyAvatar(accessToken: string): Promise<MyProfile> {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${accessToken}` },
   })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(text || `server-central: ${res.status} ${res.statusText}`)
-  }
+  if (!res.ok) throw await apiErrorFromResponse(res, 'server-central')
   return res.json() as Promise<MyProfile>
 }
 
@@ -110,9 +114,7 @@ export async function fetchAvatarBlob(avatarUrl: string, accessToken: string): P
   const res = await fetch(`${SERVER_CENTRAL_URL}${avatarUrl}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
-  if (!res.ok) {
-    throw new Error(`server-central: ${res.status} ${res.statusText}`)
-  }
+  if (!res.ok) throw await apiErrorFromResponse(res, 'server-central')
   return res.blob()
 }
 
@@ -151,9 +153,7 @@ export async function reorderKnownServers(accessToken: string, ids: string[]): P
     },
     body: JSON.stringify({ ids }),
   })
-  if (!res.ok) {
-    throw new Error(`server-central: ${res.status} ${res.statusText}`)
-  }
+  if (!res.ok) throw await apiErrorFromResponse(res, 'server-central')
 }
 
 export async function removeKnownServer(accessToken: string, id: string): Promise<void> {
@@ -161,9 +161,7 @@ export async function removeKnownServer(accessToken: string, id: string): Promis
     method: 'DELETE',
     headers: { Authorization: `Bearer ${accessToken}` },
   })
-  if (!res.ok) {
-    throw new Error(`server-central: ${res.status} ${res.statusText}`)
-  }
+  if (!res.ok) throw await apiErrorFromResponse(res, 'server-central')
 }
 
 // Amigos + presença (ver docs/architecture.md, "Decisão: adicionar amigos
@@ -236,10 +234,7 @@ export async function setMyE2EKeyBackup(accessToken: string, backup: E2EKeyBacku
     body: JSON.stringify({ ...backup, replace }),
   })
   if (res.status === 409) throw new E2EKeyBackupConflictError('a conta já tem frase de recuperação')
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(text || `server-central: ${res.status} ${res.statusText}`)
-  }
+  if (!res.ok) throw await apiErrorFromResponse(res, 'server-central')
 }
 
 export async function fetchPresenceSnapshot(accessToken: string): Promise<FriendPresence[]> {
@@ -263,10 +258,7 @@ export async function redeemFriendInvite(accessToken: string, code: string): Pro
     `${SERVER_CENTRAL_URL}/api/friends/invites/${encodeURIComponent(code)}/redeem`,
     { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` } },
   )
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(text || `server-central: ${res.status} ${res.statusText}`)
-  }
+  if (!res.ok) throw await apiErrorFromResponse(res, 'server-central')
 }
 
 // Pedidos de amizade feitos pela lista de membros (ver docs/architecture.md,
@@ -293,10 +285,7 @@ export function friendRequestName(request: { accountId: string; displayName?: st
 }
 
 async function throwWithBody(res: Response): Promise<void> {
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(text.trim() || `server-central: ${res.status} ${res.statusText}`)
-  }
+  if (!res.ok) throw await apiErrorFromResponse(res, 'server-central')
 }
 
 export async function fetchFriendRequests(accessToken: string): Promise<FriendRequests> {
@@ -409,7 +398,7 @@ type PresenceSocketFrame =
   | { type: 'friend.request.removed'; id: string }
   | { type: 'friend.accepted'; requestId?: string; accountId: string; displayName?: string }
   | { type: 'friend.removed'; accountId: string }
-  | { type: 'error'; error: string }
+  | { type: 'error'; code?: string; message?: string; params?: Record<string, unknown>; error?: string }
 
 export function decodePresenceSocketFrame(raw: string): PresenceSocketFrame | null {
   try {
@@ -439,10 +428,7 @@ export async function setMyStatus(accessToken: string, status: ChosenStatus): Pr
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ status }),
   })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(text || `server-central: ${res.status} ${res.statusText}`)
-  }
+  if (!res.ok) throw await apiErrorFromResponse(res, 'server-central')
 }
 
 // Conta de server-central por trás de um membro de server-channel, achada
