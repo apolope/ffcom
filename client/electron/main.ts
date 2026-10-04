@@ -4,6 +4,7 @@ import {
   desktopCapturer,
   globalShortcut,
   ipcMain,
+  Menu,
   net,
   powerMonitor,
   protocol,
@@ -15,6 +16,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import electronUpdater from 'electron-updater'
 import { UiohookKey, uIOhook, type UiohookKeyboardEvent } from 'uiohook-napi'
+import { isLanguage, setLanguage, t } from './i18n.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -277,6 +279,91 @@ function registerAutoUpdate() {
   setInterval(check, UPDATE_CHECK_INTERVAL_MS)
 }
 
+// Barra de menu (ver docs/architecture.md, "Decisão: internacionalização",
+// Electron). No Windows e no Linux não há barra, como no Discord: copiar,
+// colar e desfazer funcionam nos campos de texto sem ela. No macOS o
+// Cmd+C/Cmd+V/Cmd+Q dependem do menu, então fica um mínimo traduzido. É
+// reconstruído quando o renderer troca o idioma.
+function buildApplicationMenu() {
+  if (process.platform !== 'darwin') {
+    Menu.setApplicationMenu(null)
+    return
+  }
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      {
+        label: app.name,
+        submenu: [
+          { role: 'about', label: t('electron.menu.about') },
+          { type: 'separator' },
+          { role: 'hide', label: t('electron.menu.hide') },
+          { role: 'hideOthers', label: t('electron.menu.hideOthers') },
+          { role: 'unhide', label: t('electron.menu.showAll') },
+          { type: 'separator' },
+          { role: 'quit', label: t('electron.menu.quit') },
+        ],
+      },
+      {
+        label: t('electron.menu.edit'),
+        submenu: [
+          { role: 'undo', label: t('electron.menu.undo') },
+          { role: 'redo', label: t('electron.menu.redo') },
+          { type: 'separator' },
+          { role: 'cut', label: t('electron.menu.cut') },
+          { role: 'copy', label: t('electron.menu.copy') },
+          { role: 'paste', label: t('electron.menu.paste') },
+          { role: 'selectAll', label: t('electron.menu.selectAll') },
+        ],
+      },
+      {
+        label: t('electron.menu.window'),
+        submenu: [
+          { role: 'minimize', label: t('electron.menu.minimize') },
+          { role: 'close', label: t('electron.menu.close') },
+        ],
+      },
+    ]),
+  )
+}
+
+// Idioma do main, mandado pelo renderer ao iniciar e a cada troca
+// (electron/i18n.ts guarda e responde pelo t()).
+function registerLanguageIpc() {
+  ipcMain.on('ffcom:set-language', (_event, lang: unknown) => {
+    if (isLanguage(lang) && setLanguage(lang)) buildApplicationMenu()
+  })
+}
+
+// Atalhos que o menu padrão do Electron dava e a barra sem menu tirou. Zoom
+// (Ctrl/Cmd com +, - e 0) em todo build; recarregar (Ctrl/Cmd+R, F5) e
+// DevTools (Ctrl/Cmd+Shift+I, F12) só fora do app empacotado, porque
+// recarregar derruba a chamada de voz.
+const ZOOM_STEP = 0.5
+
+function registerWindowShortcuts(win: BrowserWindow) {
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return
+    const contents = win.webContents
+    const mod = process.platform === 'darwin' ? input.meta : input.control
+    const key = input.key
+    let handled = true
+    if (mod && !input.alt && (key === '=' || key === '+')) {
+      contents.setZoomLevel(contents.getZoomLevel() + ZOOM_STEP)
+    } else if (mod && !input.alt && (key === '-' || key === '_')) {
+      contents.setZoomLevel(contents.getZoomLevel() - ZOOM_STEP)
+    } else if (mod && !input.alt && !input.shift && key === '0') {
+      contents.setZoomLevel(0)
+    } else if (!app.isPackaged && ((mod && !input.shift && key.toLowerCase() === 'r') || key === 'F5')) {
+      contents.reload()
+    } else if (!app.isPackaged && ((mod && input.shift && key.toLowerCase() === 'i') || key === 'F12')) {
+      contents.toggleDevTools()
+    } else {
+      handled = false
+    }
+    if (handled) event.preventDefault()
+  })
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
@@ -297,6 +384,8 @@ function createWindow() {
     }
     return { action: 'allow' }
   })
+
+  registerWindowShortcuts(win)
 
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL)
@@ -373,6 +462,8 @@ function registerDisplayMediaIpc() {
 app.whenReady().then(() => {
   if (!gotSingleInstanceLock) return
   registerAppProtocol()
+  buildApplicationMenu()
+  registerLanguageIpc()
   registerAuthIpc()
   registerMuteShortcutIpc()
   registerPushToTalkIpc()

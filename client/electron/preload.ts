@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld('ffcomElectron', {
       ipcRenderer.removeListener('ffcom:auth-callback', listener)
     }
   },
+  setLanguage: (lang: string): void => ipcRenderer.send('ffcom:set-language', lang),
   // O áudio do sistema ('loopback' no main) só existe no Windows.
   canShareSystemAudio: process.platform === 'win32',
 })
