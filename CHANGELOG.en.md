@@ -15,11 +15,27 @@ One section per published tag, in the exact format below (the site and the CI ch
 
 `<component>` is one of: `client` (the app), `central` (server-central), `channel` (server-channel), `channel-image` (the server-channel container image), `site` (this home page). Items accept `code` in backticks and **bold**. Text outside the sections (like this) is ignored by the site.
 
+## site v0.8.0 · 2026-10-03
+- The site now has an English version: it opens in your browser language (Portuguese for Portuguese speakers, English for everyone else) and you can switch it in the footer.
+- The version history, the sign-up form and the ideas area also show up in English, error notices included.
+- A sign-up request made in English gets the set-your-password email in English.
+
+## channel v0.10.0 · 2026-10-03
+- API and WebSocket errors come with a code (`{"code", "message", "params"}`), which the app translates into the user's language. Older apps keep seeing the message in Portuguese.
+
 ## client v0.22.0 · 2026-10-03
 - You can now unfriend someone: right-click the friend in the Friends list and choose "Remove friend". They disappear from your list and you from theirs, and the open conversation closes on both sides. The messages are kept and show up again if you become friends again.
+- FFCom now speaks English: under "Language", in your avatar menu, pick Portuguese or English and the interface switches right away, without reloading. The choice is saved to your account and applies on all your devices; with no choice, the app follows the system language.
+- Dates, times and numbers use the format of the chosen language.
+- Error notices from the servers show up in your language, instead of always in Portuguese.
+- The sign-in and password recovery pages open in the app language.
+- In the desktop app, the English menu bar (File, Edit, View...) is gone on Windows and Linux; copy, paste, undo and zoom (Ctrl with +, - and 0) keep working. On macOS, the menu follows the app language.
 
 ## central v0.14.0 · 2026-10-03
 - Unfriending (`DELETE /api/friends/{accountId}`), by either side, notifying both right away. After that, either one can send a friend request again.
+- The chosen language is saved to the account (`PATCH /api/me` with `language`, returned by `GET /api/me`), so it applies on all devices.
+- API and WebSocket errors come with a code (`{"code", "message", "params"}`), which the app translates into the user's language. Older apps keep seeing the message in Portuguese.
+- The sign-up request stores the site language, and the set-your-password email, sent on approval, goes out in that language.
 
 ## client v0.21.0 · 2026-10-02
 - The voice call no longer drops when you open a text channel, a forum, another server or Friends: "Voice connected" shows at the bottom of the channel list, with the call's channel, the mute button, the leave button and a shortcut back to it.

@@ -15,11 +15,27 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## site v0.8.0 · 2026-10-03
+- O site agora tem versão em inglês: abre no idioma do seu navegador (português para quem usa português, inglês para os demais) e dá para trocar no rodapé.
+- O histórico de versões, o cadastro e a área de ideias também aparecem em inglês, inclusive os avisos de erro.
+- O pedido de cadastro feito em inglês recebe o e-mail de definir a senha em inglês.
+
+## channel v0.10.0 · 2026-10-03
+- Os erros da API e do WebSocket saem com um código (`{"code", "message", "params"}`), que o app traduz para o idioma de quem usa. Apps antigos continuam vendo a mensagem em português.
+
 ## client v0.22.0 · 2026-10-03
 - Dá para desfazer uma amizade: botão direito no amigo, na lista de Amigos, e "Remover amigo". Ele some da sua lista e da dele, e a conversa aberta fecha nos dois lados. As mensagens ficam guardadas e voltam a aparecer se vocês forem amigos de novo.
+- O FFCom agora fala inglês: em "Idioma", no menu do seu avatar, escolha português ou inglês e a interface troca na hora, sem recarregar. A escolha fica salva na conta e vale em todos os seus dispositivos; sem escolha, o app segue o idioma do sistema.
+- Datas, horas e números aparecem no formato do idioma escolhido.
+- Os avisos de erro dos servidores aparecem no seu idioma, em vez de sempre em português.
+- As telas de login e de recuperação de senha abrem no idioma do app.
+- No app desktop, a barra de menu em inglês (File, Edit, View...) saiu no Windows e no Linux; copiar, colar, desfazer e o zoom (Ctrl com +, - e 0) continuam funcionando. No macOS, o menu segue o idioma do app.
 
 ## central v0.14.0 · 2026-10-03
 - Desfazer amizade (`DELETE /api/friends/{accountId}`), por qualquer um dos dois lados, avisando os dois na hora. Depois disso qualquer um pode pedir amizade de novo.
+- O idioma escolhido fica guardado na conta (`PATCH /api/me` com `language`, devolvido no `GET /api/me`), para valer em todos os dispositivos.
+- Os erros da API e do WebSocket saem com um código (`{"code", "message", "params"}`), que o app traduz para o idioma de quem usa. Apps antigos continuam vendo a mensagem em português.
+- O pedido de cadastro guarda o idioma do site, e o e-mail para definir a senha, enviado na aprovação, sai nesse idioma.
 
 ## client v0.21.0 · 2026-10-02
 - A chamada de voz não cai mais ao abrir um canal de texto, um fórum, outro servidor ou os Amigos: no pé da lista de canais aparece "Voz conectada", com o canal da chamada, o botão de mutar, o de sair e o atalho para voltar a ele.
