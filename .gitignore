@@ -6,6 +6,8 @@ release/
 # pacote Go do índice assinado, não é saída de build (o padrão acima é do electron-builder)
 !/server-channel/internal/release/
 .vite/
+# Cópia de locales/ para o build Docker do client (ver client/Dockerfile)
+/client/locales/
 *.local
 
 # Go
