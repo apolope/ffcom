@@ -39,14 +39,25 @@ jobs:
     runs-on: [self-hosted, a3s-network]
     steps:
       - uses: actions/checkout@v7
-      - name: Conferir CHANGELOG.md
+      - name: Conferir CHANGELOG.md e CHANGELOG.en.md
         env:
           TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
         run: bash scripts/check-changelog.sh "$TAG"
 
+  locales:
+    name: Arquivos de idioma
+    runs-on: [self-hosted, a3s-network]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Conferir locales/
+        run: node scripts/check-locales.mjs
+
   build-push-deploy:
     name: Build, push e deploy
-    needs: [lint-dockerfile, security-scan, changelog]
+    needs: [lint-dockerfile, security-scan, changelog, locales]
     runs-on: [self-hosted, a3s-network]
 
     steps:
@@ -67,8 +78,12 @@ jobs:
       - name: Build e push da imagem
         working-directory: site
         run: |
-          # Cópia de reserva do histórico de versões (ver site/Dockerfile).
+          # Cópias de reserva do histórico de versões (português e inglês) e
+          # arquivos de idioma, que ficam na raiz do repositório (ver
+          # site/Dockerfile).
           cp ../CHANGELOG.md CHANGELOG.md
+          cp ../CHANGELOG.en.md CHANGELOG.en.md
+          rm -rf locales && cp -r ../locales locales
           VERSION="${{ steps.version.outputs.value }}"
           TAGS=(-t "${IMAGE}:$(git rev-parse --short HEAD)")
           if [ "$VERSION" != "dev" ]; then

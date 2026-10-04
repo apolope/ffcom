@@ -4,6 +4,8 @@
 // tela (rede do hero, pulsos, cards subindo); o chat e o terminal continuam
 // trocando de conteúdo, sem deslizar.
 (() => {
+  const i18n = window.ffcomI18n;
+  const { t } = i18n;
   const reduzir = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   document.documentElement.classList.add('js');
 
@@ -31,19 +33,22 @@
     aoAparecer(el, () => el.classList.add('visivel'), '0px 0px -60px 0px');
   });
 
-  // Chat do mock: alguém digita, a mensagem chega, a mais antiga sai.
+  // Chat do mock: alguém digita, a mensagem chega, a mais antiga sai. Nome
+  // e texto são chaves do arquivo de idioma (site.mock.*), marcadas com
+  // data-i18n para acompanhar a troca de idioma.
   const chat = document.getElementById('mock-chat');
   const digitando = document.getElementById('mock-digitando');
   const conversa = [
-    ['Ana', '#e8590c', 'Mandei as fotos da viagem no canal certo dessa vez.'],
-    ['Marina', '#3ba55c', 'Ficaram lindas! A da praia vai pro porta-retrato.'],
-    ['Tio Beto', '#faa61a', 'Achei a receita do bolo da vó. Posto em #receitas?'],
-    ['Lucas', '#aa3bff', 'Posta! E o servidor tá rodando liso aqui em casa.'],
-    ['Ana', '#e8590c', 'Melhor que grupo de mensagem: nada some e é tudo nosso.'],
-    ['Marina', '#3ba55c', 'Vó entrou na chamada, corre lá!'],
+    ['site.mock.people.ana', '#e8590c', 'site.mock.chat1'],
+    ['site.mock.people.marina', '#3ba55c', 'site.mock.chat2'],
+    ['site.mock.people.beto', '#faa61a', 'site.mock.chat3'],
+    ['site.mock.people.lucas', '#aa3bff', 'site.mock.chat4'],
+    ['site.mock.people.ana', '#e8590c', 'site.mock.chat5'],
+    ['site.mock.people.marina', '#3ba55c', 'site.mock.chat6'],
   ];
 
-  const novaMensagem = ([nome, cor, texto]) => {
+  const novaMensagem = ([chaveNome, cor, chaveTexto]) => {
+    const nome = t(chaveNome);
     const msg = document.createElement('div');
     msg.className = 'mock-msg entrando';
     const av = document.createElement('span');
@@ -53,8 +58,10 @@
     const corpo = document.createElement('div');
     const b = document.createElement('b');
     b.textContent = nome;
+    b.dataset.i18n = chaveNome;
     const p = document.createElement('p');
-    p.textContent = texto;
+    p.textContent = t(chaveTexto);
+    p.dataset.i18n = chaveTexto;
     corpo.append(b, p);
     msg.append(av, corpo);
     return msg;
@@ -65,7 +72,7 @@
     for (;;) {
       if (document.hidden) { await espera(1000); continue; }
       const item = conversa[i % conversa.length];
-      digitando.querySelector('b').textContent = item[0];
+      digitando.querySelector('b').textContent = t(item[0]);
       digitando.classList.add('ativo');
       await espera(1600 + Math.random() * 900);
       digitando.classList.remove('ativo');
@@ -82,7 +89,7 @@
       await espera(2200 + Math.random() * 1200);
     }
   };
-  if (chat && digitando) aoAparecer(chat, rodarChat);
+  if (chat && digitando) i18n.ready.then(() => aoAparecer(chat, rodarChat));
 
   // Terminal: digita os comandos e solta a saída, como numa instalação real.
   const code = document.getElementById('terminal-code');
@@ -103,7 +110,7 @@
         el.innerHTML = cmd[1];
         await espera(350);
         // Digita o texto do comando; um comentário no fim entra de uma vez.
-        const [texto, comentario = ''] = cmd[2].split(/(?=\s*<span class="c">)/);
+        const [texto, comentario = ''] = cmd[2].split(/(?=\s*<span class="c"[\s>])/);
         const tmp = document.createElement('span');
         el.append(tmp);
         for (const ch of texto.replace(/&amp;/g, '&')) {
@@ -120,18 +127,17 @@
     }
     code.append(cursor);
   };
-  if (code) aoAparecer(code, rodarTerminal, '0px 0px -120px 0px');
+  // Só depois da tradução: o terminal copia o próprio HTML (com os
+  // comentários já no idioma da página) e o redesenha.
+  if (code) i18n.ready.then(() => aoAparecer(code, rodarTerminal, '0px 0px -120px 0px'));
 
   // Histórico de versões, lido do CHANGELOG.md (fonte única, no GitHub; o
-  // nginx busca e guarda em cache, ver nginx.conf). Formato de cada seção:
-  // "## <componente> v<X.Y.Z> · <AAAA-MM-DD>" seguida de itens "- ...".
-  const COMPONENTES = {
-    client: 'App',
-    central: 'Central',
-    channel: 'Servidor',
-    'channel-image': 'Imagem do servidor',
-    site: 'Site',
-  };
+  // nginx busca e guarda em cache, ver nginx.conf) ou, em inglês, do
+  // CHANGELOG.en.md (/changelog.en.md), com as mesmas seções. Formato de
+  // cada seção: "## <componente> v<X.Y.Z> · <AAAA-MM-DD>" seguida de itens
+  // "- ...". Trocar o idioma no rodapé busca o outro arquivo.
+  const COMPONENTES = ['client', 'central', 'channel', 'channel-image', 'site'];
+  const nomeComponente = (comp) => t(`site.versions.components.${comp}`);
   const lista = document.getElementById('versoes-lista');
   const atuais = document.getElementById('versoes-atuais');
   const filtros = document.getElementById('versoes-filtros');
@@ -179,21 +185,21 @@
     return frag;
   };
 
-  const fmtData = new Intl.DateTimeFormat('pt-BR', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
   const selo = (comp) => {
     const s = document.createElement('span');
     s.className = `comp comp-${comp}`;
-    s.textContent = COMPONENTES[comp];
+    s.textContent = nomeComponente(comp);
     return s;
   };
 
   const renderVersoes = (versoes) => {
     let filtro = 'todos';
     let expandido = false;
+    const fmtData = new Intl.DateTimeFormat(i18n.lang, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 
     // Versão atual de cada componente: a primeira que aparece no arquivo.
     atuais.replaceChildren();
-    for (const comp of Object.keys(COMPONENTES)) {
+    for (const comp of COMPONENTES) {
       const v = versoes.find((x) => x.comp === comp);
       if (!v) continue;
       const chip = document.createElement('span');
@@ -230,10 +236,13 @@
       }));
       const resto = visiveis.length - mostrar.length;
       mais.hidden = resto <= 0 && !expandido;
-      mais.textContent = expandido ? 'Mostrar menos' : `Mostrar mais ${resto} ${resto === 1 ? 'versão' : 'versões'}`;
+      mais.textContent = expandido ? t('site.versions.less') : t('site.versions.more', { count: resto });
     };
 
-    const opcoes = [['todos', 'Todas'], ...Object.entries(COMPONENTES).filter(([c]) => versoes.some((v) => v.comp === c))];
+    const opcoes = [
+      ['todos', t('site.versions.all')],
+      ...COMPONENTES.filter((c) => versoes.some((v) => v.comp === c)).map((c) => [c, nomeComponente(c)]),
+    ];
     filtros.replaceChildren(...opcoes.map(([valor, rotulo]) => {
       const b = document.createElement('button');
       b.type = 'button';
@@ -250,29 +259,66 @@
     }));
     filtros.hidden = false;
 
-    mais.addEventListener('click', () => {
+    // onclick em vez de addEventListener: a lista é redesenhada a cada troca
+    // de idioma, e o botão é o mesmo.
+    mais.onclick = () => {
       const estavaExpandido = expandido;
       expandido = !expandido;
       desenhar();
       if (estavaExpandido) document.getElementById('versoes').scrollIntoView();
-    });
+    };
 
     desenhar();
   };
 
+  // Aviso com o link do CHANGELOG no GitHub, no idioma da página; volta
+  // quando o arquivo não chega.
+  const avisoGithub = () => {
+    const li = document.createElement('li');
+    li.className = 'versoes-aviso';
+    li.dataset.i18nHtml = 'site.versions.fallback';
+    li.innerHTML = t('site.versions.fallback');
+    return li;
+  };
+
+  let pedido = 0;
+  let iniciado = false;
   const carregarVersoes = async () => {
-    const aviso = lista.innerHTML;
-    lista.innerHTML = '<li class="versoes-aviso">Carregando o histórico…</li>';
+    iniciado = true;
+    const meu = ++pedido;
+    const carregando = document.createElement('li');
+    carregando.className = 'versoes-aviso';
+    carregando.textContent = t('site.versions.loading');
+    lista.replaceChildren(carregando);
     try {
-      const r = await fetch('/changelog.md', { headers: { Accept: 'text/plain' } });
+      const arquivo = i18n.lang === 'en' ? '/changelog.en.md' : '/changelog.md';
+      const r = await fetch(arquivo, { headers: { Accept: 'text/plain' } });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const versoes = parseChangelog(await r.text());
       if (!versoes.length) throw new Error('CHANGELOG sem versões');
+      if (meu !== pedido) return;
       renderVersoes(versoes);
     } catch (e) {
+      if (meu !== pedido) return;
       console.warn('Histórico de versões indisponível:', e);
-      lista.innerHTML = aviso;
+      lista.replaceChildren(avisoGithub());
+      atuais.replaceChildren();
+      filtros.hidden = true;
+      mais.hidden = true;
     }
   };
-  if (lista) aoAparecer(lista, carregarVersoes, '0px 0px 400px 0px');
+  if (lista) {
+    i18n.ready.then(() => aoAparecer(lista, carregarVersoes, '0px 0px 400px 0px'));
+    i18n.onChange(() => { if (iniciado) carregarVersoes(); });
+  }
+
+  // "Esqueci minha senha": a página do Authentik lê ?locale= antes do
+  // idioma do navegador, então abre no idioma do site.
+  const recuperar = document.querySelector('a[data-i18n="site.hero.forgotPassword"]');
+  if (recuperar) {
+    const base = recuperar.href.split('?')[0];
+    const idioma = () => { recuperar.href = `${base}?locale=${encodeURIComponent(i18n.lang)}`; };
+    idioma();
+    i18n.onChange(idioma);
+  }
 })();

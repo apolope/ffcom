@@ -2,10 +2,15 @@
 // Claude (via server-central e a3s-claude-relay), votos e moderação. As
 // regras (uma ideia por dia, usos da varinha, penalidade, quem modera)
 // vivem no server-central; aqui só a interface. Ver docs/architecture.md,
-// "Decisão: sugestões de melhoria com varinha do Claude".
+// "Decisão: sugestões de melhoria com varinha do Claude". Textos em
+// site.ideas.* e erros do server-central em errors.* do arquivo de idioma
+// (i18n.js); mensagens e avisos guardam a chave ou o erro, não o texto, e
+// são traduzidos a cada render, então acompanham a troca de idioma.
 (() => {
   const secao = document.getElementById('ideias');
-  if (!secao || !window.oidc) return;
+  const i18n = window.ffcomI18n;
+  if (!secao || !window.oidc || !i18n) return;
+  const { t } = i18n;
 
   const CENTRAL = secao.dataset.central;
   const RASCUNHO = 'ffcom-ideia-rascunho';
@@ -54,7 +59,8 @@
     varinha: null, // { id, status }
     parecidas: [],
     anterior: null, // texto antes da varinha, para desfazer
-    mensagem: null, // { tipo: 'ok'|'erro'|'info', texto }
+    mensagem: null, // { tipo: 'ok'|'erro'|'info', chave, params } ou { tipo, erro }
+    aviso: null, // acima da lista: { chave, params } ou { erro }
     enviada: null, // { id, texto } da última sugestão enviada, até a checagem terminar
   };
 
@@ -90,11 +96,18 @@
     dislike: '<path d="M17 13V4h3v9zM17 13l-4 8c-1.7 0-3-1.3-3-3v-3H4.8a2 2 0 0 1-2-2.3l1.2-7A2 2 0 0 1 6 4h11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>',
   };
 
-  const fmtData = new Intl.DateTimeFormat('pt-BR', { day: 'numeric', month: 'short' });
+  const fmtData = (d) => new Intl.DateTimeFormat(i18n.lang, { day: 'numeric', month: 'short' }).format(d);
   const primeiroNome = (user) => {
     const p = user?.profile ?? {};
-    return String(p.given_name || p.name || p.preferred_username || '').trim().split(/\s+/)[0] || 'você';
+    return String(p.given_name || p.name || p.preferred_username || '').trim().split(/\s+/)[0] || t('site.ideas.you');
   };
+
+  // Os erros do server-central vêm em minúsculas e sem ponto final;
+  // sozinhos na tela, ganham os dois.
+  const frase = (texto) => (texto ? texto.charAt(0).toUpperCase() + texto.slice(1) + (/[.!?]$/.test(texto) ? '' : '.') : '');
+
+  // Chave ou erro guardado em estado.mensagem/estado.aviso, no idioma atual.
+  const textoDe = (m) => (m.erro ? m.erro.message : t(m.chave, m.params));
 
   const rascunho = {
     ler: () => { try { return sessionStorage.getItem(RASCUNHO) ?? ''; } catch { return ''; } },
@@ -106,8 +119,21 @@
 
   // ---------- API do server-central
 
+  // Erro da API: {code, message, params?} (docs/protocol.md, "Erros da API
+  // HTTP"). A message é traduzida a cada leitura pelo code, caindo na
+  // message em português; `chave` é para erros do próprio site.
   class ErroApi extends Error {
-    constructor(status, texto) { super(texto); this.status = status; }
+    constructor(status, problema, chave) {
+      super();
+      this.status = status;
+      this.problema = problema;
+      this.chave = chave;
+    }
+
+    get message() {
+      if (this.chave) return t(this.chave);
+      return frase(i18n.errorText(this.problema)) || t('site.ideas.httpError', { status: this.status });
+    }
   }
 
   const api = async (caminho, { method = 'GET', body, auth = true } = {}, tentouRenovar = false) => {
@@ -124,13 +150,19 @@
         estado.user = null;
         estado.me = null;
         render();
-        throw new ErroApi(401, 'Sua sessão expirou. Entre de novo.');
+        throw new ErroApi(401, null, 'site.ideas.sessionExpired');
       }
     }
     const texto = await r.text();
     let dados = null;
     try { dados = texto ? JSON.parse(texto) : null; } catch { dados = null; }
-    if (!r.ok) throw new ErroApi(r.status, (dados && dados.error) || texto.trim() || `Erro ${r.status}`);
+    // `error` é o formato antigo; corpo que não é JSON (proxy na frente) vai
+    // cru.
+    if (!r.ok) {
+      throw new ErroApi(r.status, dados && (dados.code || dados.message || dados.error)
+        ? { code: dados.code, message: dados.message || dados.error, params: dados.params }
+        : { message: texto.trim() });
+    }
     return dados;
   };
 
@@ -139,7 +171,9 @@
   const entrar = () => {
     const campo = document.getElementById('ideia-texto');
     if (campo) rascunho.gravar(campo.value);
-    um.signinRedirect({ state: { voltar: '#ideias' } });
+    // ui_locales: telas do Authentik no idioma do site (pt-BR ou en, que
+    // ele aceita como estão).
+    um.signinRedirect({ state: { voltar: '#ideias' }, extraQueryParams: { ui_locales: i18n.lang } });
   };
 
   const sair = async () => {
@@ -161,7 +195,7 @@
       await um.signinRedirectCallback();
     } catch (e) {
       console.warn('Login não concluído:', e);
-      estado.mensagem = { tipo: 'erro', texto: 'Não foi possível concluir o login. Confira se sua conta tem acesso ao FFCom.' };
+      estado.mensagem = { tipo: 'erro', chave: 'site.ideas.loginFailed' };
     }
     history.replaceState(null, '', `${location.pathname}#ideias`);
     secao.scrollIntoView();
@@ -174,18 +208,23 @@
     try {
       estado.me = await api('/api/ideas/me');
     } catch (e) {
-      if (e.status !== 401) estado.mensagem = { tipo: 'erro', texto: e.message };
+      if (e.status !== 401) estado.mensagem = { tipo: 'erro', erro: e };
     }
   };
 
+  const avisar = (aviso) => {
+    estado.aviso = aviso;
+    el.aviso.textContent = aviso ? textoDe(aviso) : '';
+  };
+
   const carregarLista = async () => {
-    el.aviso.textContent = 'Carregando ideias…';
+    avisar({ chave: 'site.ideas.loadingIdeas' });
     try {
       estado.ideias = await api(`/api/ideas?view=${estado.aba}`, { auth: Boolean(estado.user) });
-      el.aviso.textContent = '';
+      avisar(null);
     } catch (e) {
       estado.ideias = [];
-      el.aviso.textContent = e.status === 403 ? 'Só administradores veem a moderação.' : 'Não foi possível carregar as ideias agora.';
+      avisar({ chave: e.status === 403 ? 'site.ideas.adminOnlyReview' : 'site.ideas.loadFailed' });
     }
     renderLista();
   };
@@ -205,7 +244,7 @@
       render();
       acompanharVarinha(r.id);
     } catch (e) {
-      estado.mensagem = { tipo: 'erro', texto: e.message };
+      estado.mensagem = { tipo: 'erro', erro: e };
       await carregarMe();
       render();
     }
@@ -228,20 +267,20 @@
       const campo = document.getElementById('ideia-texto');
       if (r.status === 'failed') {
         estado.anterior = null;
-        estado.mensagem = { tipo: 'info', texto: 'A varinha não conseguiu responder agora. Seu uso foi devolvido e o texto ficou como estava.' };
+        estado.mensagem = { tipo: 'info', chave: 'site.ideas.wandFailed' };
       } else if (r.result.notSuggestion) {
         estado.anterior = null;
-        estado.mensagem = { tipo: 'info', texto: `Isso ainda não parece uma sugestão de melhoria. ${r.result.hint}` };
+        estado.mensagem = { tipo: 'info', chave: 'site.ideas.notSuggestion', params: { hint: r.result.hint ?? '' } };
       } else if (r.result.offensive) {
         estado.anterior = null;
         if (campo) campo.value = '';
         rascunho.limpar();
-        estado.mensagem = { tipo: 'erro', texto: 'Essa sugestão foi considerada ofensiva e descartada. Além do uso, ela custou usos extras da varinha de hoje.' };
+        estado.mensagem = { tipo: 'erro', chave: 'site.ideas.offensive' };
       } else {
         if (campo) campo.value = r.result.text;
         rascunho.gravar(r.result.text);
         estado.parecidas = r.result.similar ?? [];
-        estado.mensagem = { tipo: 'ok', texto: 'Texto melhorado. Revise e ajuste o que quiser antes de enviar.' };
+        estado.mensagem = { tipo: 'ok', chave: 'site.ideas.improved' };
       }
       await carregarMe();
       render();
@@ -272,12 +311,12 @@
       rascunho.limpar();
       estado.parecidas = [];
       estado.anterior = null;
-      estado.mensagem = { tipo: 'info', texto: 'Recebemos sua sugestão. Ela passa por uma verificação rápida antes de aparecer.' };
+      estado.mensagem = { tipo: 'info', chave: 'site.ideas.received' };
       await carregarMe();
       render();
       acompanharEnvio();
     } catch (e) {
-      estado.mensagem = { tipo: 'erro', texto: e.message };
+      estado.mensagem = { tipo: 'erro', erro: e };
       render();
     }
   };
@@ -293,10 +332,7 @@
         // Não era uma sugestão: o dia não foi gasto, o texto volta ao campo.
         rascunho.gravar(estado.enviada.texto);
         estado.enviada = null;
-        estado.mensagem = {
-          tipo: 'erro',
-          texto: `Não publicamos porque o texto não parece uma sugestão de melhoria. ${descartada.feedback ?? ''} Você pode reescrever e enviar de novo.`,
-        };
+        estado.mensagem = { tipo: 'erro', chave: 'site.ideas.discarded', params: { feedback: descartada.feedback ?? '' } };
         render();
         return;
       }
@@ -304,8 +340,8 @@
       if (s && s !== 'checking') {
         estado.enviada = null;
         estado.mensagem = s === 'review'
-          ? { tipo: 'info', texto: 'Sua sugestão vai passar por um moderador antes de aparecer na lista.' }
-          : { tipo: 'ok', texto: 'Sua sugestão foi publicada. Agora é torcer pelos votos.' };
+          ? { tipo: 'info', chave: 'site.ideas.toReview' }
+          : { tipo: 'ok', chave: 'site.ideas.published' };
         render();
         if (estado.aba === 'ranking') carregarLista();
         return;
@@ -330,7 +366,7 @@
       renderLista();
       renderComposer();
     } catch (e) {
-      el.aviso.textContent = e.message;
+      avisar({ erro: e });
     }
   };
 
@@ -339,11 +375,11 @@
       await api(`/api/ideas/${ideia.id}`, { method: 'DELETE' });
       estado.ideias = estado.ideias.filter((i) => i.id !== ideia.id);
       estado.parecidas = estado.parecidas.filter((i) => i.id !== ideia.id);
-      el.aviso.textContent = '';
+      avisar(null);
       renderLista();
       renderComposer();
     } catch (e) {
-      el.aviso.textContent = e.message;
+      avisar({ erro: e });
     }
   };
 
@@ -352,25 +388,16 @@
       await api(`/api/ideas/${ideia.id}`, { method: 'PATCH', body: { status, implementedVersion: versao } });
       await carregarLista();
     } catch (e) {
-      el.aviso.textContent = e.message;
+      avisar({ erro: e });
     }
   };
 
   // ---------- renderização
 
-  const STATUS = {
-    checking: 'Em verificação',
-    review: 'Em moderação',
-    open: 'Publicada',
-    planned: 'Planejada',
-    implemented: 'Implementada',
-    rejected: 'Recusada',
-    discarded: 'Descartada',
-  };
-  const MOTIVO = {
-    conteudo_ofensivo: 'a verificação apontou conteúdo ofensivo',
-    verificacao_indisponivel: 'a verificação automática não pôde rodar',
-  };
+  // Status e motivo de moderação vêm do server-central; sem tradução,
+  // aparece o valor cru.
+  const nomeStatus = (s) => (i18n.exists(`site.ideas.status.${s}`) ? t(`site.ideas.status.${s}`) : s);
+  const nomeMotivo = (m) => (i18n.exists(`site.ideas.reviewReason.${m}`) ? t(`site.ideas.reviewReason.${m}`) : m);
 
   const botoesVoto = (ideia) => {
     const propria = ideia.mine;
@@ -381,13 +408,13 @@
       class: `voto voto-${valor > 0 ? 'like' : 'dislike'}`,
       'aria-pressed': String(ideia.myVote === valor),
       'aria-label': `${rotulo} (${qtd})`,
-      title: propria ? 'Você não pode votar na própria ideia' : (estado.user ? rotulo : 'Entre para votar'),
+      title: propria ? t('site.ideas.ownVote') : (estado.user ? rotulo : t('site.ideas.signInToVote')),
       disabled: propria,
       onclick: () => votar(ideia, valor),
     }, svg(ICONES[icone]), h('span', {}, String(qtd)));
     return h('div', { class: 'votos' },
-      botao(1, 'like', 'Gostei', ideia.likes),
-      botao(-1, 'dislike', 'Não gostei', ideia.dislikes));
+      botao(1, 'like', t('site.ideas.like'), ideia.likes),
+      botao(-1, 'dislike', t('site.ideas.dislike'), ideia.dislikes));
   };
 
   const acoesAdmin = (ideia) => {
@@ -395,49 +422,49 @@
     const acoes = h('div', { class: 'admin-acoes' });
     const botao = (rotulo, status, extra) => h('button', { type: 'button', class: 'btn-mini', onclick: () => moderar(ideia, status, extra?.()) }, rotulo);
     if (ideia.status === 'review' || ideia.status === 'checking') {
-      acoes.append(botao('Aprovar', 'open'), botao('Recusar', 'rejected'));
+      acoes.append(botao(t('site.ideas.admin.approve'), 'open'), botao(t('site.ideas.admin.reject'), 'rejected'));
     } else if (ideia.status === 'open' || ideia.status === 'planned') {
-      if (ideia.status === 'open') acoes.append(botao('Planejar', 'planned'));
+      if (ideia.status === 'open') acoes.append(botao(t('site.ideas.admin.plan'), 'planned'));
       const idCampo = `versao-${ideia.id}`;
-      const campo = h('input', { id: idCampo, class: 'campo-mini', placeholder: 'client v0.15.0', 'aria-label': 'Versão em que foi implementada' });
-      acoes.append(campo, botao('Implementada', 'implemented', () => campo.value.trim()), botao('Recusar', 'rejected'));
+      const campo = h('input', { id: idCampo, class: 'campo-mini', placeholder: 'client v0.15.0', 'aria-label': t('site.ideas.admin.versionLabel') });
+      acoes.append(campo, botao(t('site.ideas.admin.implemented'), 'implemented', () => campo.value.trim()), botao(t('site.ideas.admin.reject'), 'rejected'));
     } else if (ideia.status === 'implemented') {
-      acoes.append(botao('Voltar ao ranking', 'open'));
+      acoes.append(botao(t('site.ideas.admin.backToRanking'), 'open'));
     }
     // Excluir em dois cliques: o primeiro só arma o botão.
     const apagar = h('button', {
       type: 'button',
       class: 'btn-mini btn-perigo',
-      title: 'Apaga a ideia e os votos de vez. Diferente de Recusar, devolve ao autor a sugestão do dia.',
+      title: t('site.ideas.admin.deleteTitle'),
       onclick: () => {
         if (apagar.dataset.armado) return excluir(ideia);
         apagar.dataset.armado = '1';
-        apagar.textContent = 'Confirmar exclusão';
+        apagar.textContent = t('site.ideas.admin.confirmDelete');
         setTimeout(() => {
           if (!apagar.isConnected) return;
           delete apagar.dataset.armado;
-          apagar.textContent = 'Excluir';
+          apagar.textContent = t('site.ideas.admin.delete');
         }, 5000);
       },
-    }, 'Excluir');
+    }, t('site.ideas.admin.delete'));
     acoes.append(apagar);
     return acoes;
   };
 
   const itemIdeia = (ideia, { compacto = false } = {}) => {
-    const meta = h('p', { class: 'ideia-meta' }, `por ${ideia.author} · ${fmtData.format(new Date(ideia.createdAt))}`);
-    if (ideia.status === 'planned') meta.append(h('span', { class: 'etiqueta etiqueta-planejada' }, 'Planejada'));
+    const meta = h('p', { class: 'ideia-meta' }, t('site.ideas.byline', { author: ideia.author, date: fmtData(new Date(ideia.createdAt)) }));
+    if (ideia.status === 'planned') meta.append(h('span', { class: 'etiqueta etiqueta-planejada' }, nomeStatus('planned')));
     if (ideia.status === 'implemented' && ideia.implementedVersion) {
       meta.append(h('a', { class: 'etiqueta etiqueta-implementada', href: '#versoes' }, ideia.implementedVersion));
     }
-    if (ideia.mine) meta.append(h('span', { class: 'etiqueta' }, 'Sua ideia'));
+    if (ideia.mine) meta.append(h('span', { class: 'etiqueta' }, t('site.ideas.mine')));
     if (ideia.reviewReason && (ideia.status === 'review')) {
-      meta.append(h('span', { class: 'etiqueta etiqueta-alerta' }, MOTIVO[ideia.reviewReason] ?? ideia.reviewReason));
+      meta.append(h('span', { class: 'etiqueta etiqueta-alerta' }, nomeMotivo(ideia.reviewReason)));
     }
     return h('li', { class: `ideia${compacto ? ' compacta' : ''}` },
-      h('div', { class: 'placar', 'aria-label': `${ideia.score} pontos` },
+      h('div', { class: 'placar', 'aria-label': t('site.ideas.scoreLabel', { count: ideia.score }) },
         h('span', { class: 'placar-num' }, String(ideia.score)),
-        h('span', { class: 'placar-rot' }, Math.abs(ideia.score) === 1 ? 'ponto' : 'pontos')),
+        h('span', { class: 'placar-rot' }, t('site.ideas.points', { count: Math.abs(ideia.score) }))),
       h('div', { class: 'ideia-corpo' },
         ideia.title ? h('h3', {}, ideia.title) : null,
         h('p', { class: 'ideia-texto' }, ideia.body),
@@ -446,20 +473,20 @@
       botoesVoto(ideia));
   };
 
+  const VAZIO = {
+    ranking: 'site.ideas.empty.ranking',
+    implemented: 'site.ideas.empty.implemented',
+    review: 'site.ideas.empty.review',
+  };
+
   const renderLista = () => {
     el.lista.replaceChildren(...estado.ideias.map((i) => itemIdeia(i)));
-    if (!estado.ideias.length && !el.aviso.textContent) {
-      el.aviso.textContent = {
-        ranking: 'Nenhuma ideia publicada ainda. Que tal ser a primeira?',
-        implemented: 'Nenhuma ideia implementada ainda.',
-        review: 'Nada esperando moderação.',
-      }[estado.aba];
-    }
+    if (!estado.ideias.length && !estado.aviso) avisar({ chave: VAZIO[estado.aba] });
   };
 
   const renderAbas = () => {
-    const abas = [['ranking', 'Mais votadas'], ['implemented', 'Implementadas']];
-    if (estado.me?.isAdmin) abas.push(['review', 'Moderação']);
+    const abas = [['ranking', t('site.ideas.tabs.ranking')], ['implemented', t('site.ideas.tabs.implemented')]];
+    if (estado.me?.isAdmin) abas.push(['review', t('site.ideas.tabs.review')]);
     el.abas.replaceChildren(...abas.map(([valor, rotulo]) => h('button', {
       type: 'button',
       class: 'filtro',
@@ -474,7 +501,7 @@
   };
 
   const mensagem = () => (estado.mensagem
-    ? h('p', { class: `ideia-msg ideia-msg-${estado.mensagem.tipo}`, role: estado.mensagem.tipo === 'erro' ? 'alert' : 'status' }, estado.mensagem.texto)
+    ? h('p', { class: `ideia-msg ideia-msg-${estado.mensagem.tipo}`, role: estado.mensagem.tipo === 'erro' ? 'alert' : 'status' }, textoDe(estado.mensagem))
     : null);
 
   const renderComposer = () => {
@@ -483,20 +510,20 @@
       trocar(c, 
         h('div', { class: 'composer-convite' },
           h('div', {},
-            h('h3', {}, 'Tem uma ideia para o FFCom?'),
-            h('p', {}, 'Entre com sua conta do FFCom para sugerir e votar. Uma sugestão por dia, com até 3 ajudas da varinha para deixar o texto claro.')),
-          h('button', { type: 'button', class: 'btn', onclick: entrar }, 'Entrar para sugerir')),
+            h('h3', {}, t('site.ideas.invite.title')),
+            h('p', {}, t('site.ideas.invite.body'))),
+          h('button', { type: 'button', class: 'btn', onclick: entrar }, t('site.ideas.invite.signIn'))),
         mensagem());
       return;
     }
 
     const topo = h('div', { class: 'composer-topo' },
-      h('span', {}, `Olá, ${primeiroNome(estado.user)}`),
-      h('button', { type: 'button', class: 'link-botao', onclick: sair }, 'Sair'));
+      h('span', {}, t('site.ideas.hello', { name: primeiroNome(estado.user) })),
+      h('button', { type: 'button', class: 'link-botao', onclick: sair }, t('site.ideas.signOut')));
 
     const me = estado.me;
     if (!me) {
-      trocar(c, topo, h('p', { class: 'versoes-aviso' }, 'Carregando…'), mensagem());
+      trocar(c, topo, h('p', { class: 'versoes-aviso' }, t('site.ideas.loading')), mensagem());
       return;
     }
 
@@ -504,11 +531,11 @@
       const ideia = me.todayIdea;
       trocar(c, topo,
         h('div', { class: 'ideia-do-dia' },
-          h('p', { class: 'ideia-do-dia-rot' }, `Sua sugestão de hoje · ${STATUS[ideia.status] ?? ideia.status}`),
+          h('p', { class: 'ideia-do-dia-rot' }, t('site.ideas.today', { status: nomeStatus(ideia.status) })),
           h('p', {}, ideia.body),
           h('p', { class: 'versoes-aviso' }, ideia.status === 'review'
-            ? 'Ela aparece na lista assim que um moderador aprovar.'
-            : 'Amanhã você pode enviar outra.')),
+            ? t('site.ideas.todayReview')
+            : t('site.ideas.todayTomorrow'))),
         mensagem());
       return;
     }
@@ -519,7 +546,7 @@
       id: 'ideia-texto',
       rows: '5',
       maxlength: String(MAX),
-      placeholder: 'Ex.: poder fixar mensagens importantes no topo do canal.',
+      placeholder: t('site.ideas.placeholder'),
       readonly: trabalhando,
       'aria-describedby': 'ideia-contador',
     });
@@ -531,11 +558,11 @@
       class: `varinha${trabalhando ? ' trabalhando' : ''}`,
       onclick: usarVarinha,
       'aria-label': me.assistEnabled
-        ? `Melhorar o texto com o Claude. ${usados} de ${me.wandLimit} usos hoje`
-        : 'Varinha indisponível no momento',
-    }, svg(ICONES.varinha), h('span', {}, trabalhando ? 'Melhorando…' : 'Melhorar texto'),
-    h('span', { class: 'varinha-contador', title: `${usados} de ${me.wandLimit} usos da varinha hoje` }, `${usados}/${me.wandLimit}`));
-    const enviarBtn = h('button', { type: 'submit', class: 'btn' }, 'Enviar sugestão');
+        ? t('site.ideas.wandLabel', { used: usados, limit: me.wandLimit })
+        : t('site.ideas.wandUnavailableLabel'),
+    }, svg(ICONES.varinha), h('span', {}, trabalhando ? t('site.ideas.wandWorking') : t('site.ideas.wandButton')),
+    h('span', { class: 'varinha-contador', title: t('site.ideas.wandCounterTitle', { used: usados, limit: me.wandLimit }) }, `${usados}/${me.wandLimit}`));
+    const enviarBtn = h('button', { type: 'submit', class: 'btn' }, t('site.ideas.submit'));
 
     const atualizar = () => {
       const n = campo.value.trim().length;
@@ -548,21 +575,21 @@
 
     const parecidas = estado.parecidas.length
       ? h('div', { class: 'parecidas' },
-        h('p', { class: 'parecidas-rot' }, 'Parece com ideias que já existem. Se for a mesma coisa, vote nela; se for diferente, siga com a sua.'),
+        h('p', { class: 'parecidas-rot' }, t('site.ideas.similar')),
         h('ol', { class: 'ideias-lista' }, estado.parecidas.map((i) => itemIdeia(i, { compacto: true }))))
       : null;
 
     trocar(c, topo,
       h('form', { class: 'composer-form', onsubmit: enviar },
-        h('label', { for: 'ideia-texto', class: 'composer-rot' }, 'Sua sugestão'),
+        h('label', { for: 'ideia-texto', class: 'composer-rot' }, t('site.ideas.yourSuggestion')),
         campo,
         h('div', { class: 'composer-barra' },
           varinha,
-          estado.anterior != null && !trabalhando ? h('button', { type: 'button', class: 'link-botao', onclick: desfazer }, 'Desfazer') : null,
+          estado.anterior != null && !trabalhando ? h('button', { type: 'button', class: 'link-botao', onclick: desfazer }, t('site.ideas.undo')) : null,
           contador,
           enviarBtn),
-        trabalhando ? h('p', { class: 'versoes-aviso' }, 'O Claude está revisando seu texto. Quando a fila está cheia, pode levar alguns minutos.') : null,
-        !me.assistEnabled ? h('p', { class: 'versoes-aviso' }, 'A varinha está indisponível agora; você ainda pode enviar sua sugestão.') : null),
+        trabalhando ? h('p', { class: 'versoes-aviso' }, t('site.ideas.claudeReviewing')) : null,
+        !me.assistEnabled ? h('p', { class: 'versoes-aviso' }, t('site.ideas.wandDisabled')) : null),
       mensagem(),
       parecidas);
   };
@@ -574,7 +601,15 @@
 
   // ---------- início
 
+  // Troca de idioma: redesenha tudo com os textos novos, sem buscar de novo.
+  i18n.onChange(() => {
+    render();
+    renderLista();
+    avisar(estado.aviso);
+  });
+
   const iniciar = async () => {
+    await i18n.ready;
     await voltarDoLogin();
     estado.user = await um.getUser();
     if (estado.user?.expired) {
@@ -596,6 +631,6 @@
 
   iniciar().catch((e) => {
     console.warn('Ideias indisponíveis:', e);
-    el.aviso.textContent = 'Não foi possível carregar as ideias agora.';
+    avisar({ chave: 'site.ideas.loadFailed' });
   });
 })();

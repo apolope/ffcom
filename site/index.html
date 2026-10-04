@@ -3,38 +3,39 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>FFCom · sua comunidade, no seu servidor</title>
-  <meta name="description" content="FFCom organiza a conversa em servidores, categorias e canais de texto, voz e fórum, mas cada servidor roda na máquina de quem cria a comunidade.">
+  <title data-i18n="site.meta.title">FFCom · sua comunidade, no seu servidor</title>
+  <meta name="description" data-i18n-attr="content:site.meta.description" content="FFCom organiza a conversa em servidores, categorias e canais de texto, voz e fórum, mas cada servidor roda na máquina de quem cria a comunidade.">
   <meta name="theme-color" content="#aa3bff">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="FFCom · sua comunidade, no seu servidor">
-  <meta property="og:description" content="Servidores, canais de texto, voz e fórum, hospedados por quem cria a comunidade.">
+  <meta property="og:title" data-i18n-attr="content:site.meta.title" content="FFCom · sua comunidade, no seu servidor">
+  <meta property="og:description" data-i18n-attr="content:site.meta.ogDescription" content="Servidores, canais de texto, voz e fórum, hospedados por quem cria a comunidade.">
   <meta property="og:url" content="https://ffcom.a3sitsolutions.com.br/">
   <meta property="og:image" content="https://ffcom.a3sitsolutions.com.br/assets/og.png">
   <link rel="preload" href="/assets/fonts/bricolage-grotesque-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/styles.css">
+  <script src="/i18n.js"></script>
 </head>
 <body>
-  <a class="skip" href="#conteudo">Pular para o conteúdo</a>
+  <a class="skip" href="#conteudo" data-i18n="site.skip">Pular para o conteúdo</a>
 
   <header class="topo">
     <div class="wrap topo-inner">
-      <a class="marca" href="/" aria-label="FFCom, início">
+      <a class="marca" href="/" aria-label="FFCom, início" data-i18n-attr="aria-label:site.nav.home">
         <img src="/assets/logo.svg" alt="" width="36" height="36">
         <span>ffcom</span>
       </a>
-      <nav aria-label="Seções">
-        <a href="#recursos">Recursos</a>
-        <a href="#como-funciona">Como funciona</a>
-        <a href="#hospedar">Hospedar</a>
-        <a href="#participar">Participar</a>
-        <a href="#ideias">Ideias</a>
-        <a href="#versoes">Versões</a>
+      <nav aria-label="Seções" data-i18n-attr="aria-label:site.nav.label">
+        <a href="#recursos" data-i18n="site.nav.features">Recursos</a>
+        <a href="#como-funciona" data-i18n="site.nav.howItWorks">Como funciona</a>
+        <a href="#hospedar" data-i18n="site.nav.host">Hospedar</a>
+        <a href="#participar" data-i18n="site.nav.join">Participar</a>
+        <a href="#ideias" data-i18n="site.nav.ideas">Ideias</a>
+        <a href="#versoes" data-i18n="site.nav.versions">Versões</a>
       </nav>
-      <a class="btn btn-sm" href="https://app.ffcom.a3sitsolutions.com.br/">Entrar</a>
+      <a class="btn btn-sm" href="https://app.ffcom.a3sitsolutions.com.br/" data-i18n="site.nav.signIn">Entrar</a>
     </div>
   </header>
 
@@ -103,17 +104,17 @@
       </g></svg>
       <div class="wrap hero-grid">
         <div class="hero-texto">
-          <p class="selo">Em testes · acesso por convite</p>
-          <h1>Sua comunidade, no seu servidor.</h1>
-          <p class="lead">O FFCom organiza a conversa do jeito que você já conhece: servidores, categorias e canais de texto, voz e fórum. A diferença está em quem guarda tudo isso, porque cada servidor roda na máquina de quem cria a comunidade, e nenhuma empresa pode desligar, vender ou mudar as regras dele por você.</p>
+          <p class="selo" data-i18n="site.hero.badge">Em testes · acesso por convite</p>
+          <h1 data-i18n="site.hero.title">Sua comunidade, no seu servidor.</h1>
+          <p class="lead" data-i18n="site.hero.lead">O FFCom organiza a conversa do jeito que você já conhece: servidores, categorias e canais de texto, voz e fórum. A diferença está em quem guarda tudo isso, porque cada servidor roda na máquina de quem cria a comunidade, e nenhuma empresa pode desligar, vender ou mudar as regras dele por você.</p>
           <div class="acoes">
-            <a class="btn" href="https://app.ffcom.a3sitsolutions.com.br/">Entrar no FFCom</a>
-            <a class="btn btn-ghost" href="https://github.com/apolope/ffcom/releases/download/desktop-stable/FFCom-Setup.exe">Baixar para Windows</a>
-            <a class="btn btn-ghost" href="#hospedar">Hospedar um servidor</a>
+            <a class="btn" href="https://app.ffcom.a3sitsolutions.com.br/" data-i18n="site.hero.signIn">Entrar no FFCom</a>
+            <a class="btn btn-ghost" href="https://github.com/apolope/ffcom/releases/download/desktop-stable/FFCom-Setup.exe" data-i18n="site.hero.downloadWindows">Baixar para Windows</a>
+            <a class="btn btn-ghost" href="#hospedar" data-i18n="site.hero.hostServer">Hospedar um servidor</a>
           </div>
-          <p class="acoes-nota"><a href="https://auth.ffcom.a3sitsolutions.com.br/if/flow/ffcom-recovery-flow/">Esqueci minha senha</a></p>
+          <p class="acoes-nota"><a href="https://auth.ffcom.a3sitsolutions.com.br/if/flow/ffcom-recovery-flow/" data-i18n="site.hero.forgotPassword">Esqueci minha senha</a></p>
           <!-- Instalador sem assinatura digital: ver docs/architecture.md, "Decisão: distribuição e atualização do app desktop". -->
-          <p class="acoes-nota">No app para Windows, o próprio app avisa quando há versão nova. Ao instalar, o Windows pode mostrar "O Windows protegeu o computador": clique em <strong>Mais informações</strong> e em <strong>Executar assim mesmo</strong>.</p>
+          <p class="acoes-nota" data-i18n-html="site.hero.windowsNote">No app para Windows, o próprio app avisa quando há versão nova. Ao instalar, o Windows pode mostrar "O Windows protegeu o computador": clique em <strong>Mais informações</strong> e em <strong>Executar assim mesmo</strong>.</p>
         </div>
 
         <div class="app-mock" aria-hidden="true">
@@ -124,23 +125,23 @@
             <span class="mock-srv add">+</span>
           </div>
           <div class="mock-canais">
-            <p class="mock-nome-srv">Família da Ana</p>
-            <p class="mock-cat">Texto</p>
-            <p class="mock-canal ativo"># geral</p>
-            <p class="mock-canal"># receitas</p>
-            <p class="mock-canal"># fotos-da-viagem</p>
-            <p class="mock-cat">Voz</p>
-            <p class="mock-canal voz"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6h2l3-3v10L5 10H3z" fill="currentColor"></path><path d="M10.5 5.5a3.5 3.5 0 0 1 0 5M12.5 3.5a6.5 6.5 0 0 1 0 9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg>sala da vó</p>
+            <p class="mock-nome-srv" data-i18n="site.mock.serverName">Família da Ana</p>
+            <p class="mock-cat" data-i18n="site.mock.textCategory">Texto</p>
+            <p class="mock-canal ativo" data-i18n="site.mock.channelGeneral"># geral</p>
+            <p class="mock-canal" data-i18n="site.mock.channelRecipes"># receitas</p>
+            <p class="mock-canal" data-i18n="site.mock.channelPhotos"># fotos-da-viagem</p>
+            <p class="mock-cat" data-i18n="site.mock.voiceCategory">Voz</p>
+            <p class="mock-canal voz"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6h2l3-3v10L5 10H3z" fill="currentColor"></path><path d="M10.5 5.5a3.5 3.5 0 0 1 0 5M12.5 3.5a6.5 6.5 0 0 1 0 9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg><span data-i18n="site.mock.voiceGrandma">sala da vó</span></p>
             <div class="mock-falantes"><span class="av mini falando" style="--c:#faa61a">T</span><span class="av mini" style="--c:#3ba55c">M</span></div>
-            <p class="mock-canal"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6h2l3-3v10L5 10H3z" fill="currentColor"></path><path d="M10.5 5.5a3.5 3.5 0 0 1 0 5M12.5 3.5a6.5 6.5 0 0 1 0 9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg>jogatina</p>
+            <p class="mock-canal"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6h2l3-3v10L5 10H3z" fill="currentColor"></path><path d="M10.5 5.5a3.5 3.5 0 0 1 0 5M12.5 3.5a6.5 6.5 0 0 1 0 9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg><span data-i18n="site.mock.voiceGaming">jogatina</span></p>
           </div>
           <div class="mock-chat" id="mock-chat">
-            <p class="mock-topo"># geral</p>
-            <div class="mock-msg"><span class="av" style="--c:#3ba55c">M</span><div><b>Marina</b><p>Alguém sabe se o churrasco de sábado está de pé?</p></div></div>
-            <div class="mock-msg"><span class="av" style="--c:#faa61a">T</span><div><b>Tio Beto</b><p>Está sim. Eu levo o carvão e a caixa de som.</p></div></div>
-            <div class="mock-msg"><span class="av" style="--c:#aa3bff">L</span><div><b>Lucas</b><p>Entro na sala da vó às 20h pra combinar.</p></div></div>
-            <p class="mock-digitando" id="mock-digitando" aria-hidden="true"><span class="pontos"><i></i><i></i><i></i></span> <b></b> está digitando</p>
-            <p class="mock-input">Conversar em #geral</p>
+            <p class="mock-topo" data-i18n="site.mock.channelGeneral"># geral</p>
+            <div class="mock-msg"><span class="av" style="--c:#3ba55c">M</span><div><b data-i18n="site.mock.people.marina">Marina</b><p data-i18n="site.mock.intro1">Alguém sabe se o churrasco de sábado está de pé?</p></div></div>
+            <div class="mock-msg"><span class="av" style="--c:#faa61a">T</span><div><b data-i18n="site.mock.people.beto">Tio Beto</b><p data-i18n="site.mock.intro2">Está sim. Eu levo o carvão e a caixa de som.</p></div></div>
+            <div class="mock-msg"><span class="av" style="--c:#aa3bff">L</span><div><b data-i18n="site.mock.people.lucas">Lucas</b><p data-i18n="site.mock.intro3">Entro na sala da vó às 20h pra combinar.</p></div></div>
+            <p class="mock-digitando" id="mock-digitando" aria-hidden="true"><span class="pontos"><i></i><i></i><i></i></span> <b></b> <span data-i18n="site.mock.typing">está digitando</span></p>
+            <p class="mock-input" data-i18n="site.mock.input">Conversar em #geral</p>
           </div>
         </div>
       </div>
@@ -148,32 +149,32 @@
 
     <section id="recursos" class="secao">
       <div class="wrap">
-        <h2>O que já funciona</h2>
-        <p class="sub">Tudo abaixo já está implementado e no ar na instância de testes.</p>
+        <h2 data-i18n="site.features.title">O que já funciona</h2>
+        <p class="sub" data-i18n="site.features.subtitle">Tudo abaixo já está implementado e no ar na instância de testes.</p>
         <div class="grade">
           <article class="card revelar">
-            <h3>Texto em tempo real</h3>
-            <p>Canais de texto com histórico, anexos, edição e exclusão de mensagens, e indicador de não lidas em todos os servidores ao mesmo tempo.</p>
+            <h3 data-i18n="site.features.text.title">Texto em tempo real</h3>
+            <p data-i18n="site.features.text.body">Canais de texto com histórico, anexos, edição e exclusão de mensagens, e indicador de não lidas em todos os servidores ao mesmo tempo.</p>
           </article>
           <article class="card revelar">
-            <h3>Voz, vídeo e tela</h3>
-            <p>Canais de voz com câmera, compartilhamento de tela, push-to-talk e atalho para mutar, rodando num LiveKit que fica no seu próprio servidor.</p>
+            <h3 data-i18n="site.features.voice.title">Voz, vídeo e tela</h3>
+            <p data-i18n="site.features.voice.body">Canais de voz com câmera, compartilhamento de tela, push-to-talk e atalho para mutar, rodando num LiveKit que fica no seu próprio servidor.</p>
           </article>
           <article class="card revelar">
-            <h3>Fórum</h3>
-            <p>Para o que não pode se perder no meio do chat: tópicos com respostas, organizados como qualquer outro canal.</p>
+            <h3 data-i18n="site.features.forum.title">Fórum</h3>
+            <p data-i18n="site.features.forum.body">Para o que não pode se perder no meio do chat: tópicos com respostas, organizados como qualquer outro canal.</p>
           </article>
           <article class="card revelar">
-            <h3>Cargos e permissões</h3>
-            <p>Cargos com permissões por servidor e ajustes por canal, além de convites, expulsão e banimento de membros.</p>
+            <h3 data-i18n="site.features.roles.title">Cargos e permissões</h3>
+            <p data-i18n="site.features.roles.body">Cargos com permissões por servidor e ajustes por canal, além de convites, expulsão e banimento de membros.</p>
           </article>
           <article class="card revelar">
-            <h3>Amigos e mensagens diretas</h3>
-            <p>Lista de amigos com presença, e mensagens diretas cifradas de ponta a ponta: nem o servidor que entrega a mensagem consegue lê-la.</p>
+            <h3 data-i18n="site.features.friends.title">Amigos e mensagens diretas</h3>
+            <p data-i18n="site.features.friends.body">Lista de amigos com presença, e mensagens diretas cifradas de ponta a ponta: nem o servidor que entrega a mensagem consegue lê-la.</p>
           </article>
           <article class="card revelar">
-            <h3>No navegador ou instalado</h3>
-            <p>Funciona no navegador e pode ser instalado como aplicativo (PWA). A versão desktop em Electron está em preparação.</p>
+            <h3 data-i18n="site.features.apps.title">No navegador ou instalado</h3>
+            <p data-i18n="site.features.apps.body">Funciona no navegador e pode ser instalado como aplicativo (PWA). A versão desktop em Electron está em preparação.</p>
           </article>
         </div>
       </div>
@@ -181,45 +182,45 @@
 
     <section id="como-funciona" class="secao secao-alt">
       <div class="wrap">
-        <h2>Como funciona</h2>
-        <p class="sub">São três peças, e só uma delas é central, a que guarda a sua conta.</p>
+        <h2 data-i18n="site.how.title">Como funciona</h2>
+        <p class="sub" data-i18n="site.how.subtitle">São três peças, e só uma delas é central, a que guarda a sua conta.</p>
         <div class="arq revelar">
           <div class="arq-no central">
-            <p class="arq-tag">server-central · uma instância oficial</p>
-            <h3>Sua conta</h3>
-            <p>Login, perfil, amigos, mensagens diretas cifradas e a lista dos servidores em que você entrou. Não guarda as conversas dos servidores.</p>
+            <p class="arq-tag" data-i18n="site.how.centralTag">server-central · uma instância oficial</p>
+            <h3 data-i18n="site.how.centralTitle">Sua conta</h3>
+            <p data-i18n="site.how.centralBody">Login, perfil, amigos, mensagens diretas cifradas e a lista dos servidores em que você entrou. Não guarda as conversas dos servidores.</p>
           </div>
           <div class="arq-seta" aria-hidden="true"><span class="pacote"></span><span class="pacote p2"></span></div>
           <div class="arq-no">
-            <p class="arq-tag">client · web e desktop</p>
-            <h3>O aplicativo</h3>
-            <p>Um só aplicativo conversa com quantos servidores você quiser, cada um no endereço de quem o hospeda.</p>
+            <p class="arq-tag" data-i18n="site.how.clientTag">client · web e desktop</p>
+            <h3 data-i18n="site.how.clientTitle">O aplicativo</h3>
+            <p data-i18n="site.how.clientBody">Um só aplicativo conversa com quantos servidores você quiser, cada um no endereço de quem o hospeda.</p>
           </div>
           <div class="arq-seta" aria-hidden="true"><span class="pacote"></span><span class="pacote p2"></span></div>
           <div class="arq-nos">
-            <div class="arq-no mini"><p class="arq-tag">server-channel</p><h3>A casa da família</h3></div>
-            <div class="arq-no mini"><p class="arq-tag">server-channel</p><h3>O grupo do RPG</h3></div>
-            <div class="arq-no mini"><p class="arq-tag">server-channel</p><h3>A sua comunidade</h3></div>
+            <div class="arq-no mini"><p class="arq-tag">server-channel</p><h3 data-i18n="site.how.family">A casa da família</h3></div>
+            <div class="arq-no mini"><p class="arq-tag">server-channel</p><h3 data-i18n="site.how.rpg">O grupo do RPG</h3></div>
+            <div class="arq-no mini"><p class="arq-tag">server-channel</p><h3 data-i18n="site.how.yours">A sua comunidade</h3></div>
           </div>
         </div>
-        <p class="nota">Cada <code>server-channel</code> guarda os próprios canais, mensagens, arquivos e chamadas de voz. Se um deles sair do ar, os outros seguem funcionando, e ninguém de fora decide quem entra: só se chega a um servidor por convite ou pelo endereço dele.</p>
+        <p class="nota" data-i18n-html="site.how.note">Cada <code>server-channel</code> guarda os próprios canais, mensagens, arquivos e chamadas de voz. Se um deles sair do ar, os outros seguem funcionando, e ninguém de fora decide quem entra: só se chega a um servidor por convite ou pelo endereço dele.</p>
       </div>
     </section>
 
     <section id="hospedar" class="secao">
       <div class="wrap duas-col">
         <div>
-          <h2>Hospede o seu</h2>
-          <p>Um servidor FFCom é um diretório com um <code>docker-compose.yml</code> e um arquivo <code>.env</code>. Ele sobe o serviço, o banco Postgres, o LiveKit para voz e vídeo e um servidor TURN para atravessar NAT, sem compilar nada na sua máquina.</p>
-          <p>Depois de instalado, o servidor se atualiza sozinho: ele consulta um índice de versões assinado, confere a assinatura e o hash de cada binário e volta para a versão anterior se a nova não subir.</p>
-          <p>Hoje a imagem é publicada para <code>linux/amd64</code>. Na frente do servidor vai um proxy reverso com HTTPS; o guia recomenda o Caddy, que emite o certificado sozinho.</p>
-          <p><a class="link-seta" href="https://github.com/apolope/ffcom/tree/main/server-channel#readme">Guia completo de hospedagem</a></p>
+          <h2 data-i18n="site.host.title">Hospede o seu</h2>
+          <p data-i18n-html="site.host.p1">Um servidor FFCom é um diretório com um <code>docker-compose.yml</code> e um arquivo <code>.env</code>. Ele sobe o serviço, o banco Postgres, o LiveKit para voz e vídeo e um servidor TURN para atravessar NAT, sem compilar nada na sua máquina.</p>
+          <p data-i18n="site.host.p2">Depois de instalado, o servidor se atualiza sozinho: ele consulta um índice de versões assinado, confere a assinatura e o hash de cada binário e volta para a versão anterior se a nova não subir.</p>
+          <p data-i18n-html="site.host.p3">Hoje a imagem é publicada para <code>linux/amd64</code>. Na frente do servidor vai um proxy reverso com HTTPS; o guia recomenda o Caddy, que emite o certificado sozinho.</p>
+          <p><a class="link-seta" href="https://github.com/apolope/ffcom/tree/main/server-channel#readme" data-i18n="site.host.guide">Guia completo de hospedagem</a></p>
         </div>
-        <div class="terminal" role="group" aria-label="Exemplo de instalação" id="terminal">
+        <div class="terminal" role="group" aria-label="Exemplo de instalação" data-i18n-attr="aria-label:site.host.terminalLabel" id="terminal">
           <div class="terminal-barra"><span></span><span></span><span></span></div>
-<pre><code id="terminal-code"><span class="c"># no diretório server-channel do repositório</span>
+<pre><code id="terminal-code"><span class="c" data-i18n="site.host.terminalComment1"># no diretório server-channel do repositório</span>
 <span class="p">$</span> cp .env.example .env
-<span class="p">$</span> nano .env  <span class="c"># senhas, chaves do LiveKit, IP público</span>
+<span class="p">$</span> nano .env  <span class="c" data-i18n="site.host.terminalComment2"># senhas, chaves do LiveKit, IP público</span>
 <span class="p">$</span> docker compose up -d
 [+] Running 4/4
  <span class="ok">✔</span> Container server-channel-postgres-1  <span class="ok">Healthy</span>
@@ -235,69 +236,69 @@
     <section id="nome" class="secao secao-alt">
       <div class="wrap duas-col nome">
         <div class="nome-marca">
-          <img src="/assets/logo.svg" alt="Logo do FFCom: dois f minúsculos unidos pela mesma barra, dentro de um balão de conversa" width="220" height="220">
+          <img src="/assets/logo.svg" data-i18n-attr="alt:site.name.logoAlt" alt="Logo do FFCom: dois f minúsculos unidos pela mesma barra, dentro de um balão de conversa" width="220" height="220">
         </div>
         <div>
-          <h2>Por que FFCom</h2>
-          <p class="lead">FFCom quer dizer <strong>Friends &amp; Family Communication</strong>.</p>
-          <p>A turma para quem você liga sem avisar merece um lugar para conversar que seja de vocês, e não um espaço alugado de uma empresa que pode mudar as regras amanhã. O FFCom nasceu daí: para conversar com quem importa, num servidor que você controla.</p>
-          <p>O logo conta a mesma história. São dois <em>f</em> que dividem a mesma barra, como na ligadura clássica da tipografia, dentro de um balão de conversa: a barra que atravessa os dois é o laço entre as pessoas.</p>
+          <h2 data-i18n="site.name.title">Por que FFCom</h2>
+          <p class="lead" data-i18n-html="site.name.lead">FFCom quer dizer <strong>Friends &amp; Family Communication</strong>.</p>
+          <p data-i18n="site.name.p1">A turma para quem você liga sem avisar merece um lugar para conversar que seja de vocês, e não um espaço alugado de uma empresa que pode mudar as regras amanhã. O FFCom nasceu daí: para conversar com quem importa, num servidor que você controla.</p>
+          <p data-i18n-html="site.name.p2">O logo conta a mesma história. São dois <em>f</em> que dividem a mesma barra, como na ligadura clássica da tipografia, dentro de um balão de conversa: a barra que atravessa os dois é o laço entre as pessoas.</p>
         </div>
       </div>
     </section>
 
     <section class="secao status">
       <div class="wrap">
-        <h2>Onde estamos</h2>
-        <p>O FFCom está em testes com usuários reais na instância oficial, e cada conta nova passa por aprovação: <a href="#participar">peça a sua aqui</a>. O código é público no GitHub, sob a licença <a href="https://github.com/apolope/ffcom/blob/main/LICENSE">AGPL-3.0</a>, e o que falta fazer está no <a href="https://github.com/apolope/ffcom/blob/main/TODO.md">TODO do projeto</a>. As decisões técnicas, com as alternativas consideradas e o motivo de cada escolha, ficam em <a href="https://github.com/apolope/ffcom/blob/main/docs/architecture.md">docs/architecture.md</a>.</p>
+        <h2 data-i18n="site.status.title">Onde estamos</h2>
+        <p data-i18n-html="site.status.body">O FFCom está em testes com usuários reais na instância oficial, e cada conta nova passa por aprovação: <a href="#participar">peça a sua aqui</a>. O código é público no GitHub, sob a licença <a href="https://github.com/apolope/ffcom/blob/main/LICENSE">AGPL-3.0</a>, e o que falta fazer está no <a href="https://github.com/apolope/ffcom/blob/main/TODO.md">TODO do projeto</a>. As decisões técnicas, com as alternativas consideradas e o motivo de cada escolha, ficam em <a href="https://github.com/apolope/ffcom/blob/main/docs/architecture.md">docs/architecture.md</a>.</p>
         <div class="acoes">
-          <a class="btn" href="https://github.com/apolope/ffcom">Ver o código no GitHub</a>
+          <a class="btn" href="https://github.com/apolope/ffcom" data-i18n="site.status.github">Ver o código no GitHub</a>
         </div>
       </div>
     </section>
     <section id="participar" class="secao" data-central="https://central.ffcom.a3sitsolutions.com.br">
       <div class="wrap duas-col participar">
         <div>
-          <h2>Participe</h2>
-          <p class="lead">Peça sua conta na instância oficial do FFCom. Cada pedido é lido por uma pessoa antes de ser aprovado.</p>
+          <h2 data-i18n="site.signup.title">Participe</h2>
+          <p class="lead" data-i18n="site.signup.lead">Peça sua conta na instância oficial do FFCom. Cada pedido é lido por uma pessoa antes de ser aprovado.</p>
           <div class="aviso-servidor" role="note">
-            <h3>Tenha um server-channel</h3>
-            <p>A conta sozinha dá acesso às <strong>mensagens diretas</strong> com amigos. Canais de texto, voz, vídeo e fórum vivem nos servidores de comunidade (<code>server-channel</code>): para usar o FFCom por inteiro, você precisa do seu próprio ou de um convite para o servidor de alguém.</p>
-            <p><a class="link-seta" href="#hospedar">Como hospedar o seu</a></p>
+            <h3 data-i18n="site.signup.serverTitle">Tenha um server-channel</h3>
+            <p data-i18n-html="site.signup.serverBody">A conta sozinha dá acesso às <strong>mensagens diretas</strong> com amigos. Canais de texto, voz, vídeo e fórum vivem nos servidores de comunidade (<code>server-channel</code>): para usar o FFCom por inteiro, você precisa do seu próprio ou de um convite para o servidor de alguém.</p>
+            <p><a class="link-seta" href="#hospedar" data-i18n="site.signup.serverLink">Como hospedar o seu</a></p>
           </div>
-          <p class="participar-passos">Depois da aprovação, chega um e-mail para você escolher a senha. Se o pedido não for aprovado, nenhum e-mail é enviado.</p>
-          <p class="participar-passos">Já tem conta em outro serviço da infra A3S? Marque a opção no formulário: aprovado o pedido, você entra no FFCom com o mesmo usuário e senha, sem e-mail novo.</p>
+          <p class="participar-passos" data-i18n="site.signup.steps1">Depois da aprovação, chega um e-mail para você escolher a senha. Se o pedido não for aprovado, nenhum e-mail é enviado.</p>
+          <p class="participar-passos" data-i18n="site.signup.steps2">Já tem conta em outro serviço da infra A3S? Marque a opção no formulário: aprovado o pedido, você entra no FFCom com o mesmo usuário e senha, sem e-mail novo.</p>
         </div>
         <form class="composer cadastro" id="cadastro" novalidate>
           <noscript><p>Ative o JavaScript para pedir sua conta.</p></noscript>
           <label class="campo">
-            <span class="composer-rot">Nome completo</span>
+            <span class="composer-rot" data-i18n="site.signup.fullName">Nome completo</span>
             <input name="fullName" autocomplete="name" required minlength="2" maxlength="80">
           </label>
           <label class="campo-check">
             <input type="checkbox" name="existingAccount" aria-describedby="cadastro-conta-dica">
-            <span>Já tenho conta na infra A3S</span>
+            <span data-i18n="site.signup.existingAccount">Já tenho conta na infra A3S</span>
           </label>
-          <small class="campo-check-dica" id="cadastro-conta-dica">Marque se você já entra em outro serviço da A3S. Aí não precisa escolher usuário nem apelido: a sua conta só ganha acesso ao FFCom.</small>
+          <small class="campo-check-dica" id="cadastro-conta-dica" data-i18n="site.signup.existingAccountHint">Marque se você já entra em outro serviço da A3S. Aí não precisa escolher usuário nem apelido: a sua conta só ganha acesso ao FFCom.</small>
           <label class="campo" data-conta-nova>
-            <span class="composer-rot">Nome de usuário</span>
+            <span class="composer-rot" data-i18n="site.signup.username">Nome de usuário</span>
             <input name="username" autocomplete="username" required minlength="3" maxlength="30" pattern="[a-z0-9][a-z0-9._\-]{2,29}" autocapitalize="none" spellcheck="false" aria-describedby="cadastro-usuario-dica">
-            <small id="cadastro-usuario-dica">Para entrar. Letras minúsculas sem acento, números, ponto, hífen ou sublinhado.</small>
+            <small id="cadastro-usuario-dica" data-i18n="site.signup.usernameHint">Para entrar. Letras minúsculas sem acento, números, ponto, hífen ou sublinhado.</small>
             <small class="campo-status" id="cadastro-usuario-status" aria-live="polite"></small>
           </label>
           <label class="campo">
-            <span class="composer-rot">E-mail</span>
+            <span class="composer-rot" data-i18n="site.signup.email">E-mail</span>
             <input name="email" type="email" autocomplete="email" required maxlength="254" aria-describedby="cadastro-email-dica">
-            <small id="cadastro-email-dica" data-nova="O link para escolher a senha chega aqui." data-existente="O e-mail da sua conta na infra A3S.">O link para escolher a senha chega aqui.</small>
+            <small id="cadastro-email-dica" data-i18n="site.signup.emailHint">O link para escolher a senha chega aqui.</small>
           </label>
           <label class="campo" data-conta-nova>
-            <span class="composer-rot">Apelido</span>
+            <span class="composer-rot" data-i18n="site.signup.nickname">Apelido</span>
             <input name="nickname" autocomplete="nickname" required minlength="2" maxlength="32" aria-describedby="cadastro-apelido-dica">
-            <small id="cadastro-apelido-dica">Como as pessoas vão ver você no FFCom.</small>
+            <small id="cadastro-apelido-dica" data-i18n="site.signup.nicknameHint">Como as pessoas vão ver você no FFCom.</small>
           </label>
           <label class="campo">
-            <span class="composer-rot">Por que quer entrar?</span>
-            <textarea name="reason" required minlength="10" maxlength="500" rows="4" placeholder="Quem te indicou, qual comunidade você quer montar ou participar..."></textarea>
+            <span class="composer-rot" data-i18n="site.signup.reason">Por que quer entrar?</span>
+            <textarea name="reason" required minlength="10" maxlength="500" rows="4" data-i18n-attr="placeholder:site.signup.reasonPlaceholder" placeholder="Quem te indicou, qual comunidade você quer montar ou participar..."></textarea>
           </label>
           <label class="campo-isca" aria-hidden="true">Site <input name="website" tabindex="-1" autocomplete="off"></label>
           <div class="composer-barra">
@@ -309,26 +310,26 @@
     </section>
     <section id="ideias" class="secao secao-alt" data-central="https://central.ffcom.a3sitsolutions.com.br">
       <div class="wrap">
-        <h2>Ideias para o FFCom</h2>
-        <p class="sub">Sugira o que você quer ver no FFCom e vote nas ideias das outras pessoas. As mais votadas entram primeiro no próximo ciclo de desenvolvimento.</p>
+        <h2 data-i18n="site.ideas.title">Ideias para o FFCom</h2>
+        <p class="sub" data-i18n="site.ideas.subtitle">Sugira o que você quer ver no FFCom e vote nas ideias das outras pessoas. As mais votadas entram primeiro no próximo ciclo de desenvolvimento.</p>
         <div class="composer" id="ideia-composer">
           <noscript><p>Ative o JavaScript para ver, sugerir e votar nas ideias.</p></noscript>
         </div>
-        <div class="filtros" id="ideias-abas" role="group" aria-label="Lista de ideias"></div>
+        <div class="filtros" id="ideias-abas" role="group" aria-label="Lista de ideias" data-i18n-attr="aria-label:site.ideas.listLabel"></div>
         <p class="versoes-aviso" id="ideias-aviso" aria-live="polite"></p>
         <ol class="ideias-lista" id="ideias-lista"></ol>
-        <p class="ideias-regras">Uma sugestão por pessoa por dia. Like vale 2 pontos e dislike tira 1. Sugestões ofensivas são descartadas, e as que a verificação automática não liberar só aparecem depois de um moderador aprovar.</p>
+        <p class="ideias-regras" data-i18n="site.ideas.rules">Uma sugestão por pessoa por dia. Like vale 2 pontos e dislike tira 1. Sugestões ofensivas são descartadas, e as que a verificação automática não liberar só aparecem depois de um moderador aprovar.</p>
       </div>
     </section>
 
     <section id="versoes" class="secao">
       <div class="wrap">
-        <h2>Histórico de versões</h2>
-        <p class="sub">O que cada versão publicada trouxe. App, servidor central e servidor de comunidade têm versões independentes.</p>
-        <div class="versoes-atuais" id="versoes-atuais" aria-label="Versão atual de cada componente"></div>
-        <div class="filtros" id="versoes-filtros" role="group" aria-label="Filtrar por componente" hidden></div>
+        <h2 data-i18n="site.versions.title">Histórico de versões</h2>
+        <p class="sub" data-i18n="site.versions.subtitle">O que cada versão publicada trouxe. App, servidor central e servidor de comunidade têm versões independentes.</p>
+        <div class="versoes-atuais" id="versoes-atuais" aria-label="Versão atual de cada componente" data-i18n-attr="aria-label:site.versions.currentLabel"></div>
+        <div class="filtros" id="versoes-filtros" role="group" aria-label="Filtrar por componente" data-i18n-attr="aria-label:site.versions.filterLabel" hidden></div>
         <ol class="linha-tempo" id="versoes-lista" aria-live="polite">
-          <li class="versoes-aviso">O histórico fica no <a href="https://github.com/apolope/ffcom/blob/main/CHANGELOG.md">CHANGELOG.md do projeto no GitHub</a>.</li>
+          <li class="versoes-aviso" data-i18n-html="site.versions.fallback">O histórico fica no <a href="https://github.com/apolope/ffcom/blob/main/CHANGELOG.md">CHANGELOG.md do projeto no GitHub</a>.</li>
         </ol>
         <button type="button" class="btn btn-ghost versoes-mais" id="versoes-mais" hidden></button>
       </div>
@@ -342,15 +343,19 @@
         <img src="/assets/logo.svg" alt="" width="28" height="28">
         <span>ffcom</span>
       </div>
-      <p class="ovo" title="gg">Em jogo online, <b>ff</b> é o voto para desistir da partida. Também conhecido como o dia em que a turma deu FF e foi montar a própria casa.</p>
+      <p class="ovo" title="gg" data-i18n-html="site.footer.egg">Em jogo online, <b>ff</b> é o voto para desistir da partida. Também conhecido como o dia em que a turma deu FF e foi montar a própria casa.</p>
       <p class="rodape-links">
-        <a href="https://app.ffcom.a3sitsolutions.com.br/">Entrar</a>
-        <a href="#participar">Participar</a>
+        <a href="https://app.ffcom.a3sitsolutions.com.br/" data-i18n="site.nav.signIn">Entrar</a>
+        <a href="#participar" data-i18n="site.nav.join">Participar</a>
         <a href="https://github.com/apolope/ffcom">GitHub</a>
-        <a href="https://github.com/apolope/ffcom/blob/main/LICENSE">Licença</a>
-        <a href="https://github.com/apolope/ffcom/blob/main/docs/architecture.md">Arquitetura</a>
-        <a href="#ideias">Ideias</a>
-        <a href="#versoes">Versões</a>
+        <a href="https://github.com/apolope/ffcom/blob/main/LICENSE" data-i18n="site.footer.license">Licença</a>
+        <a href="https://github.com/apolope/ffcom/blob/main/docs/architecture.md" data-i18n="site.footer.architecture">Arquitetura</a>
+        <a href="#ideias" data-i18n="site.nav.ideas">Ideias</a>
+        <a href="#versoes" data-i18n="site.nav.versions">Versões</a>
+      </p>
+      <p class="rodape-idioma" role="group" aria-label="Idioma" data-i18n-attr="aria-label:site.language" data-i18n-idiomas hidden>
+        <button type="button" class="link-botao" lang="pt-BR" data-i18n-lang="pt-BR" aria-pressed="false">Português (Brasil)</button>
+        <button type="button" class="link-botao" lang="en" data-i18n-lang="en" aria-pressed="false">English</button>
       </p>
     </div>
   </footer>

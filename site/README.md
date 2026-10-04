@@ -5,7 +5,8 @@ Home page pública do FFCom em `https://ffcom.a3sitsolutions.com.br/` (o `www.` 
 ## Rodando localmente
 
 ```
-cp ../CHANGELOG.md .
+cp ../CHANGELOG.md ../CHANGELOG.en.md .
+rm -rf locales && cp -r ../locales .
 docker build -t ffcom-site:local .
 docker run --rm -p 8099:8080 ffcom-site:local
 ```
@@ -18,13 +19,17 @@ A rede de servidores no fundo do hero é SVG animado (SMIL), e os pacotes do dia
 
 Com `prefers-reduced-motion: reduce` (no Windows, "Efeitos de animação" desligado) somem a rede em movimento, os pacotes, os pulsos e os deslizamentos; o chat e o terminal continuam trocando de conteúdo, sem deslocamento. A saída do terminal imita o `docker compose up` do compose de referência e o `/healthz` real; se os nomes dos serviços ou a versão mudarem muito, vale atualizar o texto em `index.html`.
 
+## Idiomas
+
+O site sai em português ou inglês. `i18n.js`, carregado sem `defer` no `<head>`, escolhe o idioma (o salvo no `localStorage` pela troca no rodapé, ou `navigator.languages`: `pt*` vira `pt-BR`, o resto `en`), busca `/locales/<idioma>.json` (os mesmos arquivos do client, copiados da raiz no build) e traduz a marcação: `data-i18n="chave"` (texto), `data-i18n-html="chave"` (texto com link ou negrito, só de `locales/`) e `data-i18n-attr="atributo:chave;..."`. Os scripts usam `window.ffcomI18n` (`t`, `errorText`, `lang`, `ready`, `onChange`); textos novos entram em `site.*` nos dois arquivos, e erros da API são mostrados por `errorText({code, message, params})`, que traduz `errors.<code>` e cai na `message`. O HTML continua em português: em português nada muda de lugar, e em outro idioma a página fica escondida (`html.i18n-pendente`, no máximo 3 segundos) até a tradução ser aplicada. `<title>`, descrição e Open Graph são trocados pelo script, então robôs que não executam JavaScript (prévias de link em redes sociais, por exemplo) sempre veem o português. `node scripts/check-locales.mjs` confere que toda chave usada aqui existe.
+
 ## Ideias
 
 A seção "Ideias" (`ideias.js`) fala com o server-central (`data-central` na `<section id="ideias">`): lista pública de sugestões, e login OIDC no Authentik (provider `ffcom`, callback na própria raiz do site) para sugerir, usar a varinha e votar. O `oidc-client-ts` está copiado em `assets/vendor/` (licença Apache 2.0 ao lado) em vez de vir de CDN, pelo mesmo motivo da fonte; ao atualizar a versão do client, copie de `client/node_modules/oidc-client-ts/dist/browser/`. O login pede o scope `ffcom-groups`, que traz os grupos `ffcom-*` e diz ao server-central quem modera. As regras moram no server-central (ver `docs/architecture.md`, "Decisão: sugestões de melhoria com varinha do Claude").
 
 ## Histórico de versões
 
-A seção "Histórico de versões" lê `/changelog.md`, que o nginx busca do `CHANGELOG.md` do `main` no GitHub (cache de 5 minutos; se o GitHub falhar, serve o cache antigo ou a cópia embutida no build). O cabeçalho `X-Changelog-Source` diz de onde veio a resposta (`github (HIT)`, `github (MISS)`, `local`). O `CHANGELOG.md` não fica neste diretório no git: para buildar local, copie o da raiz antes (`cp ../CHANGELOG.md .`), como o workflow faz. O `nginx.conf` é um template da imagem oficial (vai para `/etc/nginx/templates/`), para o `resolver` usar o DNS do container.
+A seção "Histórico de versões" lê `/changelog.md` (ou `/changelog.en.md` com o site em inglês, relido na troca de idioma), que o nginx busca do `CHANGELOG.md` do `main` no GitHub (cache de 5 minutos; se o GitHub falhar, serve o cache antigo ou a cópia embutida no build). A tradução em inglês sai do mesmo jeito em `/changelog.en.md`, a partir do `CHANGELOG.en.md`, com cache e cópia de reserva próprios. O cabeçalho `X-Changelog-Source` diz de onde veio a resposta (`github (HIT)`, `github (MISS)`, `local`). Os dois CHANGELOGs e os arquivos de idioma (`locales/`) não ficam neste diretório no git: para buildar local, copie os da raiz antes (`cp ../CHANGELOG.md ../CHANGELOG.en.md .` e `cp -r ../locales .`), como o workflow faz. O `nginx.conf` é um template da imagem oficial (vai para `/etc/nginx/templates/`), para o `resolver` usar o DNS do container.
 
 ## Identidade visual
 

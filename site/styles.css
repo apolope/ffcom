@@ -425,6 +425,11 @@ code {
 .rodape-links { display: flex; gap: 20px; margin: 0; }
 .rodape-links a { color: var(--text); text-decoration: none; }
 .rodape-links a:hover { color: var(--text-h); }
+.rodape-idioma { grid-column: 1 / -1; justify-self: end; display: flex; gap: 4px; align-items: center; margin: 0; font-size: 0.9rem; }
+.rodape-idioma[hidden] { display: none; }
+.rodape-idioma .link-botao { color: var(--muted); text-decoration: none; }
+.rodape-idioma .link-botao[aria-pressed="true"] { color: var(--text-h); font-weight: 600; }
+.rodape-idioma .link-botao:hover { color: var(--text-h); text-decoration: underline; }
 
 @media (max-width: 960px) {
   .hero-grid, .duas-col, .nome { grid-template-columns: 1fr; }
@@ -459,3 +464,8 @@ code {
   .pacote, .rede-pacotes { display: none; }
   .js .revelar { opacity: 1; transform: none; transition: none; }
 }
+
+/* Idioma diferente do português: a página fica escondida até o i18n.js
+   aplicar a tradução (no máximo 3 segundos), para não piscar o texto em
+   português do HTML. */
+html.i18n-pendente body { visibility: hidden; }

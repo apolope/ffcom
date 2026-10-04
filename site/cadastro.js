@@ -6,11 +6,15 @@
 // existe. As regras (formato dos campos, nomes reservados, limites, pedidos
 // repetidos) vivem no server-central; aqui só a interface. Ver
 // docs/architecture.md, "Decisão: cadastro com aprovação pelo Telegram".
+// Textos em site.signup.* e erros do server-central em errors.signup.* do
+// arquivo de idioma (i18n.js).
 (() => {
   const secao = document.getElementById('participar');
   const form = document.getElementById('cadastro');
   const msg = document.getElementById('cadastro-msg');
-  if (!secao || !form || !msg) return;
+  const i18n = window.ffcomI18n;
+  if (!secao || !form || !msg || !i18n) return;
+  const { t } = i18n;
 
   const CENTRAL = secao.dataset.central;
   const USUARIO = /^[a-z0-9][a-z0-9._-]{2,29}$/;
@@ -23,8 +27,12 @@
     'security', 'seguranca', 'sistema', 'staff', 'suporte', 'support', 'system', 'telegram', 'undefined',
     'webmaster', 'www',
   ]);
-  const MSG_FORMATO = 'O nome de usuário precisa ter de 3 a 30 caracteres: letras minúsculas sem acento, números, ponto, hífen ou sublinhado, começando por letra ou número.';
-  const MSG_RESERVADO = 'Esse nome de usuário é reservado; escolha outro.';
+  // Os erros do server-central vêm em minúsculas e sem ponto final, para
+  // caber no meio de uma frase; sozinhos na tela, ganham os dois.
+  const frase = (texto) => (texto ? texto.charAt(0).toUpperCase() + texto.slice(1) + (/[.!?]$/.test(texto) ? '' : '.') : '');
+  // Mesmos códigos e parâmetros que o server-central devolveria.
+  const MSG_FORMATO = () => frase(i18n.errorText({ code: 'signup.username_format', params: { min: 3, max: 30 } }));
+  const MSG_RESERVADO = () => frase(i18n.errorText({ code: 'signup.username_reserved' }));
   const botao = form.querySelector('button[type="submit"]');
   const campo = (nome) => form.elements.namedItem(nome);
   const statusUsuario = document.getElementById('cadastro-usuario-status');
@@ -41,14 +49,14 @@
       el.hidden = existente;
       for (const input of el.querySelectorAll('input')) input.disabled = existente;
     }
-    dicaEmail.textContent = existente ? dicaEmail.dataset.existente : dicaEmail.dataset.nova;
-    botao.textContent = existente ? 'Pedir acesso' : 'Pedir minha conta';
+    dicaEmail.textContent = t(existente ? 'site.signup.emailHintExisting' : 'site.signup.emailHint');
+    if (!botao.disabled) botao.textContent = t(existente ? 'site.signup.submitExisting' : 'site.signup.submit');
   };
   campo('existingAccount').addEventListener('change', aplicarModo);
 
   const problemaUsuario = (nome) => {
-    if (!USUARIO.test(nome)) return MSG_FORMATO;
-    if (RESERVADOS.has(nome.replace(/[._-]/g, ''))) return MSG_RESERVADO;
+    if (!USUARIO.test(nome)) return MSG_FORMATO();
+    if (RESERVADOS.has(nome.replace(/[._-]/g, ''))) return MSG_RESERVADO();
     return '';
   };
 
@@ -68,16 +76,18 @@
     if (!nome) return status('', '');
     const problema = problemaUsuario(nome);
     if (problema) return status('erro', problema);
-    status('', 'Conferindo...');
+    status('', t('site.signup.checking'));
     espera = setTimeout(async () => {
       try {
         const r = await fetch(`${CENTRAL}/api/signup-requests/username-available?username=${encodeURIComponent(nome)}`);
         if (minha !== consulta) return;
         if (!r.ok) return status('', '');
-        const { available, message } = await r.json();
+        // {available, code?, message, params?}: o motivo no formato dos
+        // erros da API (docs/protocol.md, "Erros da API HTTP").
+        const resposta = await r.json();
         if (minha !== consulta) return;
-        if (available) status('ok', 'Nome disponível.');
-        else status('erro', message.charAt(0).toUpperCase() + message.slice(1) + '.');
+        if (resposta.available) status('ok', t('site.signup.available'));
+        else status('erro', frase(i18n.errorText(resposta)));
       } catch {
         if (minha === consulta) status('', '');
       }
@@ -108,14 +118,14 @@
   // volta por um erro de digitação.
   const conferir = (d) => {
     const tam = (s) => [...s].length;
-    if (tam(d.fullName) < 2 || tam(d.fullName) > 80) return ['fullName', 'Informe o nome completo.'];
+    if (tam(d.fullName) < 2 || tam(d.fullName) > 80) return ['fullName', t('site.signup.fullNameInvalid')];
     if (!d.existingAccount) {
       const problema = problemaUsuario(d.username);
       if (problema) return ['username', problema];
     }
-    if (!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(d.email)) return ['email', 'Confira o e-mail.'];
-    if (!d.existingAccount && (tam(d.nickname) < 2 || tam(d.nickname) > 32)) return ['nickname', 'O apelido precisa ter entre 2 e 32 caracteres.'];
-    if (tam(d.reason) < 10 || tam(d.reason) > 500) return ['reason', 'Conte em 10 a 500 caracteres por que quer entrar.'];
+    if (!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(d.email)) return ['email', t('site.signup.emailInvalid')];
+    if (!d.existingAccount && (tam(d.nickname) < 2 || tam(d.nickname) > 32)) return ['nickname', t('site.signup.nicknameLength', { min: 2, max: 32 })];
+    if (tam(d.reason) < 10 || tam(d.reason) > 500) return ['reason', t('site.signup.reasonLength', { min: 10, max: 500 })];
     return null;
   };
 
@@ -130,6 +140,9 @@
       reason: campo('reason').value.trim(),
       existingAccount,
       website: campo('website').value,
+      // Na aprovação vira o idioma da conta no Authentik (e-mail de
+      // definir senha e telas de login).
+      language: i18n.lang,
     };
     const problema = conferir(dados);
     if (problema) {
@@ -139,8 +152,8 @@
     }
 
     botao.disabled = true;
-    botao.textContent = 'Enviando...';
-    mostrar('info', 'Enviando o pedido...');
+    botao.textContent = t('site.signup.sending');
+    mostrar('info', t('site.signup.sendingRequest'));
     try {
       const r = await fetch(`${CENTRAL}/api/signup-requests`, {
         method: 'POST',
@@ -149,33 +162,50 @@
       });
       const texto = await r.text();
       if (!r.ok) {
-        mostrar('erro', texto.trim() || `Não foi possível enviar o pedido (erro ${r.status}).`);
+        // Erro da API: {code, message, params?} (docs/protocol.md, "Erros da
+        // API HTTP"), traduzido pelo code e, sem tradução, a message em
+        // português; corpo que não é JSON (proxy na frente) vai cru.
+        let erro = texto.trim();
+        try {
+          const problema = JSON.parse(texto);
+          if (problema && typeof problema.message === 'string') erro = frase(i18n.errorText(problema));
+        } catch {
+          /* não é JSON */
+        }
+        mostrar('erro', erro || t('site.signup.failedStatus', { status: r.status }));
         return;
       }
       form.reset();
       status('', '');
       const forte = document.createElement('strong');
-      forte.textContent = 'Pedido enviado. ';
+      forte.textContent = `${t('site.signup.sent')} `;
       const servidor = document.createElement('strong');
-      servidor.textContent = 'sem um server-channel você só conseguirá trocar mensagens diretas';
+      servidor.textContent = t('site.signup.noServerChannel');
       // Quem já tem conta não recebe e-mail na aprovação (a conta já tem
       // senha), então o jeito de saber é tentar entrar.
       const quando = existingAccount
-        ? 'Quando for aprovado, é só entrar no app com o usuário e a senha que você já usa na infra A3S (nenhum e-mail é enviado nesse caso). Enquanto isso, lembre: '
-        : `Quando for aprovado, chega um e-mail em ${dados.email} para você escolher a senha. Enquanto isso, lembre: `;
+        ? t('site.signup.whenApprovedExisting')
+        : t('site.signup.whenApproved', { email: dados.email });
       mostrar('ok', [
         forte,
-        quando,
+        `${quando} `,
         servidor,
-        '. Para canais, voz e fórum, hospede o seu ou peça um convite a quem já tem um.',
+        `. ${t('site.signup.serverHint')}`,
       ]);
     } catch {
-      mostrar('erro', 'Não foi possível falar com o servidor. Confira sua conexão e tente de novo.');
+      mostrar('erro', t('site.signup.network'));
     } finally {
       botao.disabled = false;
       aplicarModo();
     }
   });
 
-  aplicarModo();
+  // Os textos que o script põe na tela esperam o arquivo de idioma; uma
+  // mensagem já mostrada fica no idioma em que apareceu.
+  i18n.ready.then(aplicarModo);
+  i18n.onChange(() => {
+    aplicarModo();
+    const nome = campo('username').value;
+    if (nome && !jaTemConta()) conferirDisponivel(nome);
+  });
 })();
