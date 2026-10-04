@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"a3sitsolutions.com/ffcom/server-channel/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
 	"a3sitsolutions.com/ffcom/server-channel/internal/permissions"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
@@ -57,29 +58,29 @@ func handleListCategories(categories *store.CategoryStore, channels *store.Chann
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		member, ok := auth.MemberFromContext(r.Context())
 		if !ok {
-			http.Error(w, "membro não encontrado no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.member_missing", "membro não encontrado no contexto")
 			return
 		}
 
 		allCategories, err := categories.List(r.Context())
 		if err != nil {
-			http.Error(w, "erro ao buscar categorias", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "categories.list_fetch_failed", "erro ao buscar categorias")
 			return
 		}
 		allChannels, err := channels.List(r.Context())
 		if err != nil {
-			http.Error(w, "erro ao buscar canais", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "channels.list_fetch_failed", "erro ao buscar canais")
 			return
 		}
 		visible, err := visibleChannels(r.Context(), roles, overwrites, member, allChannels)
 		if err != nil {
-			http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "permissions.resolve_failed", "erro ao resolver permissões")
 			return
 		}
 
 		base, _, err := memberBasePermission(r.Context(), roles, member)
 		if err != nil {
-			http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "permissions.resolve_failed", "erro ao resolver permissões")
 			return
 		}
 		showAll := permissions.Has(base, permissions.StructureBits)
@@ -114,23 +115,23 @@ func handleListChannels(channels *store.ChannelStore, roles *store.RoleStore, ov
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		member, ok := auth.MemberFromContext(r.Context())
 		if !ok {
-			http.Error(w, "membro não encontrado no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.member_missing", "membro não encontrado no contexto")
 			return
 		}
 
 		rows, err := channels.List(r.Context())
 		if err != nil {
-			http.Error(w, "erro ao buscar canais", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "channels.list_fetch_failed", "erro ao buscar canais")
 			return
 		}
 		visible, err := visibleChannels(r.Context(), roles, overwrites, member, rows)
 		if err != nil {
-			http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "permissions.resolve_failed", "erro ao resolver permissões")
 			return
 		}
 		lastMessageAt, err := messages.LastMessageAtByChannel(r.Context())
 		if err != nil {
-			http.Error(w, "erro ao buscar atividade dos canais", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "channels.activity_fetch_failed", "erro ao buscar atividade dos canais")
 			return
 		}
 

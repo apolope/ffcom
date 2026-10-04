@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"a3sitsolutions.com/ffcom/server-channel/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
 )
@@ -19,13 +20,13 @@ func handleMe(roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		member, ok := auth.MemberFromContext(r.Context())
 		if !ok {
-			http.Error(w, "membro não encontrado no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.member_missing", "membro não encontrado no contexto")
 			return
 		}
 
 		base, roleIDs, err := memberBasePermission(r.Context(), roles, member)
 		if err != nil {
-			http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "permissions.resolve_failed", "erro ao resolver permissões")
 			return
 		}
 
@@ -56,7 +57,7 @@ func handleUpdateMe(members *store.MemberStore, roles *store.RoleStore) http.Han
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		member, ok := auth.MemberFromContext(r.Context())
 		if !ok {
-			http.Error(w, "membro não encontrado no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.member_missing", "membro não encontrado no contexto")
 			return
 		}
 
@@ -64,7 +65,7 @@ func handleUpdateMe(members *store.MemberStore, roles *store.RoleStore) http.Han
 			Nickname *string `json:"nickname"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo inválido")
 			return
 		}
 		if body.Nickname != nil {
@@ -72,7 +73,7 @@ func handleUpdateMe(members *store.MemberStore, roles *store.RoleStore) http.Han
 			if trimmed == "" {
 				body.Nickname = nil
 			} else if len(trimmed) > 64 {
-				http.Error(w, "apelido deve ter no máximo 64 caracteres", http.StatusBadRequest)
+				apierr.WriteParams(w, http.StatusBadRequest, "members.nickname_too_long", "apelido deve ter no máximo 64 caracteres", apierr.Params{"max": 64})
 				return
 			} else {
 				body.Nickname = &trimmed
@@ -81,13 +82,13 @@ func handleUpdateMe(members *store.MemberStore, roles *store.RoleStore) http.Han
 
 		updated, err := members.SetNickname(r.Context(), member.ID, body.Nickname)
 		if err != nil {
-			http.Error(w, "erro ao atualizar apelido", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "members.nickname_save_failed", "erro ao atualizar apelido")
 			return
 		}
 
 		base, roleIDs, err := memberBasePermission(r.Context(), roles, updated)
 		if err != nil {
-			http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "permissions.resolve_failed", "erro ao resolver permissões")
 			return
 		}
 
@@ -117,7 +118,7 @@ func handleSetProfileName(members *store.MemberStore, roles *store.RoleStore) ht
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		member, ok := auth.MemberFromContext(r.Context())
 		if !ok {
-			http.Error(w, "membro não encontrado no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.member_missing", "membro não encontrado no contexto")
 			return
 		}
 
@@ -125,7 +126,7 @@ func handleSetProfileName(members *store.MemberStore, roles *store.RoleStore) ht
 			ProfileName *string `json:"profileName"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo inválido")
 			return
 		}
 		if body.ProfileName != nil {
@@ -133,7 +134,7 @@ func handleSetProfileName(members *store.MemberStore, roles *store.RoleStore) ht
 			if trimmed == "" {
 				body.ProfileName = nil
 			} else if len(trimmed) > 64 {
-				http.Error(w, "nome deve ter no máximo 64 caracteres", http.StatusBadRequest)
+				apierr.WriteParams(w, http.StatusBadRequest, "profile.display_name_too_long", "nome deve ter no máximo 64 caracteres", apierr.Params{"max": 64})
 				return
 			} else {
 				body.ProfileName = &trimmed
@@ -142,12 +143,12 @@ func handleSetProfileName(members *store.MemberStore, roles *store.RoleStore) ht
 
 		updated, err := members.SetProfileName(r.Context(), member.ID, body.ProfileName)
 		if err != nil {
-			http.Error(w, "erro ao atualizar nome", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "members.display_name_save_failed", "erro ao atualizar nome")
 			return
 		}
 		base, roleIDs, err := memberBasePermission(r.Context(), roles, updated)
 		if err != nil {
-			http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "permissions.resolve_failed", "erro ao resolver permissões")
 			return
 		}
 

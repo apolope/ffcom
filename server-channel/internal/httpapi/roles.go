@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"a3sitsolutions.com/ffcom/server-channel/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
 	"a3sitsolutions.com/ffcom/server-channel/internal/permissions"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
@@ -51,16 +52,16 @@ type roleRequest struct {
 func requireManageRoles(w http.ResponseWriter, r *http.Request, roles *store.RoleStore) (int64, bool) {
 	member, ok := auth.MemberFromContext(r.Context())
 	if !ok {
-		http.Error(w, "membro não encontrado no contexto", http.StatusInternalServerError)
+		apierr.Write(w, http.StatusInternalServerError, "common.member_missing", "membro não encontrado no contexto")
 		return 0, false
 	}
 	base, _, err := memberBasePermission(r.Context(), roles, member)
 	if err != nil {
-		http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+		apierr.Write(w, http.StatusInternalServerError, "permissions.resolve_failed", "erro ao resolver permissões")
 		return 0, false
 	}
 	if !permissions.Has(base, permissions.ManageRoles) {
-		http.Error(w, "requer a permissão ManageRoles", http.StatusForbidden)
+		apierr.WriteParams(w, http.StatusForbidden, "permissions.required", "requer a permissão ManageRoles", apierr.Params{"permission": "ManageRoles"})
 		return 0, false
 	}
 	return base, true
@@ -89,18 +90,18 @@ func findRole(ctx context.Context, roles *store.RoleStore, id string) (store.Rol
 // role que ele mesmo poderia ter criado. Sem isso, um moderador conseguia
 // apagar a role de Administrador ou tirar o bit dela. Ver
 // docs/architecture.md, "Decisão: teto por bits para remover e rebaixar".
-func requireRoleWithinGrants(w http.ResponseWriter, r *http.Request, roles *store.RoleStore, base int64, roleID, deniedMessage string) (store.Role, bool) {
+func requireRoleWithinGrants(w http.ResponseWriter, r *http.Request, roles *store.RoleStore, base int64, roleID string, denied *apierr.Problem) (store.Role, bool) {
 	role, err := findRole(r.Context(), roles, roleID)
 	if errors.Is(err, store.ErrNotFound) {
-		http.Error(w, "role não encontrada", http.StatusNotFound)
+		apierr.Write(w, http.StatusNotFound, "roles.not_found", "role não encontrada")
 		return store.Role{}, false
 	}
 	if err != nil {
-		http.Error(w, "erro ao buscar role", http.StatusInternalServerError)
+		apierr.Write(w, http.StatusInternalServerError, "roles.fetch_failed", "erro ao buscar role")
 		return store.Role{}, false
 	}
 	if !permissions.Grants(base, role.Permissions) {
-		http.Error(w, deniedMessage, http.StatusForbidden)
+		apierr.WriteProblem(w, http.StatusForbidden, denied)
 		return store.Role{}, false
 	}
 	return role, true
@@ -113,7 +114,7 @@ func handleListRoles(roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rows, err := roles.List(r.Context())
 		if err != nil {
-			http.Error(w, "erro ao listar roles", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "roles.list_failed", "erro ao listar roles")
 			return
 		}
 		out := make([]roleView, len(rows))
@@ -137,21 +138,21 @@ func handleCreateRole(roles *store.RoleStore) http.Handler {
 
 		var body roleRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo inválido")
 			return
 		}
 		if body.Name == "" {
-			http.Error(w, "name é obrigatório", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.name_required", "name é obrigatório")
 			return
 		}
 		if !permissions.Grants(base, body.Permissions) {
-			http.Error(w, "não é possível conceder permissões que você mesmo não possui", http.StatusForbidden)
+			apierr.Write(w, http.StatusForbidden, "roles.grant_exceeds_own", "não é possível conceder permissões que você mesmo não possui")
 			return
 		}
 
 		role, err := roles.Create(r.Context(), body.Name, body.Color, body.Permissions, body.Position)
 		if err != nil {
-			http.Error(w, "erro ao criar role", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "roles.create_failed", "erro ao criar role")
 			return
 		}
 
@@ -173,28 +174,28 @@ func handleUpdateRole(roles *store.RoleStore) http.Handler {
 
 		var body roleRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo inválido")
 			return
 		}
 		if body.Name == "" {
-			http.Error(w, "name é obrigatório", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.name_required", "name é obrigatório")
 			return
 		}
 		if !permissions.Grants(base, body.Permissions) {
-			http.Error(w, "não é possível conceder permissões que você mesmo não possui", http.StatusForbidden)
+			apierr.Write(w, http.StatusForbidden, "roles.grant_exceeds_own", "não é possível conceder permissões que você mesmo não possui")
 			return
 		}
-		if _, ok := requireRoleWithinGrants(w, r, roles, base, r.PathValue("id"), "não é possível editar uma role com permissões que você mesmo não possui"); !ok {
+		if _, ok := requireRoleWithinGrants(w, r, roles, base, r.PathValue("id"), apierr.New("roles.edit_exceeds_own", "não é possível editar uma role com permissões que você mesmo não possui")); !ok {
 			return
 		}
 
 		role, err := roles.Update(r.Context(), r.PathValue("id"), body.Name, body.Color, body.Permissions, body.Position)
 		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "role não encontrada", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "roles.not_found", "role não encontrada")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao editar role", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "roles.update_failed", "erro ao editar role")
 			return
 		}
 
@@ -215,20 +216,20 @@ func handleDeleteRole(roles *store.RoleStore) http.Handler {
 		}
 
 		id := r.PathValue("id")
-		role, ok := requireRoleWithinGrants(w, r, roles, base, id, "não é possível apagar uma role com permissões que você mesmo não possui")
+		role, ok := requireRoleWithinGrants(w, r, roles, base, id, apierr.New("roles.delete_exceeds_own", "não é possível apagar uma role com permissões que você mesmo não possui"))
 		if !ok {
 			return
 		}
 		if role.IsDefault {
-			http.Error(w, "a role default não pode ser removida", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "roles.default_not_removable", "a role default não pode ser removida")
 			return
 		}
 
 		if err := roles.Delete(r.Context(), id); errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "role não encontrada", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "roles.not_found", "role não encontrada")
 			return
 		} else if err != nil {
-			http.Error(w, "erro ao remover role", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "roles.delete_failed", "erro ao remover role")
 			return
 		}
 
@@ -245,24 +246,24 @@ func handleAssignRole(members *store.MemberStore, roles *store.RoleStore) http.H
 			return
 		}
 		if err := rejectDefaultRole(r, roles); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "roles.default_implicit", err.Error())
 			return
 		}
 
-		if _, ok := requireRoleWithinGrants(w, r, roles, base, r.PathValue("roleId"), "não é possível atribuir uma role com permissões que você mesmo não possui"); !ok {
+		if _, ok := requireRoleWithinGrants(w, r, roles, base, r.PathValue("roleId"), apierr.New("roles.assign_exceeds_own", "não é possível atribuir uma role com permissões que você mesmo não possui")); !ok {
 			return
 		}
 
 		if _, err := members.GetByID(r.Context(), r.PathValue("memberId")); errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "membro não encontrado", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "members.not_found", "membro não encontrado")
 			return
 		} else if err != nil {
-			http.Error(w, "erro ao buscar membro", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "members.fetch_failed", "erro ao buscar membro")
 			return
 		}
 
 		if err := roles.AssignToMember(r.Context(), r.PathValue("memberId"), r.PathValue("roleId")); err != nil {
-			http.Error(w, "erro ao atribuir role", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "roles.assign_failed", "erro ao atribuir role")
 			return
 		}
 
@@ -279,17 +280,17 @@ func handleRemoveRole(roles *store.RoleStore) http.Handler {
 		if !ok {
 			return
 		}
-		if _, ok := requireRoleWithinGrants(w, r, roles, base, r.PathValue("roleId"), "não é possível tirar uma role com permissões que você mesmo não possui"); !ok {
+		if _, ok := requireRoleWithinGrants(w, r, roles, base, r.PathValue("roleId"), apierr.New("roles.unassign_exceeds_own", "não é possível tirar uma role com permissões que você mesmo não possui")); !ok {
 			return
 		}
 
 		err := roles.RemoveFromMember(r.Context(), r.PathValue("memberId"), r.PathValue("roleId"))
 		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "membro não tinha essa role", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "roles.member_lacks_role", "membro não tinha essa role")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao remover role do membro", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "roles.unassign_failed", "erro ao remover role do membro")
 			return
 		}
 

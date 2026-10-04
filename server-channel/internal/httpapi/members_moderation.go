@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"a3sitsolutions.com/ffcom/server-channel/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
 	"a3sitsolutions.com/ffcom/server-channel/internal/permissions"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
@@ -16,19 +17,19 @@ import (
 // Mesmo formato de requireManageRoles (internal/httpapi/roles.go),
 // generalizado aqui para não duplicar a função a cada bit novo
 // (KickMembers/BanMembers).
-func requireMemberPermission(w http.ResponseWriter, r *http.Request, roles *store.RoleStore, bit int64, deniedMessage string) (store.Member, bool) {
+func requireMemberPermission(w http.ResponseWriter, r *http.Request, roles *store.RoleStore, bit int64, bitName string) (store.Member, bool) {
 	member, ok := auth.MemberFromContext(r.Context())
 	if !ok {
-		http.Error(w, "membro não encontrado no contexto", http.StatusInternalServerError)
+		apierr.Write(w, http.StatusInternalServerError, "common.member_missing", "membro não encontrado no contexto")
 		return store.Member{}, false
 	}
 	base, _, err := memberBasePermission(r.Context(), roles, member)
 	if err != nil {
-		http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+		apierr.Write(w, http.StatusInternalServerError, "permissions.resolve_failed", "erro ao resolver permissões")
 		return store.Member{}, false
 	}
 	if !permissions.Has(base, bit) {
-		http.Error(w, deniedMessage, http.StatusForbidden)
+		apierr.WriteParams(w, http.StatusForbidden, "permissions.required", "requer a permissão "+bitName, apierr.Params{"permission": bitName})
 		return store.Member{}, false
 	}
 	return member, true
@@ -44,36 +45,36 @@ func requireMemberPermission(w http.ResponseWriter, r *http.Request, roles *stor
 func resolveModerationTarget(w http.ResponseWriter, r *http.Request, members *store.MemberStore, roles *store.RoleStore, requester store.Member) (store.Member, bool) {
 	targetID := r.PathValue("memberId")
 	if targetID == requester.ID {
-		http.Error(w, "não é possível expulsar/banir a si mesmo", http.StatusBadRequest)
+		apierr.Write(w, http.StatusBadRequest, "members.moderate_self", "não é possível expulsar/banir a si mesmo")
 		return store.Member{}, false
 	}
 
 	target, err := members.GetByID(r.Context(), targetID)
 	if errors.Is(err, store.ErrNotFound) {
-		http.Error(w, "membro não encontrado", http.StatusNotFound)
+		apierr.Write(w, http.StatusNotFound, "members.not_found", "membro não encontrado")
 		return store.Member{}, false
 	}
 	if err != nil {
-		http.Error(w, "erro ao buscar membro", http.StatusInternalServerError)
+		apierr.Write(w, http.StatusInternalServerError, "members.fetch_failed", "erro ao buscar membro")
 		return store.Member{}, false
 	}
 	if target.IsOwner {
-		http.Error(w, "não é possível expulsar/banir o dono do servidor", http.StatusForbidden)
+		apierr.Write(w, http.StatusForbidden, "members.moderate_owner", "não é possível expulsar/banir o dono do servidor")
 		return store.Member{}, false
 	}
 
 	requesterBase, _, err := memberBasePermission(r.Context(), roles, requester)
 	if err != nil {
-		http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+		apierr.Write(w, http.StatusInternalServerError, "permissions.resolve_failed", "erro ao resolver permissões")
 		return store.Member{}, false
 	}
 	targetBase, _, err := memberBasePermission(r.Context(), roles, target)
 	if err != nil {
-		http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+		apierr.Write(w, http.StatusInternalServerError, "permissions.resolve_failed", "erro ao resolver permissões")
 		return store.Member{}, false
 	}
 	if !permissions.Grants(requesterBase, targetBase) {
-		http.Error(w, "não é possível expulsar/banir quem tem permissões que você não possui", http.StatusForbidden)
+		apierr.Write(w, http.StatusForbidden, "members.moderate_exceeds_own", "não é possível expulsar/banir quem tem permissões que você não possui")
 		return store.Member{}, false
 	}
 	return target, true
@@ -85,7 +86,7 @@ func resolveModerationTarget(w http.ResponseWriter, r *http.Request, members *st
 // assim que resgatar um novo convite de alguém com CreateInvites ou ManageInvites.
 func handleKickMember(members *store.MemberStore, roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requester, ok := requireMemberPermission(w, r, roles, permissions.KickMembers, "requer a permissão KickMembers")
+		requester, ok := requireMemberPermission(w, r, roles, permissions.KickMembers, "KickMembers")
 		if !ok {
 			return
 		}
@@ -95,10 +96,10 @@ func handleKickMember(members *store.MemberStore, roles *store.RoleStore) http.H
 		}
 
 		if _, err := members.Kick(r.Context(), target.ID); errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "membro já não está mais no servidor", http.StatusConflict)
+			apierr.Write(w, http.StatusConflict, "members.already_gone", "membro já não está mais no servidor")
 			return
 		} else if err != nil {
-			http.Error(w, "erro ao expulsar membro", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "members.kick_failed", "erro ao expulsar membro")
 			return
 		}
 
@@ -118,7 +119,7 @@ type banRequest struct {
 // saiu continua fazendo sentido, é o próprio propósito de impedir volta.
 func handleBanMember(members *store.MemberStore, roles *store.RoleStore, bans *store.MemberBanStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requester, ok := requireMemberPermission(w, r, roles, permissions.BanMembers, "requer a permissão BanMembers")
+		requester, ok := requireMemberPermission(w, r, roles, permissions.BanMembers, "BanMembers")
 		if !ok {
 			return
 		}
@@ -133,12 +134,12 @@ func handleBanMember(members *store.MemberStore, roles *store.RoleStore, bans *s
 		}
 
 		if _, err := bans.Create(r.Context(), target.OIDCSubject, requester.ID, body.Reason); err != nil {
-			http.Error(w, "erro ao banir membro", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "members.ban_failed", "erro ao banir membro")
 			return
 		}
 
 		if _, err := members.Kick(r.Context(), target.ID); err != nil && !errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "erro ao expulsar membro banido", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "members.kick_banned_failed", "erro ao expulsar membro banido")
 			return
 		}
 
@@ -158,13 +159,13 @@ type banView struct {
 // UI de administração poder revisar/revogar. Requer BanMembers.
 func handleListBans(bans *store.MemberBanStore, roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := requireMemberPermission(w, r, roles, permissions.BanMembers, "requer a permissão BanMembers"); !ok {
+		if _, ok := requireMemberPermission(w, r, roles, permissions.BanMembers, "BanMembers"); !ok {
 			return
 		}
 
 		rows, err := bans.List(r.Context())
 		if err != nil {
-			http.Error(w, "erro ao listar banimentos", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "members.bans_list_failed", "erro ao listar banimentos")
 			return
 		}
 		out := make([]banView, len(rows))
@@ -190,15 +191,15 @@ func handleListBans(bans *store.MemberBanStore, roles *store.RoleStore) http.Han
 // suficiente para isso.
 func handleUnbanMember(bans *store.MemberBanStore, roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := requireMemberPermission(w, r, roles, permissions.BanMembers, "requer a permissão BanMembers"); !ok {
+		if _, ok := requireMemberPermission(w, r, roles, permissions.BanMembers, "BanMembers"); !ok {
 			return
 		}
 
 		if err := bans.Delete(r.Context(), r.PathValue("oidcSubject")); errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "banimento não encontrado", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "members.ban_not_found", "banimento não encontrado")
 			return
 		} else if err != nil {
-			http.Error(w, "erro ao revogar banimento", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "members.unban_failed", "erro ao revogar banimento")
 			return
 		}
 

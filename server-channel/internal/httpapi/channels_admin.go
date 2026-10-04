@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"unicode/utf8"
 
+	"a3sitsolutions.com/ffcom/server-channel/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
 	"a3sitsolutions.com/ffcom/server-channel/internal/permissions"
 	"a3sitsolutions.com/ffcom/server-channel/internal/storage"
@@ -31,24 +33,31 @@ const maxStructureNameLength = 100
 func structureBase(w http.ResponseWriter, r *http.Request, roles *store.RoleStore) (int64, bool) {
 	member, ok := auth.MemberFromContext(r.Context())
 	if !ok {
-		http.Error(w, "membro não encontrado no contexto", http.StatusInternalServerError)
+		apierr.Write(w, http.StatusInternalServerError, "common.member_missing", "membro não encontrado no contexto")
 		return 0, false
 	}
 	base, _, err := memberBasePermission(r.Context(), roles, member)
 	if err != nil {
-		http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+		apierr.Write(w, http.StatusInternalServerError, "permissions.resolve_failed", "erro ao resolver permissões")
 		return 0, false
 	}
 	return base, true
 }
 
 // allowStructure confere se base tem ManageChannels ou o bit granular da
-// ação (bit 0 = só ManageChannels), escrevendo 403 se não.
+// ação (bit 0 e bitName vazio = só ManageChannels), escrevendo 403 se não.
+// bitName é o nome do bit granular, que vai em params para a tradução.
 func allowStructure(w http.ResponseWriter, base, bit int64, bitName string) bool {
 	if permissions.Has(base, permissions.ManageChannels|bit) {
 		return true
 	}
-	http.Error(w, "requer a permissão "+bitName, http.StatusForbidden)
+	if bitName == "" {
+		apierr.WriteParams(w, http.StatusForbidden, "permissions.required", "requer a permissão ManageChannels",
+			apierr.Params{"permission": "ManageChannels"})
+		return false
+	}
+	apierr.WriteParams(w, http.StatusForbidden, "permissions.required_either", "requer a permissão ManageChannels ou "+bitName,
+		apierr.Params{"permission": "ManageChannels", "alternative": bitName})
 	return false
 }
 
@@ -60,16 +69,17 @@ func requireStructure(w http.ResponseWriter, r *http.Request, roles *store.RoleS
 }
 
 // normalizeStructureName tira espaços das pontas e valida o tamanho,
-// devolvendo a mensagem de erro para o client quando inválido.
-func normalizeStructureName(raw string) (string, string) {
+// devolvendo o erro para o client (400) quando inválido.
+func normalizeStructureName(raw string) (string, *apierr.Problem) {
 	name := strings.TrimSpace(raw)
 	if name == "" {
-		return "", "name é obrigatório"
+		return "", apierr.New("common.name_required", "name é obrigatório")
 	}
 	if utf8.RuneCountInString(name) > maxStructureNameLength {
-		return "", "name excede 100 caracteres"
+		return "", apierr.NewParams("common.name_too_long", fmt.Sprintf("name excede %d caracteres", maxStructureNameLength),
+			apierr.Params{"max": maxStructureNameLength})
 	}
-	return name, ""
+	return name, nil
 }
 
 // validCategoryID confere que categoryID (quando não nulo) aponta para uma
@@ -81,9 +91,9 @@ func validCategoryID(ctx context.Context, w http.ResponseWriter, categories *sto
 	}
 	if _, err := categories.GetByID(ctx, *categoryID); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "categoryId não existe", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "categories.id_unknown", "categoryId não existe")
 		} else {
-			http.Error(w, "erro ao buscar categoria", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "categories.fetch_failed", "erro ao buscar categoria")
 		}
 		return false
 	}
@@ -98,23 +108,23 @@ type createCategoryRequest struct {
 // POST /api/categories — cria uma categoria, por padrão no fim da lista.
 func handleCreateCategory(categories *store.CategoryStore, roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !requireStructure(w, r, roles, permissions.CreateCategories, "ManageChannels ou CreateCategories") {
+		if !requireStructure(w, r, roles, permissions.CreateCategories, "CreateCategories") {
 			return
 		}
 		var body createCategoryRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo inválido")
 			return
 		}
 		name, msg := normalizeStructureName(body.Name)
-		if msg != "" {
-			http.Error(w, msg, http.StatusBadRequest)
+		if msg != nil {
+			apierr.WriteProblem(w, http.StatusBadRequest, msg)
 			return
 		}
 
 		category, err := categories.Create(r.Context(), name, body.Position)
 		if err != nil {
-			http.Error(w, "erro ao criar categoria", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "categories.create_failed", "erro ao criar categoria")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -138,31 +148,31 @@ func handleUpdateCategory(categories *store.CategoryStore, roles *store.RoleStor
 		}
 		var body updateCategoryRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo inválido")
 			return
 		}
-		if body.Name != nil && !allowStructure(w, base, 0, "ManageChannels") {
+		if body.Name != nil && !allowStructure(w, base, 0, "") {
 			return
 		}
-		if body.Name == nil && !allowStructure(w, base, permissions.ReorderCategories, "ManageChannels ou ReorderCategories") {
+		if body.Name == nil && !allowStructure(w, base, permissions.ReorderCategories, "ReorderCategories") {
 			return
 		}
 
 		existing, err := categories.GetByID(r.Context(), r.PathValue("id"))
 		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "categoria não encontrada", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "categories.not_found", "categoria não encontrada")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao buscar categoria", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "categories.fetch_failed", "erro ao buscar categoria")
 			return
 		}
 
 		name, position := existing.Name, existing.Position
 		if body.Name != nil {
-			var msg string
-			if name, msg = normalizeStructureName(*body.Name); msg != "" {
-				http.Error(w, msg, http.StatusBadRequest)
+			var msg *apierr.Problem
+			if name, msg = normalizeStructureName(*body.Name); msg != nil {
+				apierr.WriteProblem(w, http.StatusBadRequest, msg)
 				return
 			}
 		}
@@ -172,11 +182,11 @@ func handleUpdateCategory(categories *store.CategoryStore, roles *store.RoleStor
 
 		updated, err := categories.Update(r.Context(), existing.ID, name, position)
 		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "categoria não encontrada", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "categories.not_found", "categoria não encontrada")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao atualizar categoria", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "categories.update_failed", "erro ao atualizar categoria")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -188,16 +198,16 @@ func handleUpdateCategory(categories *store.CategoryStore, roles *store.RoleStor
 // existindo, sem categoria (mesmo comportamento do Discord).
 func handleDeleteCategory(categories *store.CategoryStore, roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !requireStructure(w, r, roles, permissions.DeleteCategories, "ManageChannels ou DeleteCategories") {
+		if !requireStructure(w, r, roles, permissions.DeleteCategories, "DeleteCategories") {
 			return
 		}
 		err := categories.Delete(r.Context(), r.PathValue("id"))
 		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "categoria não encontrada", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "categories.not_found", "categoria não encontrada")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao apagar categoria", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "categories.delete_failed", "erro ao apagar categoria")
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -215,21 +225,21 @@ type reorderCategoriesRequest struct {
 // uma ordem montada sobre uma lista velha.
 func handleReorderCategories(categories *store.CategoryStore, roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !requireStructure(w, r, roles, permissions.ReorderCategories, "ManageChannels ou ReorderCategories") {
+		if !requireStructure(w, r, roles, permissions.ReorderCategories, "ReorderCategories") {
 			return
 		}
 		var body reorderCategoriesRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo inválido")
 			return
 		}
 		err := categories.Reorder(r.Context(), body.IDs)
 		if errors.Is(err, store.ErrOrderMismatch) {
-			http.Error(w, "a lista de categorias mudou; recarregue e tente de novo", http.StatusConflict)
+			apierr.Write(w, http.StatusConflict, "categories.list_changed", "a lista de categorias mudou; recarregue e tente de novo")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao reordenar categorias", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "categories.reorder_failed", "erro ao reordenar categorias")
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -250,12 +260,12 @@ type reorderChannelsRequest struct {
 // apagada no meio tempo dá 409, e o client recarrega e tenta de novo.
 func handleReorderChannels(channels *store.ChannelStore, roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !requireStructure(w, r, roles, permissions.ReorderChannels, "ManageChannels ou ReorderChannels") {
+		if !requireStructure(w, r, roles, permissions.ReorderChannels, "ReorderChannels") {
 			return
 		}
 		var body reorderChannelsRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.Groups) == 0 {
-			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo inválido")
 			return
 		}
 		groups := make([]store.ChannelGroup, len(body.Groups))
@@ -264,11 +274,11 @@ func handleReorderChannels(channels *store.ChannelStore, roles *store.RoleStore)
 		}
 		err := channels.Reorder(r.Context(), groups)
 		if errors.Is(err, store.ErrChannelOrderInvalid) {
-			http.Error(w, "a lista de canais mudou; recarregue e tente de novo", http.StatusConflict)
+			apierr.Write(w, http.StatusConflict, "channels.list_changed", "a lista de canais mudou; recarregue e tente de novo")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao reordenar canais", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "channels.reorder_failed", "erro ao reordenar canais")
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -286,24 +296,24 @@ type createChannelRequest struct {
 // fim da categoria (ou entre os sem categoria, com categoryId nulo).
 func handleCreateChannel(categories *store.CategoryStore, channels *store.ChannelStore, roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !requireStructure(w, r, roles, permissions.CreateChannels, "ManageChannels ou CreateChannels") {
+		if !requireStructure(w, r, roles, permissions.CreateChannels, "CreateChannels") {
 			return
 		}
 		var body createChannelRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo inválido")
 			return
 		}
 		name, msg := normalizeStructureName(body.Name)
-		if msg != "" {
-			http.Error(w, msg, http.StatusBadRequest)
+		if msg != nil {
+			apierr.WriteProblem(w, http.StatusBadRequest, msg)
 			return
 		}
 		channelType := store.ChannelType(body.Type)
 		switch channelType {
 		case store.ChannelText, store.ChannelVoice, store.ChannelForum:
 		default:
-			http.Error(w, "type deve ser text, voice ou forum", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "channels.type_invalid", "type deve ser text, voice ou forum")
 			return
 		}
 		if !validCategoryID(r.Context(), w, categories, body.CategoryID) {
@@ -312,7 +322,7 @@ func handleCreateChannel(categories *store.CategoryStore, channels *store.Channe
 
 		channel, err := channels.Create(r.Context(), body.CategoryID, name, channelType, body.Position)
 		if err != nil {
-			http.Error(w, "erro ao criar canal", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "channels.create_failed", "erro ao criar canal")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -334,24 +344,24 @@ func handleUpdateChannel(categories *store.CategoryStore, channels *store.Channe
 		}
 		var body map[string]json.RawMessage
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo inválido")
 			return
 		}
 		_, renames := body["name"]
-		if renames && !allowStructure(w, base, 0, "ManageChannels") {
+		if renames && !allowStructure(w, base, 0, "") {
 			return
 		}
-		if !renames && !allowStructure(w, base, permissions.ReorderChannels, "ManageChannels ou ReorderChannels") {
+		if !renames && !allowStructure(w, base, permissions.ReorderChannels, "ReorderChannels") {
 			return
 		}
 
 		existing, err := channels.GetByID(r.Context(), r.PathValue("id"))
 		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "canal não encontrado", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "channels.not_found", "canal não encontrado")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao buscar canal", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "channels.fetch_failed", "erro ao buscar canal")
 			return
 		}
 
@@ -359,19 +369,19 @@ func handleUpdateChannel(categories *store.CategoryStore, channels *store.Channe
 		if raw, ok := body["name"]; ok {
 			var value string
 			if err := json.Unmarshal(raw, &value); err != nil {
-				http.Error(w, "name inválido", http.StatusBadRequest)
+				apierr.Write(w, http.StatusBadRequest, "channels.name_invalid", "name inválido")
 				return
 			}
-			var msg string
-			if name, msg = normalizeStructureName(value); msg != "" {
-				http.Error(w, msg, http.StatusBadRequest)
+			var msg *apierr.Problem
+			if name, msg = normalizeStructureName(value); msg != nil {
+				apierr.WriteProblem(w, http.StatusBadRequest, msg)
 				return
 			}
 		}
 		if raw, ok := body["categoryId"]; ok {
 			categoryID = nil
 			if err := json.Unmarshal(raw, &categoryID); err != nil {
-				http.Error(w, "categoryId inválido", http.StatusBadRequest)
+				apierr.Write(w, http.StatusBadRequest, "channels.category_id_invalid", "categoryId inválido")
 				return
 			}
 			if !validCategoryID(r.Context(), w, categories, categoryID) {
@@ -380,22 +390,22 @@ func handleUpdateChannel(categories *store.CategoryStore, channels *store.Channe
 		}
 		if raw, ok := body["position"]; ok {
 			if err := json.Unmarshal(raw, &position); err != nil {
-				http.Error(w, "position inválido", http.StatusBadRequest)
+				apierr.Write(w, http.StatusBadRequest, "channels.position_invalid", "position inválido")
 				return
 			}
 		}
 		if _, ok := body["type"]; ok {
-			http.Error(w, "o tipo do canal não pode ser alterado", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "channels.type_immutable", "o tipo do canal não pode ser alterado")
 			return
 		}
 
 		updated, err := channels.Update(r.Context(), existing.ID, name, categoryID, position)
 		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "canal não encontrado", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "channels.not_found", "canal não encontrado")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao atualizar canal", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "channels.update_failed", "erro ao atualizar canal")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -411,24 +421,24 @@ func handleUpdateChannel(categories *store.CategoryStore, channels *store.Channe
 // rota.
 func handleDeleteChannel(channels *store.ChannelStore, attachments *store.AttachmentStore, files *storage.FileStore, roles *store.RoleStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !requireStructure(w, r, roles, permissions.DeleteChannels, "ManageChannels ou DeleteChannels") {
+		if !requireStructure(w, r, roles, permissions.DeleteChannels, "DeleteChannels") {
 			return
 		}
 		channelID := r.PathValue("id")
 
 		keys, err := attachments.StorageKeysForChannel(r.Context(), channelID)
 		if err != nil {
-			http.Error(w, "erro ao buscar anexos do canal", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "channels.attachments_fetch_failed", "erro ao buscar anexos do canal")
 			return
 		}
 
 		err = channels.Delete(r.Context(), channelID)
 		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "canal não encontrado", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "channels.not_found", "canal não encontrado")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao apagar canal", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "channels.delete_failed", "erro ao apagar canal")
 			return
 		}
 

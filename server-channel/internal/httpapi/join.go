@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"a3sitsolutions.com/ffcom/server-channel/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
 )
@@ -40,17 +41,17 @@ func handleJoin(members *store.MemberStore, invites *store.InviteStore, bans *st
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		subject, ok := auth.SubjectFromContext(r.Context())
 		if !ok {
-			http.Error(w, "subject ausente no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "auth.subject_missing", "subject ausente no contexto")
 			return
 		}
 
 		banned, err := bans.IsBanned(r.Context(), subject)
 		if err != nil {
-			http.Error(w, "erro ao verificar banimento", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "members.ban_check_failed", "erro ao verificar banimento")
 			return
 		}
 		if banned {
-			http.Error(w, "banido deste servidor", http.StatusForbidden)
+			apierr.Write(w, http.StatusForbidden, "members.banned", "banido deste servidor")
 			return
 		}
 
@@ -60,20 +61,20 @@ func handleJoin(members *store.MemberStore, invites *store.InviteStore, bans *st
 			return
 		}
 		if !errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "erro ao resolver membro", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "auth.member_resolve_failed", "erro ao resolver membro")
 			return
 		}
 
 		count, err := members.Count(r.Context())
 		if err != nil {
-			http.Error(w, "erro ao contar membros", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "members.count_failed", "erro ao contar membros")
 			return
 		}
 
 		if count == 0 {
 			member, err := members.CreateFounder(r.Context(), subject)
 			if err != nil {
-				http.Error(w, "erro ao criar membro", http.StatusInternalServerError)
+				apierr.Write(w, http.StatusInternalServerError, "members.create_failed", "erro ao criar membro")
 				return
 			}
 			writeJoinResponse(w, http.StatusCreated, member, true)
@@ -86,40 +87,40 @@ func handleJoin(members *store.MemberStore, invites *store.InviteStore, bans *st
 		}
 		code := strings.TrimSpace(body.Code)
 		if code == "" {
-			http.Error(w, "convite necessário para entrar neste servidor", http.StatusForbidden)
+			apierr.Write(w, http.StatusForbidden, "invites.required", "convite necessário para entrar neste servidor")
 			return
 		}
 
 		invite, err := invites.GetByCode(r.Context(), code)
 		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "convite não encontrado", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "invites.not_found", "convite não encontrado")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao buscar convite", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "invites.fetch_failed", "erro ao buscar convite")
 			return
 		}
 		if invite.ExpiresAt != nil && invite.ExpiresAt.Before(time.Now()) {
-			http.Error(w, "convite expirado", http.StatusGone)
+			apierr.Write(w, http.StatusGone, "invites.expired", "convite expirado")
 			return
 		}
 		if invite.MaxUses != nil && invite.Uses >= *invite.MaxUses {
-			http.Error(w, "convite esgotado", http.StatusConflict)
+			apierr.Write(w, http.StatusConflict, "invites.exhausted", "convite esgotado")
 			return
 		}
 
 		if _, err := invites.Redeem(r.Context(), invite.ID); err != nil {
 			if errors.Is(err, store.ErrConflict) {
-				http.Error(w, "convite esgotado ou expirado", http.StatusConflict)
+				apierr.Write(w, http.StatusConflict, "invites.exhausted_or_expired", "convite esgotado ou expirado")
 				return
 			}
-			http.Error(w, "erro ao resgatar convite", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "invites.redeem_failed", "erro ao resgatar convite")
 			return
 		}
 
 		member, err := members.GetOrCreateByOIDCSubject(r.Context(), subject)
 		if err != nil {
-			http.Error(w, "erro ao criar membro", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "members.create_failed", "erro ao criar membro")
 			return
 		}
 		writeJoinResponse(w, http.StatusCreated, member, false)

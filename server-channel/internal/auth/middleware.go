@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"a3sitsolutions.com/ffcom/server-channel/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
 )
 
@@ -36,13 +37,13 @@ func VerifyToken(verifier *Verifier) func(http.Handler) http.Handler {
 
 			rawToken, ok := bearerToken(r)
 			if !ok {
-				http.Error(w, "token ausente ou mal formatado", http.StatusUnauthorized)
+				apierr.Write(w, http.StatusUnauthorized, "auth.token_missing", "token ausente ou mal formatado")
 				return
 			}
 
 			claims, err := verifier.Verify(r.Context(), rawToken)
 			if err != nil {
-				http.Error(w, "token inválido", http.StatusUnauthorized)
+				apierr.Write(w, http.StatusUnauthorized, "auth.token_invalid", "token inválido")
 				return
 			}
 
@@ -91,17 +92,17 @@ func RequireMember(members *store.MemberStore) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			subject, ok := SubjectFromContext(r.Context())
 			if !ok {
-				http.Error(w, "subject ausente no contexto", http.StatusInternalServerError)
+				apierr.Write(w, http.StatusInternalServerError, "auth.subject_missing", "subject ausente no contexto")
 				return
 			}
 
 			member, err := members.GetByOIDCSubject(r.Context(), subject)
 			if errors.Is(err, store.ErrNotFound) {
-				http.Error(w, "é preciso entrar neste servidor (POST /api/join) antes", http.StatusForbidden)
+				apierr.Write(w, http.StatusForbidden, "auth.join_required", "é preciso entrar neste servidor (POST /api/join) antes")
 				return
 			}
 			if err != nil {
-				http.Error(w, "erro ao resolver membro", http.StatusInternalServerError)
+				apierr.Write(w, http.StatusInternalServerError, "auth.member_resolve_failed", "erro ao resolver membro")
 				return
 			}
 

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"a3sitsolutions.com/ffcom/server-channel/internal/apierr"
 )
 
 // Frames trocados no WebSocket de um canal seguem um envelope
@@ -144,9 +146,15 @@ type postCreatedEnvelope struct {
 	Message MessageView `json:"message"`
 }
 
+// errorEnvelope é o frame "error", no mesmo formato dos erros da API HTTP
+// (code, message, params; ver docs/protocol.md, "Erros da API HTTP"). Error
+// repete Message para os clients anteriores ao code, que só liam esse campo.
 type errorEnvelope struct {
-	Type  string `json:"type"`
-	Error string `json:"error"`
+	Type    string        `json:"type"`
+	Code    string        `json:"code"`
+	Message string        `json:"message"`
+	Params  apierr.Params `json:"params,omitempty"`
+	Error   string        `json:"error"`
 }
 
 type typeEnvelope struct {
@@ -156,10 +164,10 @@ type typeEnvelope struct {
 // FrameType lê só o campo "type" de raw, sem decodificar o resto do payload
 // — usado pelo canal forum para decidir se o frame é "thread.create" ou
 // "post.create" antes de chamar o decoder específico.
-func FrameType(raw []byte) (string, error) {
+func FrameType(raw []byte) (string, *apierr.Problem) {
 	var t typeEnvelope
 	if err := json.Unmarshal(raw, &t); err != nil {
-		return "", fmt.Errorf("frame não é JSON válido: %w", err)
+		return "", apierr.New("realtime.frame_invalid", fmt.Sprintf("frame não é JSON válido: %v", err))
 	}
 	return t.Type, nil
 }
@@ -167,58 +175,58 @@ func FrameType(raw []byte) (string, error) {
 // DecodeIncoming lê o campo "type" de raw e, se for "message.create",
 // decodifica o restante em IncomingMessageCreate. Tipos desconhecidos
 // devolvem erro para o chamador responder com SendError.
-func DecodeIncoming(raw []byte) (IncomingMessageCreate, error) {
+func DecodeIncoming(raw []byte) (IncomingMessageCreate, *apierr.Problem) {
 	t, err := FrameType(raw)
 	if err != nil {
 		return IncomingMessageCreate{}, err
 	}
 	if t != TypeMessageCreate {
-		return IncomingMessageCreate{}, fmt.Errorf("tipo de frame desconhecido: %q", t)
+		return IncomingMessageCreate{}, UnknownFrameType(t)
 	}
 
 	var m IncomingMessageCreate
 	if err := json.Unmarshal(raw, &m); err != nil {
-		return IncomingMessageCreate{}, fmt.Errorf("payload de message.create inválido: %w", err)
+		return IncomingMessageCreate{}, invalidPayload("message.create", err)
 	}
 	return m, nil
 }
 
 // DecodeMessageUpdate decodifica o payload de um frame "message.update" já
 // identificado via FrameType.
-func DecodeMessageUpdate(raw []byte) (IncomingMessageUpdate, error) {
+func DecodeMessageUpdate(raw []byte) (IncomingMessageUpdate, *apierr.Problem) {
 	var m IncomingMessageUpdate
 	if err := json.Unmarshal(raw, &m); err != nil {
-		return IncomingMessageUpdate{}, fmt.Errorf("payload de message.update inválido: %w", err)
+		return IncomingMessageUpdate{}, invalidPayload("message.update", err)
 	}
 	return m, nil
 }
 
 // DecodeMessageDelete decodifica o payload de um frame "message.delete" já
 // identificado via FrameType.
-func DecodeMessageDelete(raw []byte) (IncomingMessageDelete, error) {
+func DecodeMessageDelete(raw []byte) (IncomingMessageDelete, *apierr.Problem) {
 	var m IncomingMessageDelete
 	if err := json.Unmarshal(raw, &m); err != nil {
-		return IncomingMessageDelete{}, fmt.Errorf("payload de message.delete inválido: %w", err)
+		return IncomingMessageDelete{}, invalidPayload("message.delete", err)
 	}
 	return m, nil
 }
 
 // DecodeThreadCreate decodifica o payload de um frame "thread.create" já
 // identificado via FrameType.
-func DecodeThreadCreate(raw []byte) (IncomingThreadCreate, error) {
+func DecodeThreadCreate(raw []byte) (IncomingThreadCreate, *apierr.Problem) {
 	var m IncomingThreadCreate
 	if err := json.Unmarshal(raw, &m); err != nil {
-		return IncomingThreadCreate{}, fmt.Errorf("payload de thread.create inválido: %w", err)
+		return IncomingThreadCreate{}, invalidPayload("thread.create", err)
 	}
 	return m, nil
 }
 
 // DecodePostCreate decodifica o payload de um frame "post.create" já
 // identificado via FrameType.
-func DecodePostCreate(raw []byte) (IncomingPostCreate, error) {
+func DecodePostCreate(raw []byte) (IncomingPostCreate, *apierr.Problem) {
 	var m IncomingPostCreate
 	if err := json.Unmarshal(raw, &m); err != nil {
-		return IncomingPostCreate{}, fmt.Errorf("payload de post.create inválido: %w", err)
+		return IncomingPostCreate{}, invalidPayload("post.create", err)
 	}
 	return m, nil
 }
@@ -252,6 +260,19 @@ func EncodePostCreated(m MessageView) ([]byte, error) {
 	return json.Marshal(postCreatedEnvelope{Type: typePostCreated, Message: m})
 }
 
-func encodeError(message string) ([]byte, error) {
-	return json.Marshal(errorEnvelope{Type: typeError, Error: message})
+func encodeError(p *apierr.Problem) ([]byte, error) {
+	return json.Marshal(errorEnvelope{Type: typeError, Code: p.Code, Message: p.Message, Params: p.Params, Error: p.Message})
+}
+
+// UnknownFrameType é o erro de um frame com "type" que a conexão não aceita.
+func UnknownFrameType(frameType string) *apierr.Problem {
+	return apierr.NewParams("realtime.frame_type_unknown", fmt.Sprintf("tipo de frame desconhecido: %q", frameType),
+		apierr.Params{"type": frameType})
+}
+
+// invalidPayload é o erro de um frame de tipo conhecido cujo payload não
+// decodifica.
+func invalidPayload(frameType string, err error) *apierr.Problem {
+	return apierr.NewParams("realtime.payload_invalid", fmt.Sprintf("payload de %s inválido: %v", frameType, err),
+		apierr.Params{"type": frameType})
 }

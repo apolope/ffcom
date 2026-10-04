@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"a3sitsolutions.com/ffcom/server-channel/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
 	"a3sitsolutions.com/ffcom/server-channel/internal/livekit"
 	"a3sitsolutions.com/ffcom/server-channel/internal/permissions"
@@ -24,21 +25,21 @@ func handleVoiceToken(channels *store.ChannelStore, roles *store.RoleStore, over
 
 		channel, err := channels.GetByID(r.Context(), channelID)
 		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "canal não encontrado", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "channels.not_found", "canal não encontrado")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao buscar canal", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "channels.fetch_failed", "erro ao buscar canal")
 			return
 		}
 		if channel.Type != store.ChannelVoice {
-			http.Error(w, "canal não é de voz", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "channels.not_voice", "canal não é de voz")
 			return
 		}
 
 		member, ok := auth.MemberFromContext(r.Context())
 		if !ok {
-			http.Error(w, "membro não autenticado", http.StatusUnauthorized)
+			apierr.Write(w, http.StatusUnauthorized, "auth.member_unauthenticated", "membro não autenticado")
 			return
 		}
 
@@ -47,11 +48,11 @@ func handleVoiceToken(channels *store.ChannelStore, roles *store.RoleStore, over
 		// por servidor e por canal".
 		effective, err := channelPermission(r.Context(), roles, overwrites, member, channelID)
 		if err != nil {
-			http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "permissions.resolve_failed", "erro ao resolver permissões")
 			return
 		}
 		if !permissions.Has(effective, permissions.Voice) {
-			http.Error(w, "sem permissão para entrar neste canal de voz", http.StatusForbidden)
+			apierr.Write(w, http.StatusForbidden, "voice.connect_denied", "sem permissão para entrar neste canal de voz")
 			return
 		}
 
@@ -62,7 +63,7 @@ func handleVoiceToken(channels *store.ChannelStore, roles *store.RoleStore, over
 
 		token, err := livekit.NewAccessToken(apiKey, apiSecret, member.ID, displayName, channel.ID)
 		if err != nil {
-			http.Error(w, "erro ao gerar token de voz", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "voice.token_failed", "erro ao gerar token de voz")
 			return
 		}
 

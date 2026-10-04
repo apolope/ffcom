@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"a3sitsolutions.com/ffcom/server-channel/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-channel/internal/permissions"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
 )
@@ -26,16 +27,16 @@ func handleListChannelOverwrites(channels *store.ChannelStore, roles *store.Role
 
 		channelID := r.PathValue("id")
 		if _, err := channels.GetByID(r.Context(), channelID); errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "canal não encontrado", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "channels.not_found", "canal não encontrado")
 			return
 		} else if err != nil {
-			http.Error(w, "erro ao buscar canal", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "channels.fetch_failed", "erro ao buscar canal")
 			return
 		}
 
 		rows, err := overwrites.ListForChannel(r.Context(), channelID)
 		if err != nil {
-			http.Error(w, "erro ao listar overwrites", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "overwrites.list_failed", "erro ao listar overwrites")
 			return
 		}
 
@@ -68,29 +69,29 @@ func handleSetChannelOverwrite(channels *store.ChannelStore, roles *store.RoleSt
 
 		channelID := r.PathValue("id")
 		if _, err := channels.GetByID(r.Context(), channelID); errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "canal não encontrado", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "channels.not_found", "canal não encontrado")
 			return
 		} else if err != nil {
-			http.Error(w, "erro ao buscar canal", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "channels.fetch_failed", "erro ao buscar canal")
 			return
 		}
 
 		var body setOverwriteRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo inválido")
 			return
 		}
 		if !permissions.Grants(base, body.Allow) {
-			http.Error(w, "não é possível liberar (allow) uma permissão que você mesmo não possui", http.StatusForbidden)
+			apierr.Write(w, http.StatusForbidden, "overwrites.allow_exceeds_own", "não é possível liberar (allow) uma permissão que você mesmo não possui")
 			return
 		}
-		if _, ok := requireRoleWithinGrants(w, r, roles, base, r.PathValue("roleId"), "não é possível mexer no overwrite de uma role com permissões que você mesmo não possui"); !ok {
+		if _, ok := requireRoleWithinGrants(w, r, roles, base, r.PathValue("roleId"), apierr.New("overwrites.role_exceeds_own", "não é possível mexer no overwrite de uma role com permissões que você mesmo não possui")); !ok {
 			return
 		}
 
 		o, err := overwrites.Set(r.Context(), channelID, r.PathValue("roleId"), body.Allow, body.Deny)
 		if err != nil {
-			http.Error(w, "erro ao salvar overwrite", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "overwrites.save_failed", "erro ao salvar overwrite")
 			return
 		}
 
@@ -107,17 +108,17 @@ func handleDeleteChannelOverwrite(roles *store.RoleStore, overwrites *store.Chan
 		if !ok {
 			return
 		}
-		if _, ok := requireRoleWithinGrants(w, r, roles, base, r.PathValue("roleId"), "não é possível mexer no overwrite de uma role com permissões que você mesmo não possui"); !ok {
+		if _, ok := requireRoleWithinGrants(w, r, roles, base, r.PathValue("roleId"), apierr.New("overwrites.role_exceeds_own", "não é possível mexer no overwrite de uma role com permissões que você mesmo não possui")); !ok {
 			return
 		}
 
 		err := overwrites.Delete(r.Context(), r.PathValue("id"), r.PathValue("roleId"))
 		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "overwrite não encontrado", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "overwrites.not_found", "overwrite não encontrado")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao remover overwrite", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "overwrites.remove_failed", "erro ao remover overwrite")
 			return
 		}
 

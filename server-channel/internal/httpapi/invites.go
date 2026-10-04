@@ -9,12 +9,13 @@ import (
 	"net/http"
 	"time"
 
+	"a3sitsolutions.com/ffcom/server-channel/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-channel/internal/permissions"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
 )
 
 func requireManageInvites(w http.ResponseWriter, r *http.Request, roles *store.RoleStore) (store.Member, bool) {
-	return requireMemberPermission(w, r, roles, permissions.ManageInvites, "requer a permissão ManageInvites")
+	return requireMemberPermission(w, r, roles, permissions.ManageInvites, "ManageInvites")
 }
 
 // requireCreateInvites aceita CreateInvites ou ManageInvites (permissions.Has
@@ -22,7 +23,7 @@ func requireManageInvites(w http.ResponseWriter, r *http.Request, roles *store.R
 // criar, então roles que já tinham ManageInvites antes do bit novo continuam
 // funcionando sem migration.
 func requireCreateInvites(w http.ResponseWriter, r *http.Request, roles *store.RoleStore) (store.Member, bool) {
-	return requireMemberPermission(w, r, roles, permissions.CreateInvites|permissions.ManageInvites, "requer a permissão CreateInvites")
+	return requireMemberPermission(w, r, roles, permissions.CreateInvites|permissions.ManageInvites, "CreateInvites")
 }
 
 // inviteCodeLength/generateInviteCode seguem o mesmo formato (base32 sem
@@ -78,11 +79,11 @@ func handleCreateInvite(invites *store.InviteStore, roles *store.RoleStore) http
 
 		var body createInviteRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
-			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo inválido")
 			return
 		}
 		if body.MaxUses != nil && *body.MaxUses <= 0 {
-			http.Error(w, "maxUses deve ser positivo", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "invites.max_uses_invalid", "maxUses deve ser positivo")
 			return
 		}
 
@@ -94,7 +95,7 @@ func handleCreateInvite(invites *store.InviteStore, roles *store.RoleStore) http
 		for attempt := 0; attempt < 5; attempt++ {
 			code, err := generateInviteCode()
 			if err != nil {
-				http.Error(w, "erro ao gerar código de convite", http.StatusInternalServerError)
+				apierr.Write(w, http.StatusInternalServerError, "invites.code_failed", "erro ao gerar código de convite")
 				return
 			}
 			invite, err = invites.Create(r.Context(), code, member.ID, body.MaxUses, body.ExpiresAt)
@@ -102,7 +103,7 @@ func handleCreateInvite(invites *store.InviteStore, roles *store.RoleStore) http
 				break
 			}
 			if attempt == 4 {
-				http.Error(w, "erro ao criar convite", http.StatusInternalServerError)
+				apierr.Write(w, http.StatusInternalServerError, "invites.create_failed", "erro ao criar convite")
 				return
 			}
 		}
@@ -123,7 +124,7 @@ func handleListInvites(invites *store.InviteStore, roles *store.RoleStore) http.
 
 		rows, err := invites.List(r.Context())
 		if err != nil {
-			http.Error(w, "erro ao listar convites", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "invites.list_failed", "erro ao listar convites")
 			return
 		}
 		out := make([]inviteView, len(rows))
@@ -150,10 +151,10 @@ func handleDeleteInvite(invites *store.InviteStore, roles *store.RoleStore) http
 		id := r.PathValue("id")
 		if err := invites.Delete(r.Context(), id); err != nil {
 			if errors.Is(err, store.ErrNotFound) {
-				http.Error(w, "convite não encontrado", http.StatusNotFound)
+				apierr.Write(w, http.StatusNotFound, "invites.not_found", "convite não encontrado")
 				return
 			}
-			http.Error(w, "erro ao revogar convite", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "invites.revoke_failed", "erro ao revogar convite")
 			return
 		}
 

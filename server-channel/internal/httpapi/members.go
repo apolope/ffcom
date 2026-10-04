@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"a3sitsolutions.com/ffcom/server-channel/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
 )
 
@@ -35,7 +36,7 @@ func handleListMembers(members *store.MemberStore, roles *store.RoleStore) http.
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rows, err := members.List(r.Context())
 		if err != nil {
-			http.Error(w, "erro ao listar membros", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "members.list_failed", "erro ao listar membros")
 			return
 		}
 
@@ -45,7 +46,7 @@ func handleListMembers(members *store.MemberStore, roles *store.RoleStore) http.
 		}
 		assignments, err := roles.AssignmentsForMembers(r.Context(), ids)
 		if err != nil {
-			http.Error(w, "erro ao buscar roles dos membros", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "members.roles_fetch_failed", "erro ao buscar roles dos membros")
 			return
 		}
 

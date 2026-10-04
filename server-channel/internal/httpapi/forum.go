@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"a3sitsolutions.com/ffcom/server-channel/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
 	"a3sitsolutions.com/ffcom/server-channel/internal/permissions"
 	"a3sitsolutions.com/ffcom/server-channel/internal/realtime"
@@ -24,36 +25,36 @@ func handleListThreads(channels *store.ChannelStore, roles *store.RoleStore, ove
 
 		channel, err := channels.GetByID(r.Context(), channelID)
 		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "canal não encontrado", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "channels.not_found", "canal não encontrado")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao buscar canal", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "channels.fetch_failed", "erro ao buscar canal")
 			return
 		}
 		if channel.Type != store.ChannelForum {
-			http.Error(w, "canal não é forum", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "channels.not_forum", "canal não é forum")
 			return
 		}
 
 		member, ok := auth.MemberFromContext(r.Context())
 		if !ok {
-			http.Error(w, "membro não encontrado no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.member_missing", "membro não encontrado no contexto")
 			return
 		}
 		effective, err := channelPermission(r.Context(), roles, overwrites, member, channelID)
 		if err != nil {
-			http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "permissions.resolve_failed", "erro ao resolver permissões")
 			return
 		}
 		if !permissions.Has(effective, permissions.ViewChannels) {
-			http.Error(w, "sem permissão para ver este canal", http.StatusForbidden)
+			apierr.Write(w, http.StatusForbidden, "channels.view_denied", "sem permissão para ver este canal")
 			return
 		}
 
 		rows, err := messages.ListThreads(r.Context(), channelID)
 		if err != nil {
-			http.Error(w, "erro ao buscar threads", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "forum.threads_fetch_failed", "erro ao buscar threads")
 			return
 		}
 
@@ -77,26 +78,26 @@ func handleListThreadMessages(roles *store.RoleStore, overwrites *store.ChannelO
 
 		thread, err := messages.GetThread(r.Context(), threadID)
 		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "thread não encontrada", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "forum.thread_not_found", "thread não encontrada")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao buscar thread", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "forum.thread_fetch_failed", "erro ao buscar thread")
 			return
 		}
 
 		member, ok := auth.MemberFromContext(r.Context())
 		if !ok {
-			http.Error(w, "membro não encontrado no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.member_missing", "membro não encontrado no contexto")
 			return
 		}
 		effective, err := channelPermission(r.Context(), roles, overwrites, member, thread.ChannelID)
 		if err != nil {
-			http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "permissions.resolve_failed", "erro ao resolver permissões")
 			return
 		}
 		if !permissions.Has(effective, permissions.ViewChannels) {
-			http.Error(w, "sem permissão para ver este canal", http.StatusForbidden)
+			apierr.Write(w, http.StatusForbidden, "channels.view_denied", "sem permissão para ver este canal")
 			return
 		}
 
@@ -104,7 +105,7 @@ func handleListThreadMessages(roles *store.RoleStore, overwrites *store.ChannelO
 		if raw := r.URL.Query().Get("limit"); raw != "" {
 			n, err := strconv.Atoi(raw)
 			if err != nil || n <= 0 {
-				http.Error(w, "limit inválido", http.StatusBadRequest)
+				apierr.Write(w, http.StatusBadRequest, "common.limit_invalid", "limit inválido")
 				return
 			}
 			limit = min(n, maxHistoryLimit)
@@ -114,7 +115,7 @@ func handleListThreadMessages(roles *store.RoleStore, overwrites *store.ChannelO
 		if raw := r.URL.Query().Get("before"); raw != "" {
 			t, err := time.Parse(time.RFC3339, raw)
 			if err != nil {
-				http.Error(w, "before inválido: use RFC3339", http.StatusBadRequest)
+				apierr.Write(w, http.StatusBadRequest, "common.before_invalid", "before inválido: use RFC3339")
 				return
 			}
 			before = &t
@@ -122,7 +123,7 @@ func handleListThreadMessages(roles *store.RoleStore, overwrites *store.ChannelO
 
 		rows, err := messages.ListForChannel(r.Context(), thread.ChannelID, &threadID, before, limit)
 		if err != nil {
-			http.Error(w, "erro ao buscar histórico", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "messages.history_fetch_failed", "erro ao buscar histórico")
 			return
 		}
 

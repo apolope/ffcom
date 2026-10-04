@@ -1,6 +1,10 @@
 package realtime
 
-import "testing"
+import (
+	"testing"
+
+	"a3sitsolutions.com/ffcom/server-channel/internal/apierr"
+)
 
 // newTestClient monta um Client sem conexão: Hub e a fila de saída não
 // tocam no conn.
@@ -24,7 +28,7 @@ func TestHubCloseFechaFilasEIgnoraRegistroTardio(t *testing.T) {
 
 	// SendError e Broadcast depois do Close não podem entrar em pânico
 	// (send num canal fechado).
-	a.SendError("tarde demais")
+	a.SendError(apierr.New("realtime.rate_limited", "tarde demais"))
 	hub.Broadcast("c1", []byte("x"))
 
 	late := newTestClient()

@@ -11,6 +11,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"a3sitsolutions.com/ffcom/server-channel/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
 	"a3sitsolutions.com/ffcom/server-channel/internal/permissions"
 	"a3sitsolutions.com/ffcom/server-channel/internal/realtime"
@@ -73,30 +74,30 @@ func handleChannelWS(hub *realtime.Hub, channels *store.ChannelStore, roles *sto
 
 		channel, err := channels.GetByID(r.Context(), channelID)
 		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "canal não encontrado", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "channels.not_found", "canal não encontrado")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao buscar canal", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "channels.fetch_failed", "erro ao buscar canal")
 			return
 		}
 		if channel.Type != store.ChannelText && channel.Type != store.ChannelForum {
-			http.Error(w, "canal não suporta conexão em tempo real", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "channels.realtime_unsupported", "canal não suporta conexão em tempo real")
 			return
 		}
 
 		member, ok := auth.MemberFromContext(r.Context())
 		if !ok {
-			http.Error(w, "membro não encontrado no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.member_missing", "membro não encontrado no contexto")
 			return
 		}
 		effective, err := channelPermission(r.Context(), roles, overwrites, member, channelID)
 		if err != nil {
-			http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "permissions.resolve_failed", "erro ao resolver permissões")
 			return
 		}
 		if !permissions.Has(effective, permissions.ViewChannels) {
-			http.Error(w, "sem permissão para ver este canal", http.StatusForbidden)
+			apierr.Write(w, http.StatusForbidden, "channels.view_denied", "sem permissão para ver este canal")
 			return
 		}
 		// SendMessages é checado uma vez aqui, não a cada frame: mudanças de
@@ -127,11 +128,11 @@ func handleChannelWS(hub *realtime.Hub, channels *store.ChannelStore, roles *sto
 		if channel.Type == store.ChannelForum {
 			client.ReadPump(func(raw []byte) {
 				if !wsLimiter.allow(frameKey) {
-					client.SendError("muitas mensagens, aguarde um instante")
+					client.SendError(apierr.New("realtime.rate_limited", "muitas mensagens, aguarde um instante"))
 					return
 				}
 				if !canSend {
-					client.SendError("sem permissão para postar neste canal")
+					client.SendError(apierr.New("forum.post_denied", "sem permissão para postar neste canal"))
 					return
 				}
 				handleIncomingForumFrame(r.Context(), hub, messages, channelID, member.ID, client, raw)
@@ -140,7 +141,7 @@ func handleChannelWS(hub *realtime.Hub, channels *store.ChannelStore, roles *sto
 		}
 		client.ReadPump(func(raw []byte) {
 			if !wsLimiter.allow(frameKey) {
-				client.SendError("muitas mensagens, aguarde um instante")
+				client.SendError(apierr.New("realtime.rate_limited", "muitas mensagens, aguarde um instante"))
 				return
 			}
 			handleIncomingTextFrame(r.Context(), hub, messages, attachments, files, channelID, member.ID, effective, canSend, client, raw)
@@ -155,16 +156,16 @@ func handleChannelWS(hub *realtime.Hub, channels *store.ChannelStore, roles *sto
 // ver docs/architecture.md, "Decisão: editar/apagar mensagem de texto").
 // Qualquer outro tipo é rejeitado com error.
 func handleIncomingTextFrame(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, attachments *store.AttachmentStore, files *storage.FileStore, channelID, memberID string, effective int64, canSend bool, client *realtime.Client, raw []byte) {
-	frameType, err := realtime.FrameType(raw)
-	if err != nil {
-		client.SendError(err.Error())
+	frameType, prob := realtime.FrameType(raw)
+	if prob != nil {
+		client.SendError(prob)
 		return
 	}
 
 	switch frameType {
 	case realtime.TypeMessageCreate:
 		if !canSend {
-			client.SendError("sem permissão para enviar mensagens neste canal")
+			client.SendError(apierr.New("messages.send_denied", "sem permissão para enviar mensagens neste canal"))
 			return
 		}
 		handleIncomingMessage(ctx, hub, messages, channelID, memberID, client, raw)
@@ -173,31 +174,32 @@ func handleIncomingTextFrame(ctx context.Context, hub *realtime.Hub, messages *s
 	case realtime.TypeMessageDelete:
 		handleIncomingMessageDelete(ctx, hub, messages, attachments, files, channelID, memberID, effective, client, raw)
 	default:
-		client.SendError(fmt.Sprintf("tipo de frame desconhecido: %q", frameType))
+		client.SendError(realtime.UnknownFrameType(frameType))
 	}
 }
 
 func handleIncomingMessage(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, channelID, authorMemberID string, client *realtime.Client, raw []byte) {
-	incoming, err := realtime.DecodeIncoming(raw)
-	if err != nil {
-		client.SendError(err.Error())
+	incoming, prob := realtime.DecodeIncoming(raw)
+	if prob != nil {
+		client.SendError(prob)
 		return
 	}
 
 	content := strings.TrimSpace(incoming.Content)
 	if content == "" {
-		client.SendError("conteúdo da mensagem não pode ser vazio")
+		client.SendError(apierr.New("messages.content_empty", "conteúdo da mensagem não pode ser vazio"))
 		return
 	}
 	if len(content) > maxMessageContentLength {
-		client.SendError(fmt.Sprintf("conteúdo excede o limite de %d caracteres", maxMessageContentLength))
+		client.SendError(apierr.NewParams("messages.content_too_long", fmt.Sprintf("conteúdo excede o limite de %d caracteres", maxMessageContentLength),
+			apierr.Params{"max": maxMessageContentLength}))
 		return
 	}
 
 	m, err := messages.Create(ctx, channelID, nil, authorMemberID, content)
 	if err != nil {
 		log.Printf("server-channel: erro ao criar mensagem: %v", err)
-		client.SendError("erro ao enviar mensagem")
+		client.SendError(apierr.New("messages.send_failed", "erro ao enviar mensagem"))
 		return
 	}
 
@@ -218,45 +220,46 @@ func handleIncomingMessage(ctx context.Context, hub *realtime.Hub, messages *sto
 // aplicar "message.updated" (que substitui a mensagem inteira no estado
 // local, ver hooks/useChannelChat.ts).
 func handleIncomingMessageUpdate(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, attachments *store.AttachmentStore, channelID, memberID string, client *realtime.Client, raw []byte) {
-	incoming, err := realtime.DecodeMessageUpdate(raw)
-	if err != nil {
-		client.SendError(err.Error())
+	incoming, prob := realtime.DecodeMessageUpdate(raw)
+	if prob != nil {
+		client.SendError(prob)
 		return
 	}
 
 	content := strings.TrimSpace(incoming.Content)
 	if content == "" {
-		client.SendError("conteúdo da mensagem não pode ser vazio")
+		client.SendError(apierr.New("messages.content_empty", "conteúdo da mensagem não pode ser vazio"))
 		return
 	}
 	if len(content) > maxMessageContentLength {
-		client.SendError(fmt.Sprintf("conteúdo excede o limite de %d caracteres", maxMessageContentLength))
+		client.SendError(apierr.NewParams("messages.content_too_long", fmt.Sprintf("conteúdo excede o limite de %d caracteres", maxMessageContentLength),
+			apierr.Params{"max": maxMessageContentLength}))
 		return
 	}
 
 	existing, err := messages.GetByID(ctx, incoming.ID)
 	if errors.Is(err, store.ErrNotFound) {
-		client.SendError("mensagem não encontrada")
+		client.SendError(apierr.New("messages.not_found", "mensagem não encontrada"))
 		return
 	}
 	if err != nil {
 		log.Printf("server-channel: erro ao buscar mensagem para editar: %v", err)
-		client.SendError("erro ao editar mensagem")
+		client.SendError(apierr.New("messages.edit_failed", "erro ao editar mensagem"))
 		return
 	}
 	if existing.ChannelID != channelID {
-		client.SendError("mensagem não pertence a este canal")
+		client.SendError(apierr.New("messages.wrong_channel", "mensagem não pertence a este canal"))
 		return
 	}
 	if existing.AuthorMemberID != memberID {
-		client.SendError("só o autor pode editar a mensagem")
+		client.SendError(apierr.New("messages.edit_author_only", "só o autor pode editar a mensagem"))
 		return
 	}
 
 	m, err := messages.Edit(ctx, incoming.ID, content)
 	if err != nil {
 		log.Printf("server-channel: erro ao editar mensagem: %v", err)
-		client.SendError("erro ao editar mensagem")
+		client.SendError(apierr.New("messages.edit_failed", "erro ao editar mensagem"))
 		return
 	}
 
@@ -284,28 +287,28 @@ func handleIncomingMessageUpdate(ctx context.Context, hub *realtime.Hub, message
 // os arquivos depois, best-effort (erro de limpeza de arquivo não desfaz a
 // exclusão da mensagem, só fica logado).
 func handleIncomingMessageDelete(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, attachments *store.AttachmentStore, files *storage.FileStore, channelID, memberID string, effective int64, client *realtime.Client, raw []byte) {
-	incoming, err := realtime.DecodeMessageDelete(raw)
-	if err != nil {
-		client.SendError(err.Error())
+	incoming, prob := realtime.DecodeMessageDelete(raw)
+	if prob != nil {
+		client.SendError(prob)
 		return
 	}
 
 	existing, err := messages.GetByID(ctx, incoming.ID)
 	if errors.Is(err, store.ErrNotFound) {
-		client.SendError("mensagem não encontrada")
+		client.SendError(apierr.New("messages.not_found", "mensagem não encontrada"))
 		return
 	}
 	if err != nil {
 		log.Printf("server-channel: erro ao buscar mensagem para apagar: %v", err)
-		client.SendError("erro ao apagar mensagem")
+		client.SendError(apierr.New("messages.delete_failed", "erro ao apagar mensagem"))
 		return
 	}
 	if existing.ChannelID != channelID {
-		client.SendError("mensagem não pertence a este canal")
+		client.SendError(apierr.New("messages.wrong_channel", "mensagem não pertence a este canal"))
 		return
 	}
 	if existing.AuthorMemberID != memberID && !permissions.Has(effective, permissions.Administrator) {
-		client.SendError("sem permissão para apagar esta mensagem")
+		client.SendError(apierr.New("messages.delete_denied", "sem permissão para apagar esta mensagem"))
 		return
 	}
 
@@ -316,7 +319,7 @@ func handleIncomingMessageDelete(ctx context.Context, hub *realtime.Hub, message
 
 	if err := messages.Delete(ctx, incoming.ID); err != nil {
 		log.Printf("server-channel: erro ao apagar mensagem: %v", err)
-		client.SendError("erro ao apagar mensagem")
+		client.SendError(apierr.New("messages.delete_failed", "erro ao apagar mensagem"))
 		return
 	}
 	for _, a := range atts {
@@ -337,9 +340,9 @@ func handleIncomingMessageDelete(ctx context.Context, hub *realtime.Hub, message
 // "thread.create" ou "post.create" (ver realtime.FrameType). Qualquer outro
 // tipo é rejeitado com error.
 func handleIncomingForumFrame(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, channelID, authorMemberID string, client *realtime.Client, raw []byte) {
-	frameType, err := realtime.FrameType(raw)
-	if err != nil {
-		client.SendError(err.Error())
+	frameType, prob := realtime.FrameType(raw)
+	if prob != nil {
+		client.SendError(prob)
 		return
 	}
 
@@ -349,7 +352,7 @@ func handleIncomingForumFrame(ctx context.Context, hub *realtime.Hub, messages *
 	case realtime.TypePostCreate:
 		handleIncomingPostCreate(ctx, hub, messages, channelID, authorMemberID, client, raw)
 	default:
-		client.SendError(fmt.Sprintf("tipo de frame desconhecido: %q", frameType))
+		client.SendError(realtime.UnknownFrameType(frameType))
 	}
 }
 
@@ -357,41 +360,43 @@ func handleIncomingForumFrame(ctx context.Context, hub *realtime.Hub, messages *
 // em threads e o post inicial em messages (ThreadID preenchido) numa única
 // operação lógica, depois faz broadcast de "thread.created" com os dois.
 func handleIncomingThreadCreate(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, channelID, authorMemberID string, client *realtime.Client, raw []byte) {
-	incoming, err := realtime.DecodeThreadCreate(raw)
-	if err != nil {
-		client.SendError(err.Error())
+	incoming, prob := realtime.DecodeThreadCreate(raw)
+	if prob != nil {
+		client.SendError(prob)
 		return
 	}
 
 	title := strings.TrimSpace(incoming.Title)
 	if title == "" {
-		client.SendError("título da thread não pode ser vazio")
+		client.SendError(apierr.New("forum.thread_title_empty", "título da thread não pode ser vazio"))
 		return
 	}
 	if len(title) > maxThreadTitleLength {
-		client.SendError(fmt.Sprintf("título excede o limite de %d caracteres", maxThreadTitleLength))
+		client.SendError(apierr.NewParams("forum.thread_title_too_long", fmt.Sprintf("título excede o limite de %d caracteres", maxThreadTitleLength),
+			apierr.Params{"max": maxThreadTitleLength}))
 		return
 	}
 	content := strings.TrimSpace(incoming.Content)
 	if content == "" {
-		client.SendError("conteúdo do post inicial não pode ser vazio")
+		client.SendError(apierr.New("forum.first_post_empty", "conteúdo do post inicial não pode ser vazio"))
 		return
 	}
 	if len(content) > maxMessageContentLength {
-		client.SendError(fmt.Sprintf("conteúdo excede o limite de %d caracteres", maxMessageContentLength))
+		client.SendError(apierr.NewParams("messages.content_too_long", fmt.Sprintf("conteúdo excede o limite de %d caracteres", maxMessageContentLength),
+			apierr.Params{"max": maxMessageContentLength}))
 		return
 	}
 
 	thread, err := messages.CreateThread(ctx, channelID, title, authorMemberID)
 	if err != nil {
 		log.Printf("server-channel: erro ao criar thread: %v", err)
-		client.SendError("erro ao criar thread")
+		client.SendError(apierr.New("forum.thread_create_failed", "erro ao criar thread"))
 		return
 	}
 	m, err := messages.Create(ctx, channelID, &thread.ID, authorMemberID, content)
 	if err != nil {
 		log.Printf("server-channel: erro ao criar post inicial da thread: %v", err)
-		client.SendError("erro ao criar thread")
+		client.SendError(apierr.New("forum.thread_create_failed", "erro ao criar thread"))
 		return
 	}
 
@@ -407,41 +412,42 @@ func handleIncomingThreadCreate(ctx context.Context, hub *realtime.Hub, messages
 // thread pertence ao canal desta conexão antes de gravar, para não permitir
 // postar via o id de uma thread de outro canal forum.
 func handleIncomingPostCreate(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, channelID, authorMemberID string, client *realtime.Client, raw []byte) {
-	incoming, err := realtime.DecodePostCreate(raw)
-	if err != nil {
-		client.SendError(err.Error())
+	incoming, prob := realtime.DecodePostCreate(raw)
+	if prob != nil {
+		client.SendError(prob)
 		return
 	}
 
 	content := strings.TrimSpace(incoming.Content)
 	if content == "" {
-		client.SendError("conteúdo da mensagem não pode ser vazio")
+		client.SendError(apierr.New("messages.content_empty", "conteúdo da mensagem não pode ser vazio"))
 		return
 	}
 	if len(content) > maxMessageContentLength {
-		client.SendError(fmt.Sprintf("conteúdo excede o limite de %d caracteres", maxMessageContentLength))
+		client.SendError(apierr.NewParams("messages.content_too_long", fmt.Sprintf("conteúdo excede o limite de %d caracteres", maxMessageContentLength),
+			apierr.Params{"max": maxMessageContentLength}))
 		return
 	}
 
 	thread, err := messages.GetThread(ctx, incoming.ThreadID)
 	if errors.Is(err, store.ErrNotFound) {
-		client.SendError("thread não encontrada")
+		client.SendError(apierr.New("forum.thread_not_found", "thread não encontrada"))
 		return
 	}
 	if err != nil {
 		log.Printf("server-channel: erro ao buscar thread: %v", err)
-		client.SendError("erro ao enviar post")
+		client.SendError(apierr.New("forum.post_failed", "erro ao enviar post"))
 		return
 	}
 	if thread.ChannelID != channelID {
-		client.SendError("thread não pertence a este canal")
+		client.SendError(apierr.New("forum.thread_wrong_channel", "thread não pertence a este canal"))
 		return
 	}
 
 	m, err := messages.Create(ctx, channelID, &thread.ID, authorMemberID, content)
 	if err != nil {
 		log.Printf("server-channel: erro ao criar post: %v", err)
-		client.SendError("erro ao enviar post")
+		client.SendError(apierr.New("forum.post_failed", "erro ao enviar post"))
 		return
 	}
 

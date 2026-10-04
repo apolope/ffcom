@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"a3sitsolutions.com/ffcom/server-channel/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
 	"a3sitsolutions.com/ffcom/server-channel/internal/livekit"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
@@ -79,25 +80,25 @@ func handleListVoiceParticipants(presence *voicePresence, channels *store.Channe
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		member, ok := auth.MemberFromContext(r.Context())
 		if !ok {
-			http.Error(w, "membro não encontrado no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.member_missing", "membro não encontrado no contexto")
 			return
 		}
 
 		rows, err := channels.List(r.Context())
 		if err != nil {
-			http.Error(w, "erro ao buscar canais", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "channels.list_fetch_failed", "erro ao buscar canais")
 			return
 		}
 		visible, err := visibleChannels(r.Context(), roles, overwrites, member, rows)
 		if err != nil {
-			http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "permissions.resolve_failed", "erro ao resolver permissões")
 			return
 		}
 
 		snapshot, err := presence.get(r.Context())
 		if err != nil {
 			log.Printf("server-channel: erro ao consultar salas do LiveKit: %v", err)
-			http.Error(w, "LiveKit indisponível", http.StatusBadGateway)
+			apierr.Write(w, http.StatusBadGateway, "voice.livekit_unavailable", "LiveKit indisponível")
 			return
 		}
 

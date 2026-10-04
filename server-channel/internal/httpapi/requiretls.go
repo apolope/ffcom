@@ -1,6 +1,10 @@
 package httpapi
 
-import "net/http"
+import (
+	"net/http"
+
+	"a3sitsolutions.com/ffcom/server-channel/internal/apierr"
+)
 
 // withRequireTLS recusa requisições que não chegaram via TLS, quando required
 // é true. server-channel nunca termina TLS no próprio binário (ver
@@ -30,7 +34,7 @@ func withRequireTLS(required bool, next http.Handler) http.Handler {
 			return
 		}
 		if r.Header.Get("X-Forwarded-Proto") != "https" {
-			http.Error(w, "TLS obrigatório: conecte via https", http.StatusUpgradeRequired)
+			apierr.Write(w, http.StatusUpgradeRequired, "common.tls_required", "TLS obrigatório: conecte via https")
 			return
 		}
 		next.ServeHTTP(w, r)

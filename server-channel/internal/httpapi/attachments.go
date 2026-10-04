@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"a3sitsolutions.com/ffcom/server-channel/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
 	"a3sitsolutions.com/ffcom/server-channel/internal/permissions"
 	"a3sitsolutions.com/ffcom/server-channel/internal/realtime"
@@ -44,30 +45,30 @@ func handleCreateMessageWithAttachment(hub *realtime.Hub, channels *store.Channe
 
 		channel, err := channels.GetByID(r.Context(), channelID)
 		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "canal não encontrado", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "channels.not_found", "canal não encontrado")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao buscar canal", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "channels.fetch_failed", "erro ao buscar canal")
 			return
 		}
 		if channel.Type != store.ChannelText {
-			http.Error(w, "canal não é de texto", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "channels.not_text", "canal não é de texto")
 			return
 		}
 
 		member, ok := auth.MemberFromContext(r.Context())
 		if !ok {
-			http.Error(w, "membro não encontrado no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.member_missing", "membro não encontrado no contexto")
 			return
 		}
 		effective, err := channelPermission(r.Context(), roles, overwrites, member, channelID)
 		if err != nil {
-			http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "permissions.resolve_failed", "erro ao resolver permissões")
 			return
 		}
 		if !permissions.Has(effective, permissions.SendMessages) {
-			http.Error(w, "sem permissão para enviar mensagens neste canal", http.StatusForbidden)
+			apierr.Write(w, http.StatusForbidden, "messages.send_denied", "sem permissão para enviar mensagens neste canal")
 			return
 		}
 
@@ -76,14 +77,15 @@ func handleCreateMessageWithAttachment(hub *realtime.Hub, channels *store.Channe
 		// continua limitado a attachmentMaxBytes pelo tamanho do arquivo.
 		r.Body = http.MaxBytesReader(w, r.Body, attachmentMaxBytes+1<<20)
 		if err := r.ParseMultipartForm(multipartMemoryThreshold); err != nil {
-			http.Error(w, "corpo inválido ou anexo maior que o limite permitido", http.StatusRequestEntityTooLarge)
+			apierr.Write(w, http.StatusRequestEntityTooLarge, "attachments.invalid_or_too_large", "corpo inválido ou anexo maior que o limite permitido")
 			return
 		}
 		defer r.MultipartForm.RemoveAll()
 
 		content := strings.TrimSpace(r.FormValue("content"))
 		if len(content) > maxMessageContentLength {
-			http.Error(w, fmt.Sprintf("conteúdo excede o limite de %d caracteres", maxMessageContentLength), http.StatusBadRequest)
+			apierr.WriteParams(w, http.StatusBadRequest, "messages.content_too_long", fmt.Sprintf("conteúdo excede o limite de %d caracteres", maxMessageContentLength),
+				apierr.Params{"max": maxMessageContentLength})
 			return
 		}
 
@@ -92,12 +94,12 @@ func handleCreateMessageWithAttachment(hub *realtime.Hub, channels *store.Channe
 		if hasFile {
 			defer file.Close()
 		} else if !errors.Is(ferr, http.ErrMissingFile) {
-			http.Error(w, "anexo inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "attachments.invalid", "anexo inválido")
 			return
 		}
 
 		if content == "" && !hasFile {
-			http.Error(w, "mensagem precisa de conteúdo ou anexo", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "messages.content_or_attachment_required", "mensagem precisa de conteúdo ou anexo")
 			return
 		}
 
@@ -105,7 +107,7 @@ func handleCreateMessageWithAttachment(hub *realtime.Hub, channels *store.Channe
 		var sizeBytes int64
 		if hasFile {
 			if header.Size > attachmentMaxBytes {
-				http.Error(w, "anexo maior que o limite permitido", http.StatusRequestEntityTooLarge)
+				apierr.Write(w, http.StatusRequestEntityTooLarge, "attachments.too_large", "anexo maior que o limite permitido")
 				return
 			}
 			filename = sanitizeAttachmentFilename(header.Filename)
@@ -117,7 +119,7 @@ func handleCreateMessageWithAttachment(hub *realtime.Hub, channels *store.Channe
 			key, err := files.Save(file)
 			if err != nil {
 				log.Printf("server-channel: erro ao salvar anexo: %v", err)
-				http.Error(w, "erro ao salvar anexo", http.StatusInternalServerError)
+				apierr.Write(w, http.StatusInternalServerError, "attachments.save_failed", "erro ao salvar anexo")
 				return
 			}
 			storageKey = key
@@ -130,7 +132,7 @@ func handleCreateMessageWithAttachment(hub *realtime.Hub, channels *store.Channe
 				_ = files.Delete(storageKey)
 			}
 			log.Printf("server-channel: erro ao criar mensagem: %v", err)
-			http.Error(w, "erro ao enviar mensagem", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "messages.send_failed", "erro ao enviar mensagem")
 			return
 		}
 
@@ -143,7 +145,7 @@ func handleCreateMessageWithAttachment(hub *realtime.Hub, channels *store.Channe
 					log.Printf("server-channel: erro ao limpar mensagem órfã %s: %v", m.ID, delErr)
 				}
 				log.Printf("server-channel: erro ao gravar anexo: %v", err)
-				http.Error(w, "erro ao enviar mensagem", http.StatusInternalServerError)
+				apierr.Write(w, http.StatusInternalServerError, "messages.send_failed", "erro ao enviar mensagem")
 				return
 			}
 			view.Attachments = toAttachmentViews([]store.Attachment{a})
@@ -172,43 +174,43 @@ func handleGetAttachment(attachments *store.AttachmentStore, messages *store.Mes
 
 		attachment, err := attachments.GetByID(r.Context(), id)
 		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "anexo não encontrado", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "attachments.not_found", "anexo não encontrado")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao buscar anexo", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "attachments.fetch_failed", "erro ao buscar anexo")
 			return
 		}
 
 		msg, err := messages.GetByID(r.Context(), attachment.MessageID)
 		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "anexo não encontrado", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "attachments.not_found", "anexo não encontrado")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao buscar mensagem do anexo", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "attachments.message_fetch_failed", "erro ao buscar mensagem do anexo")
 			return
 		}
 
 		member, ok := auth.MemberFromContext(r.Context())
 		if !ok {
-			http.Error(w, "membro não encontrado no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.member_missing", "membro não encontrado no contexto")
 			return
 		}
 		effective, err := channelPermission(r.Context(), roles, overwrites, member, msg.ChannelID)
 		if err != nil {
-			http.Error(w, "erro ao resolver permissões", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "permissions.resolve_failed", "erro ao resolver permissões")
 			return
 		}
 		if !permissions.Has(effective, permissions.ViewChannels) {
-			http.Error(w, "sem permissão para ver este canal", http.StatusForbidden)
+			apierr.Write(w, http.StatusForbidden, "channels.view_denied", "sem permissão para ver este canal")
 			return
 		}
 
 		f, err := files.Open(attachment.StorageKey)
 		if err != nil {
 			log.Printf("server-channel: erro ao abrir anexo %s: %v", attachment.ID, err)
-			http.Error(w, "erro ao ler anexo", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "attachments.read_failed", "erro ao ler anexo")
 			return
 		}
 		defer f.Close()
