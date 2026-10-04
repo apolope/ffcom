@@ -96,6 +96,14 @@ Não repetidas aqui porque já estão registradas, decisão a decisão, em
   valor escrito no CSS do componente; token novo entra também em
   `docs/design-system.md`, que lista a paleta, o scrollbar e os pares de
   contraste ainda pendentes.
+- **Textos (i18n):** texto novo para o usuário entra só em `locales/`, em
+  `pt-BR.json` e `en.json` ao mesmo tempo, e o código lê pela chave (`t()`
+  no client e no Electron, `data-i18n`/`t()` no site); nunca texto direto no
+  código. Erro novo no servidor sai por `apierr` com um código
+  (`area.motivo`), que ganha a tradução em `errors.*` nos dois arquivos.
+  O guardião é `node scripts/check-locales.mjs` (também no CI): chave usada
+  e ausente, idioma faltando ou código de erro sem tradução falham. Ver
+  "Decisão: internacionalização".
 - **Config:** tudo via variável de ambiente (`.env`), nunca arquivo montado
   nem valor hardcoded — ver "Decisão: injeção de config no Docker Compose de
   server-channel". `.env` nunca é commitado; só o `.env.example`.
@@ -145,14 +153,14 @@ docker stop ffcom-test-pg
 
 ## Publicando uma versão
 
-Cada componente sai por uma tag própria (`client-vX.Y.Z`, `central-vX.Y.Z`, `channel-vX.Y.Z`, `channel-image-vX.Y.Z`, `site-vX.Y.Z`), que dispara o workflow de deploy dele. Antes de criar a tag, adicione a entrada da versão no topo do [`CHANGELOG.md`](CHANGELOG.md), no formato descrito no próprio arquivo, e faça o commit no `main`:
+Cada componente sai por uma tag própria (`client-vX.Y.Z`, `central-vX.Y.Z`, `channel-vX.Y.Z`, `channel-image-vX.Y.Z`, `site-vX.Y.Z`), que dispara o workflow de deploy dele. Antes de criar a tag, adicione a entrada da versão no topo do [`CHANGELOG.md`](CHANGELOG.md), no formato descrito no próprio arquivo, a mesma entrada traduzida para o inglês no topo do [`CHANGELOG.en.md`](CHANGELOG.en.md) (título idêntico, um item traduzido para cada item em português), e faça o commit dos dois no `main`:
 
 ```
 ## client v0.15.0 · 2026-10-01
 - O que mudou, em linguagem de quem usa.
 ```
 
-O `CHANGELOG.md` é a fonte única do histórico de versões mostrado na home page, que o lê direto do `main` (com cache de 5 minutos no nginx do site). Todo workflow de deploy roda `scripts/check-changelog.sh <tag>` e falha se a entrada não existir ou estiver vazia; para conferir antes de empurrar a tag, rode o mesmo script localmente.
+O `CHANGELOG.md` é a fonte do histórico de versões, e o `CHANGELOG.en.md` é a sua tradução: a home page lê o do idioma de quem visita direto do `main` (com cache de 5 minutos no nginx do site), e as releases do GitHub levam as duas versões (`scripts/changelog-notes.sh`). Todo workflow de deploy roda `scripts/check-changelog.sh <tag>` e falha se a entrada não existir ou estiver vazia em algum dos dois arquivos, ou se os dois não tiverem as mesmas seções na mesma ordem e com as mesmas datas (número de itens diferente só gera aviso). Para conferir antes de empurrar a tag, rode o mesmo script localmente; sem tag, ele só confere que os dois arquivos batem.
 
 ## Commits
 

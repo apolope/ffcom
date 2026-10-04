@@ -1,12 +1,12 @@
 # Histórico de versões
 
-O que cada versão publicada implementou, da mais nova para a mais antiga. Este arquivo é a fonte única do histórico: a home page (`https://ffcom.a3sitsolutions.com.br/#versoes`) lê este arquivo direto do `main`, cada workflow de deploy recusa uma tag que não tenha a sua entrada aqui, e as releases do GitHub (`client` e `channel`) usam a entrada como descrição (`scripts/changelog-notes.sh`).
+O que cada versão publicada implementou, da mais nova para a mais antiga. Este arquivo é a fonte do histórico, e o [`CHANGELOG.en.md`](CHANGELOG.en.md) é a tradução em inglês: toda entrada nasce aqui e é traduzida lá no mesmo commit, com as mesmas seções na mesma ordem (mesmo componente, versão e data). A home page (`https://ffcom.a3sitsolutions.com.br/#versoes`) lê o arquivo do idioma de quem visita direto do `main`, cada workflow de deploy recusa uma tag que não tenha a sua entrada nos dois arquivos (`scripts/check-changelog.sh`), e as releases do GitHub (`client` e `channel`) levam as duas versões, português primeiro e inglês embaixo (`scripts/changelog-notes.sh`).
 
 Cada componente tem versão própria (semver independente, ver `docs/architecture.md`), então as seções abaixo são por tag, não por data.
 
 ## Formato
 
-Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do CI dependem dele):
+Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do CI dependem dele; a linha do título é idêntica nos dois arquivos, só os itens são traduzidos):
 
 ```
 ## <componente> v<X.Y.Z> · <AAAA-MM-DD>

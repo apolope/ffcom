@@ -64,7 +64,7 @@ jobs:
     runs-on: [self-hosted, a3s-network]
     steps:
       - uses: actions/checkout@v7
-      - name: Conferir CHANGELOG.md
+      - name: Conferir CHANGELOG.md e CHANGELOG.en.md
         env:
           TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
         run: bash scripts/check-changelog.sh "$TAG"

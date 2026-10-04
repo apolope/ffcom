@@ -62,7 +62,7 @@ O `server-channel` sobe com Docker Compose (Postgres, LiveKit e o serviço) usan
 - [`docs/architecture.md`](docs/architecture.md) — decisões técnicas, alternativas consideradas e por quê (formato ADR).
 - [`docs/protocol.md`](docs/protocol.md) — protocolo/API entre `client`, `server-central` e `server-channel`.
 - [`docs/backup-restore.md`](docs/backup-restore.md) — backup e restore do Postgres e dos volumes de arquivo de `server-central`/`server-channel`.
-- [`CHANGELOG.md`](CHANGELOG.md) — o que cada versão publicada trouxe, por componente.
+- [`CHANGELOG.md`](CHANGELOG.md) — o que cada versão publicada trouxe, por componente (em inglês: [`CHANGELOG.en.md`](CHANGELOG.en.md)).
 - [`TODO.md`](TODO.md) — backlog unificado por tema.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — ambiente de desenvolvimento, convenções de código, testes/lint e processo de contribuição.
 
