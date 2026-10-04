@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode"
 
+	"a3sitsolutions.com/ffcom/server-central/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-central/internal/auth"
 	"a3sitsolutions.com/ffcom/server-central/internal/store"
 )
@@ -25,7 +26,7 @@ func handleSetDisplayName(profiles *store.ProfileStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
-			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.account_missing", "conta não encontrada no contexto")
 			return
 		}
 
@@ -33,7 +34,7 @@ func handleSetDisplayName(profiles *store.ProfileStore) http.Handler {
 			DisplayName *string `json:"displayName"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "corpo da requisição inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo da requisição inválido")
 			return
 		}
 
@@ -43,11 +44,11 @@ func handleSetDisplayName(profiles *store.ProfileStore) http.Handler {
 		if body.DisplayName != nil {
 			trimmed := strings.TrimSpace(*body.DisplayName)
 			if len(trimmed) > maxDisplayNameBytes {
-				http.Error(w, "nome deve ter no máximo 64 caracteres", http.StatusBadRequest)
+				apierr.WriteParams(w, http.StatusBadRequest, "profile.display_name_too_long", "nome deve ter no máximo 64 caracteres", apierr.Params{"max": maxDisplayNameBytes})
 				return
 			}
 			if strings.ContainsFunc(trimmed, unicode.IsControl) {
-				http.Error(w, "nome não pode ter quebra de linha nem caractere de controle", http.StatusBadRequest)
+				apierr.Write(w, http.StatusBadRequest, "profile.display_name_invalid_chars", "nome não pode ter quebra de linha nem caractere de controle")
 				return
 			}
 			if trimmed != "" {
@@ -57,7 +58,7 @@ func handleSetDisplayName(profiles *store.ProfileStore) http.Handler {
 
 		if err := profiles.SetDisplayName(r.Context(), account.ID, name); err != nil {
 			log.Printf("server-central: erro ao salvar nome de exibição: %v", err)
-			http.Error(w, "erro ao salvar nome", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "profile.display_name_save_failed", "erro ao salvar nome")
 			return
 		}
 

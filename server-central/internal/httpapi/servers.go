@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"a3sitsolutions.com/ffcom/server-central/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-central/internal/auth"
 	"a3sitsolutions.com/ffcom/server-central/internal/store"
 )
@@ -18,13 +19,13 @@ func handleListServers(servers *store.KnownServerStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
-			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.account_missing", "conta não encontrada no contexto")
 			return
 		}
 
 		rows, err := servers.ListForAccount(r.Context(), account.ID)
 		if err != nil {
-			http.Error(w, "erro ao buscar servidores", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "servers.fetch_failed", "erro ao buscar servidores")
 			return
 		}
 
@@ -45,25 +46,25 @@ func handleAddServer(servers *store.KnownServerStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
-			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.account_missing", "conta não encontrada no contexto")
 			return
 		}
 
 		var body addServerRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo da requisição inválido")
 			return
 		}
 		body.Address = strings.TrimSpace(body.Address)
 		body.Name = strings.TrimSpace(body.Name)
 		if body.Address == "" || body.Name == "" {
-			http.Error(w, "address e name são obrigatórios", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "servers.address_name_required", "address e name são obrigatórios")
 			return
 		}
 
 		k, err := servers.Add(r.Context(), account.ID, body.Address, body.Name, body.IconURL)
 		if err != nil {
-			http.Error(w, "erro ao adicionar servidor", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "servers.add_failed", "erro ao adicionar servidor")
 			return
 		}
 
@@ -79,18 +80,18 @@ func handleRemoveServer(servers *store.KnownServerStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
-			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.account_missing", "conta não encontrada no contexto")
 			return
 		}
 
 		id := r.PathValue("id")
 		err := servers.Remove(r.Context(), account.ID, id)
 		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "servidor não encontrado", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "servers.not_found", "servidor não encontrado")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao remover servidor", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "servers.remove_failed", "erro ao remover servidor")
 			return
 		}
 
@@ -109,21 +110,21 @@ func handleReorderServers(servers *store.KnownServerStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
-			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.account_missing", "conta não encontrada no contexto")
 			return
 		}
 		var body reorderServersRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo da requisição inválido")
 			return
 		}
 		err := servers.Reorder(r.Context(), account.ID, body.IDs)
 		if errors.Is(err, store.ErrOrderMismatch) {
-			http.Error(w, "a lista de servidores mudou; recarregue e tente de novo", http.StatusConflict)
+			apierr.Write(w, http.StatusConflict, "servers.list_changed", "a lista de servidores mudou; recarregue e tente de novo")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao reordenar servidores", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "servers.reorder_failed", "erro ao reordenar servidores")
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)

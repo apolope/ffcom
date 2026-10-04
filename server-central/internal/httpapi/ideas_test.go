@@ -231,7 +231,7 @@ func TestIdeasEndToEnd(t *testing.T) {
 		t.Fatal("prompt não levou o texto")
 	}
 	// Um pedido por vez.
-	if r := call(&alice, "POST", "/api/ideas/assist", map[string]string{"text": "outro texto qualquer aqui"}); r.Code != http.StatusConflict {
+	if r := call(&alice, "POST", "/api/ideas/assist", map[string]string{"text": "outro texto qualquer aqui"}); r.Code != http.StatusConflict || errorCode(t, r) != "ideas.wand_busy" {
 		t.Fatalf("segundo pedido simultâneo: %d", r.Code)
 	}
 	relayResponde("success", `{"ofensiva": false, "sugestao": true, "titulo": "Tema escuro", "texto": "Adicionar um tema escuro ao app.", "parecidas": []}`)

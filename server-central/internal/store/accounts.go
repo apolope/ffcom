@@ -31,10 +31,10 @@ func (s *AccountStore) GetOrCreateBySubject(ctx context.Context, oidcSubject str
 		VALUES ($1, $2)
 		ON CONFLICT (oidc_subject) DO UPDATE
 		SET profile_name = COALESCE(EXCLUDED.profile_name, accounts.profile_name)
-		RETURNING id, oidc_subject, created_at, e2e_public_key, e2e_key_backup IS NOT NULL, presence_status
+		RETURNING id, oidc_subject, created_at, e2e_public_key, e2e_key_backup IS NOT NULL, presence_status, language
 	`
 	var a Account
-	err := s.pool.QueryRow(ctx, query, oidcSubject, profileName).Scan(&a.ID, &a.OIDCSubject, &a.CreatedAt, &a.E2EPublicKey, &a.HasE2EKeyBackup, &a.PresenceStatus)
+	err := s.pool.QueryRow(ctx, query, oidcSubject, profileName).Scan(&a.ID, &a.OIDCSubject, &a.CreatedAt, &a.E2EPublicKey, &a.HasE2EKeyBackup, &a.PresenceStatus, &a.Language)
 	if err != nil {
 		return Account{}, fmt.Errorf("accounts: get or create por subject: %w", err)
 	}
@@ -42,9 +42,9 @@ func (s *AccountStore) GetOrCreateBySubject(ctx context.Context, oidcSubject str
 }
 
 func (s *AccountStore) GetByID(ctx context.Context, id string) (Account, error) {
-	const query = `SELECT id, oidc_subject, created_at, e2e_public_key, e2e_key_backup IS NOT NULL, presence_status FROM accounts WHERE id = $1`
+	const query = `SELECT id, oidc_subject, created_at, e2e_public_key, e2e_key_backup IS NOT NULL, presence_status, language FROM accounts WHERE id = $1`
 	var a Account
-	err := s.pool.QueryRow(ctx, query, id).Scan(&a.ID, &a.OIDCSubject, &a.CreatedAt, &a.E2EPublicKey, &a.HasE2EKeyBackup, &a.PresenceStatus)
+	err := s.pool.QueryRow(ctx, query, id).Scan(&a.ID, &a.OIDCSubject, &a.CreatedAt, &a.E2EPublicKey, &a.HasE2EKeyBackup, &a.PresenceStatus, &a.Language)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Account{}, ErrNotFound
 	}
@@ -64,7 +64,7 @@ func (s *AccountStore) GetManyByIDs(ctx context.Context, ids []string) (map[stri
 		return out, nil
 	}
 
-	const query = `SELECT id, oidc_subject, created_at, e2e_public_key, e2e_key_backup IS NOT NULL, presence_status FROM accounts WHERE id = ANY($1)`
+	const query = `SELECT id, oidc_subject, created_at, e2e_public_key, e2e_key_backup IS NOT NULL, presence_status, language FROM accounts WHERE id = ANY($1)`
 	rows, err := s.pool.Query(ctx, query, ids)
 	if err != nil {
 		return nil, fmt.Errorf("accounts: get many por id: %w", err)
@@ -73,7 +73,7 @@ func (s *AccountStore) GetManyByIDs(ctx context.Context, ids []string) (map[stri
 
 	for rows.Next() {
 		var a Account
-		if err := rows.Scan(&a.ID, &a.OIDCSubject, &a.CreatedAt, &a.E2EPublicKey, &a.HasE2EKeyBackup, &a.PresenceStatus); err != nil {
+		if err := rows.Scan(&a.ID, &a.OIDCSubject, &a.CreatedAt, &a.E2EPublicKey, &a.HasE2EKeyBackup, &a.PresenceStatus, &a.Language); err != nil {
 			return nil, fmt.Errorf("accounts: scan: %w", err)
 		}
 		out[a.ID] = a
@@ -135,6 +135,21 @@ func (s *AccountStore) GetE2EKeyBackup(ctx context.Context, accountID string) (p
 		return nil, nil, fmt.Errorf("accounts: get e2e key backup: %w", err)
 	}
 	return publicKey, backup, nil
+}
+
+// SetLanguage grava o idioma da interface escolhido pela pessoa (um de
+// SupportedLanguages, validado pelo chamador e pelo CHECK da coluna); nil
+// apaga a escolha.
+func (s *AccountStore) SetLanguage(ctx context.Context, accountID string, language *string) error {
+	const query = `UPDATE accounts SET language = $2 WHERE id = $1`
+	tag, err := s.pool.Exec(ctx, query, accountID, language)
+	if err != nil {
+		return fmt.Errorf("accounts: set language: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // SetPresenceStatus grava o status escolhido pela pessoa (um dos

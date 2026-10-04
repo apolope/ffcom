@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"a3sitsolutions.com/ffcom/server-central/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-central/internal/store"
 )
 
@@ -35,13 +36,13 @@ func Middleware(verifier *Verifier, accounts *store.AccountStore) func(http.Hand
 			if !ok {
 				rawToken, hasToken := bearerToken(r)
 				if !hasToken {
-					http.Error(w, "token ausente ou mal formatado", http.StatusUnauthorized)
+					apierr.Write(w, http.StatusUnauthorized, "auth.token_missing", "token ausente ou mal formatado")
 					return
 				}
 
 				claims, err := verifier.Verify(r.Context(), rawToken)
 				if err != nil {
-					http.Error(w, "token inválido", http.StatusUnauthorized)
+					apierr.Write(w, http.StatusUnauthorized, "auth.token_invalid", "token inválido")
 					return
 				}
 				subject = claims.Subject
@@ -51,7 +52,7 @@ func Middleware(verifier *Verifier, accounts *store.AccountStore) func(http.Hand
 
 			account, err := accounts.GetOrCreateBySubject(r.Context(), subject, profileName)
 			if err != nil {
-				http.Error(w, "erro ao resolver conta", http.StatusInternalServerError)
+				apierr.Write(w, http.StatusInternalServerError, "auth.account_resolve_failed", "erro ao resolver conta")
 				return
 			}
 

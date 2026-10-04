@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"a3sitsolutions.com/ffcom/server-central/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-central/internal/auth"
 	"a3sitsolutions.com/ffcom/server-central/internal/store"
 )
@@ -27,27 +28,27 @@ func handleSetE2EPublicKey(accounts *store.AccountStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
-			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.account_missing", "conta não encontrada no contexto")
 			return
 		}
 
 		var body setE2EPublicKeyRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "corpo da requisição inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo da requisição inválido")
 			return
 		}
 		if len(body.PublicKey) != e2ePublicKeyLength {
-			http.Error(w, "publicKey precisa ter 32 bytes", http.StatusBadRequest)
+			apierr.WriteParams(w, http.StatusBadRequest, "e2e.public_key_invalid", "publicKey precisa ter 32 bytes", apierr.Params{"bytes": e2ePublicKeyLength})
 			return
 		}
 
 		err := accounts.SetE2EPublicKey(r.Context(), account.ID, body.PublicKey)
 		if errors.Is(err, store.ErrConflict) {
-			http.Error(w, "a conta já tem chave com frase de recuperação; atualize o FFCom", http.StatusConflict)
+			apierr.Write(w, http.StatusConflict, "e2e.recovery_key_exists", "a conta já tem chave com frase de recuperação; atualize o FFCom")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao salvar chave pública", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "e2e.public_key_save_failed", "erro ao salvar chave pública")
 			return
 		}
 
@@ -68,17 +69,17 @@ func handleGetE2EKeyBackup(accounts *store.AccountStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
-			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.account_missing", "conta não encontrada no contexto")
 			return
 		}
 
 		publicKey, backup, err := accounts.GetE2EKeyBackup(r.Context(), account.ID)
 		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "conta sem backup de chave", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "e2e.backup_not_found", "conta sem backup de chave")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao buscar backup de chave", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "e2e.backup_fetch_failed", "erro ao buscar backup de chave")
 			return
 		}
 
@@ -100,31 +101,31 @@ func handleSetE2EKeyBackup(accounts *store.AccountStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
-			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.account_missing", "conta não encontrada no contexto")
 			return
 		}
 
 		var body setE2EKeyBackupRequest
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&body); err != nil {
-			http.Error(w, "corpo da requisição inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo da requisição inválido")
 			return
 		}
 		if len(body.PublicKey) != e2ePublicKeyLength {
-			http.Error(w, "publicKey precisa ter 32 bytes", http.StatusBadRequest)
+			apierr.WriteParams(w, http.StatusBadRequest, "e2e.public_key_invalid", "publicKey precisa ter 32 bytes", apierr.Params{"bytes": e2ePublicKeyLength})
 			return
 		}
 		if len(body.Backup) == 0 || len(body.Backup) > maxE2EKeyBackupLength {
-			http.Error(w, "backup vazio ou grande demais", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "e2e.backup_size_invalid", "backup vazio ou grande demais")
 			return
 		}
 
 		err := accounts.SetE2EKeyWithBackup(r.Context(), account.ID, body.PublicKey, body.Backup, body.Replace)
 		if errors.Is(err, store.ErrConflict) {
-			http.Error(w, "a conta já tem backup de chave", http.StatusConflict)
+			apierr.Write(w, http.StatusConflict, "e2e.backup_exists", "a conta já tem backup de chave")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao salvar backup de chave", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "e2e.backup_save_failed", "erro ao salvar backup de chave")
 			return
 		}
 

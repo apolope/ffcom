@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 
+	"a3sitsolutions.com/ffcom/server-central/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-central/internal/auth"
 	"a3sitsolutions.com/ffcom/server-central/internal/storage"
 	"a3sitsolutions.com/ffcom/server-central/internal/store"
@@ -40,7 +41,7 @@ func handleUploadAvatar(profiles *store.ProfileStore, files *storage.AvatarStore
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
-			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.account_missing", "conta não encontrada no contexto")
 			return
 		}
 
@@ -49,44 +50,44 @@ func handleUploadAvatar(profiles *store.ProfileStore, files *storage.AvatarStore
 		// avatarMaxBytes pelo tamanho declarado no header da parte.
 		r.Body = http.MaxBytesReader(w, r.Body, avatarMaxBytes+256<<10)
 		if err := r.ParseMultipartForm(multipartMemoryThreshold); err != nil {
-			http.Error(w, "corpo inválido ou avatar maior que o limite permitido", http.StatusRequestEntityTooLarge)
+			apierr.Write(w, http.StatusRequestEntityTooLarge, "avatar.invalid_or_too_large", "corpo inválido ou avatar maior que o limite permitido")
 			return
 		}
 		defer r.MultipartForm.RemoveAll()
 
 		file, header, err := r.FormFile("file")
 		if err != nil {
-			http.Error(w, "campo \"file\" obrigatório", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "avatar.file_required", "campo \"file\" obrigatório")
 			return
 		}
 		defer file.Close()
 
 		if header.Size > avatarMaxBytes {
-			http.Error(w, "avatar maior que o limite permitido", http.StatusRequestEntityTooLarge)
+			apierr.Write(w, http.StatusRequestEntityTooLarge, "avatar.too_large", "avatar maior que o limite permitido")
 			return
 		}
 		contentType := header.Header.Get("Content-Type")
 		if !allowedAvatarContentTypes[contentType] {
-			http.Error(w, "tipo de arquivo não suportado (use PNG, JPEG, WebP ou GIF)", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "avatar.unsupported_type", "tipo de arquivo não suportado (use PNG, JPEG, WebP ou GIF)")
 			return
 		}
 
 		if err := files.Save(account.ID, file); err != nil {
 			log.Printf("server-central: erro ao salvar avatar: %v", err)
-			http.Error(w, "erro ao salvar avatar", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "avatar.save_failed", "erro ao salvar avatar")
 			return
 		}
 
 		displayName, err := currentOrFallbackDisplayName(r, profiles, account)
 		if err != nil {
-			http.Error(w, "erro ao buscar perfil", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "profile.fetch_failed", "erro ao buscar perfil")
 			return
 		}
 
 		avatarURL := "/api/avatars/" + account.ID
 		if _, err := profiles.Upsert(r.Context(), account.ID, displayName, &avatarURL); err != nil {
 			log.Printf("server-central: erro ao gravar avatar_url: %v", err)
-			http.Error(w, "erro ao salvar avatar", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "avatar.save_failed", "erro ao salvar avatar")
 			return
 		}
 
@@ -101,25 +102,25 @@ func handleDeleteAvatar(profiles *store.ProfileStore, files *storage.AvatarStore
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
-			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.account_missing", "conta não encontrada no contexto")
 			return
 		}
 
 		if err := files.Delete(account.ID); err != nil {
 			log.Printf("server-central: erro ao apagar avatar: %v", err)
-			http.Error(w, "erro ao remover avatar", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "avatar.delete_failed", "erro ao remover avatar")
 			return
 		}
 
 		storedName, err := profiles.StoredDisplayName(r.Context(), account.ID)
 		if err != nil && !errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "erro ao buscar perfil", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "profile.fetch_failed", "erro ao buscar perfil")
 			return
 		}
 		if err == nil {
 			if _, err := profiles.Upsert(r.Context(), account.ID, storedName, nil); err != nil {
 				log.Printf("server-central: erro ao limpar avatar_url: %v", err)
-				http.Error(w, "erro ao remover avatar", http.StatusInternalServerError)
+				apierr.Write(w, http.StatusInternalServerError, "avatar.delete_failed", "erro ao remover avatar")
 				return
 			}
 		}
@@ -142,12 +143,12 @@ func handleGetAvatar(files *storage.AvatarStore) http.Handler {
 
 		file, err := files.Open(accountID)
 		if errors.Is(err, fs.ErrNotExist) {
-			http.Error(w, "conta sem avatar", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "avatar.not_found", "conta sem avatar")
 			return
 		}
 		if err != nil {
 			log.Printf("server-central: erro ao abrir avatar %s: %v", accountID, err)
-			http.Error(w, "erro ao ler avatar", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "avatar.read_failed", "erro ao ler avatar")
 			return
 		}
 		defer file.Close()
@@ -155,7 +156,7 @@ func handleGetAvatar(files *storage.AvatarStore) http.Handler {
 		info, err := file.Stat()
 		if err != nil {
 			log.Printf("server-central: erro ao ler metadados do avatar %s: %v", accountID, err)
-			http.Error(w, "erro ao ler avatar", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "avatar.read_failed", "erro ao ler avatar")
 			return
 		}
 
@@ -185,7 +186,7 @@ func currentOrFallbackDisplayName(r *http.Request, profiles *store.ProfileStore,
 func respondMe(w http.ResponseWriter, r *http.Request, profiles *store.ProfileStore, account store.Account) {
 	resp, err := buildMeResponse(r.Context(), profiles, account)
 	if err != nil {
-		http.Error(w, "erro ao buscar perfil", http.StatusInternalServerError)
+		apierr.Write(w, http.StatusInternalServerError, "profile.fetch_failed", "erro ao buscar perfil")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

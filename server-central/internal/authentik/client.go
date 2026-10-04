@@ -4,6 +4,8 @@
 // e-mail de recuperação, que é por onde a pessoa escolhe a senha. O token é
 // de uma conta de serviço com permissão só para isso. Ver
 // docs/architecture.md, "Decisão: cadastro com aprovação pelo Telegram".
+// O idioma do e-mail sai do Accept-Language da chamada (ver
+// SendRecoveryEmail).
 package authentik
 
 import (
@@ -169,16 +171,34 @@ func (c *Client) AddToGroup(ctx context.Context, groupUUID string, userPK int64)
 
 // SendRecoveryEmail pede ao Authentik o e-mail com o link de definir senha,
 // pelo stage de e-mail emailStage, com o link valendo tokenDuration
-// (formato do Authentik, ex. "days=3"; vazio usa o padrão do stage).
-func (c *Client) SendRecoveryEmail(ctx context.Context, userPK int64, emailStage, tokenDuration string) error {
+// (formato do Authentik, ex. "days=3"; vazio usa o padrão do stage), no
+// idioma language (pt-BR ou en; vazio usa pt-BR).
+//
+// O idioma vai no Accept-Language desta chamada, não no settings.locale do
+// usuário: o Authentik traduz o e-mail com o idioma ativo na requisição, e o
+// LocaleMiddleware dele sempre fixa um (cookie, Accept-Language ou en-us),
+// então User.locale() nunca chega a ler settings.locale numa chamada HTTP.
+// Ver docs/architecture.md, "Decisão: internacionalização".
+func (c *Client) SendRecoveryEmail(ctx context.Context, userPK int64, emailStage, tokenDuration, language string) error {
 	body := map[string]any{"email_stage": emailStage}
 	if tokenDuration != "" {
 		body["token_duration"] = tokenDuration
 	}
-	return c.do(ctx, http.MethodPost, fmt.Sprintf("/core/users/%d/recovery_email/", userPK), body, nil)
+	if language == "" {
+		language = DefaultLanguage
+	}
+	return c.doLang(ctx, http.MethodPost, fmt.Sprintf("/core/users/%d/recovery_email/", userPK), body, nil, language)
 }
 
+// DefaultLanguage é o idioma dos e-mails quando não há um escolhido.
+const DefaultLanguage = "pt-BR"
+
 func (c *Client) do(ctx context.Context, method, path string, body, out any) error {
+	return c.doLang(ctx, method, path, body, out, "")
+}
+
+// doLang é do com Accept-Language: language (vazio não manda o header).
+func (c *Client) doLang(ctx context.Context, method, path string, body, out any, language string) error {
 	var reader io.Reader
 	if body != nil {
 		payload, err := json.Marshal(body)
@@ -193,6 +213,9 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Accept", "application/json")
+	if language != "" {
+		req.Header.Set("Accept-Language", language)
+	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

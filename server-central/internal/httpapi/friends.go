@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"a3sitsolutions.com/ffcom/server-central/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-central/internal/auth"
 	"a3sitsolutions.com/ffcom/server-central/internal/realtime"
 	"a3sitsolutions.com/ffcom/server-central/internal/store"
@@ -38,7 +39,7 @@ func handleCreateFriendInvite(invites *store.FriendInviteStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
-			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.account_missing", "conta não encontrada no contexto")
 			return
 		}
 
@@ -49,7 +50,7 @@ func handleCreateFriendInvite(invites *store.FriendInviteStore) http.Handler {
 		for attempt := 0; attempt < 5; attempt++ {
 			code, err := generateInviteCode()
 			if err != nil {
-				http.Error(w, "erro ao gerar código de convite", http.StatusInternalServerError)
+				apierr.Write(w, http.StatusInternalServerError, "friends.invite_code_failed", "erro ao gerar código de convite")
 				return
 			}
 			invite, err = invites.Create(r.Context(), code, account.ID)
@@ -57,7 +58,7 @@ func handleCreateFriendInvite(invites *store.FriendInviteStore) http.Handler {
 				break
 			}
 			if attempt == 4 {
-				http.Error(w, "erro ao criar convite", http.StatusInternalServerError)
+				apierr.Write(w, http.StatusInternalServerError, "friends.invite_create_failed", "erro ao criar convite")
 				return
 			}
 		}
@@ -75,39 +76,39 @@ func handleRedeemFriendInvite(hub *realtime.Hub, invites *store.FriendInviteStor
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
-			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.account_missing", "conta não encontrada no contexto")
 			return
 		}
 
 		code := r.PathValue("code")
 		invite, err := invites.GetByCode(r.Context(), code)
 		if errors.Is(err, store.ErrNotFound) {
-			http.Error(w, "convite não encontrado", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "friends.invite_not_found", "convite não encontrado")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao buscar convite", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "friends.invite_fetch_failed", "erro ao buscar convite")
 			return
 		}
 		if invite.CreatedByAccountID == account.ID {
-			http.Error(w, "não é possível resgatar seu próprio convite", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "friends.invite_own", "não é possível resgatar seu próprio convite")
 			return
 		}
 		if invite.RedeemedAt != nil {
-			http.Error(w, "convite já foi usado", http.StatusConflict)
+			apierr.Write(w, http.StatusConflict, "friends.invite_used", "convite já foi usado")
 			return
 		}
 		if invite.ExpiresAt != nil && invite.ExpiresAt.Before(time.Now()) {
-			http.Error(w, "convite expirado", http.StatusGone)
+			apierr.Write(w, http.StatusGone, "friends.invite_expired", "convite expirado")
 			return
 		}
 
 		if _, err := invites.Redeem(r.Context(), invite.ID, account.ID); err != nil {
 			if errors.Is(err, store.ErrConflict) {
-				http.Error(w, "convite já foi usado", http.StatusConflict)
+				apierr.Write(w, http.StatusConflict, "friends.invite_used", "convite já foi usado")
 				return
 			}
-			http.Error(w, "erro ao resgatar convite", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "friends.invite_redeem_failed", "erro ao resgatar convite")
 			return
 		}
 
@@ -117,13 +118,13 @@ func handleRedeemFriendInvite(hub *realtime.Hub, invites *store.FriendInviteStor
 			// impede o convite: resgatar já é o consentimento dos dois lados.
 			existing, betweenErr := friendships.Between(r.Context(), invite.CreatedByAccountID, account.ID)
 			if betweenErr != nil || existing.Status != store.FriendshipPending {
-				http.Error(w, "vocês já são amigos", http.StatusConflict)
+				apierr.Write(w, http.StatusConflict, "friends.already_friends", "vocês já são amigos")
 				return
 			}
 			friendship, err = friendships.SetStatus(r.Context(), existing.ID, store.FriendshipAccepted)
 		}
 		if err != nil {
-			http.Error(w, "erro ao criar amizade", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "friends.create_failed", "erro ao criar amizade")
 			return
 		}
 		notifyFriendAccepted(r.Context(), hub, profiles, friendship)
@@ -147,31 +148,31 @@ func handleListFriends(friendships *store.FriendshipStore, profiles *store.Profi
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
-			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.account_missing", "conta não encontrada no contexto")
 			return
 		}
 
 		friendIDs, err := friendships.AcceptedFriendIDs(r.Context(), account.ID)
 		if err != nil {
-			http.Error(w, "erro ao buscar amigos", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "friends.fetch_failed", "erro ao buscar amigos")
 			return
 		}
 
 		profileByAccount, err := profiles.GetManyByAccountIDs(r.Context(), friendIDs)
 		if err != nil {
-			http.Error(w, "erro ao buscar perfis", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "profile.fetch_many_failed", "erro ao buscar perfis")
 			return
 		}
 
 		accountByID, err := accounts.GetManyByIDs(r.Context(), friendIDs)
 		if err != nil {
-			http.Error(w, "erro ao buscar contas", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "accounts.fetch_failed", "erro ao buscar contas")
 			return
 		}
 
 		lastMessageAt, err := directMessages.LastMessageAtByPeer(r.Context(), account.ID, friendIDs)
 		if err != nil {
-			http.Error(w, "erro ao buscar atividade das conversas", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "friends.activity_fetch_failed", "erro ao buscar atividade das conversas")
 			return
 		}
 
@@ -205,7 +206,7 @@ func handleDeleteFriend(hub *realtime.Hub, friendships *store.FriendshipStore) h
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
-			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.account_missing", "conta não encontrada no contexto")
 			return
 		}
 
@@ -213,7 +214,7 @@ func handleDeleteFriend(hub *realtime.Hub, friendships *store.FriendshipStore) h
 		if _, err := friendships.DeleteAccepted(r.Context(), account.ID, friendID); err != nil {
 			// Id que não é UUID também cai aqui; para quem chamou, é igual a
 			// não serem amigos.
-			http.Error(w, "vocês não são amigos", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "friends.not_friends", "vocês não são amigos")
 			return
 		}
 

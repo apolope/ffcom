@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"a3sitsolutions.com/ffcom/server-central/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-central/internal/relay"
 	"a3sitsolutions.com/ffcom/server-central/internal/store"
 )
@@ -419,17 +420,17 @@ func registerClaudeCallback(mux *http.ServeMux, db *store.Store, cfg IdeasConfig
 	mux.HandleFunc("POST /claude-callback", func(w http.ResponseWriter, r *http.Request) {
 		secret := r.URL.Query().Get("secret")
 		if cfg.CallbackSecret == "" || subtle.ConstantTimeCompare([]byte(secret), []byte(cfg.CallbackSecret)) != 1 {
-			http.Error(w, "segredo inválido", http.StatusUnauthorized)
+			apierr.Write(w, http.StatusUnauthorized, "auth.secret_invalid", "segredo inválido")
 			return
 		}
 		var cb relay.Callback
 		if err := json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&cb); err != nil {
-			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo da requisição inválido")
 			return
 		}
 		jobID := r.URL.Query().Get("job")
 		if jobID == "" {
-			http.Error(w, "job ausente", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "ideas.job_missing", "job ausente")
 			return
 		}
 		// Responde já; o relay só precisa saber que chegou.

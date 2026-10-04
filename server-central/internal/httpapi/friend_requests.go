@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 
+	"a3sitsolutions.com/ffcom/server-central/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-central/internal/auth"
 	"a3sitsolutions.com/ffcom/server-central/internal/realtime"
 	"a3sitsolutions.com/ffcom/server-central/internal/store"
@@ -31,28 +32,28 @@ func handleCreateFriendRequest(hub *realtime.Hub, friendships *store.FriendshipS
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
-			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.account_missing", "conta não encontrada no contexto")
 			return
 		}
 
 		var body createFriendRequestBody
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&body); err != nil || body.AccountID == "" {
-			http.Error(w, "corpo da requisição inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo da requisição inválido")
 			return
 		}
 		if body.AccountID == account.ID {
-			http.Error(w, "não é possível adicionar a si mesmo", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "friends.add_self", "não é possível adicionar a si mesmo")
 			return
 		}
 
 		target, err := accounts.GetManyByIDs(r.Context(), []string{body.AccountID})
 		if err != nil {
 			// Um id que não é UUID também cai aqui (erro de cast no Postgres).
-			http.Error(w, "conta não encontrada", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "accounts.not_found", "conta não encontrada")
 			return
 		}
 		if _, ok := target[body.AccountID]; !ok {
-			http.Error(w, "conta não encontrada", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "accounts.not_found", "conta não encontrada")
 			return
 		}
 
@@ -61,35 +62,35 @@ func handleCreateFriendRequest(hub *realtime.Hub, friendships *store.FriendshipS
 		case errors.Is(err, store.ErrNotFound):
 			// Nenhuma relação ainda: cria o pedido abaixo.
 		case err != nil:
-			http.Error(w, "erro ao buscar amizade", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "friends.friendship_fetch_failed", "erro ao buscar amizade")
 			return
 		case existing.Status == store.FriendshipAccepted:
-			http.Error(w, "vocês já são amigos", http.StatusConflict)
+			apierr.Write(w, http.StatusConflict, "friends.already_friends", "vocês já são amigos")
 			return
 		case existing.Status == store.FriendshipPending && existing.RequesterID == account.ID:
-			http.Error(w, "pedido de amizade já enviado", http.StatusConflict)
+			apierr.Write(w, http.StatusConflict, "friends.request_already_sent", "pedido de amizade já enviado")
 			return
 		case existing.Status == store.FriendshipPending:
 			accepted, err := friendships.Accept(r.Context(), existing.ID, account.ID)
 			if err != nil {
-				http.Error(w, "erro ao aceitar pedido de amizade", http.StatusInternalServerError)
+				apierr.Write(w, http.StatusInternalServerError, "friends.request_accept_failed", "erro ao aceitar pedido de amizade")
 				return
 			}
 			notifyFriendAccepted(r.Context(), hub, profiles, accepted)
 			writeFriendRequestResult(r.Context(), w, http.StatusOK, accepted, body.AccountID, profiles)
 			return
 		default:
-			http.Error(w, "não é possível adicionar esta conta", http.StatusConflict)
+			apierr.Write(w, http.StatusConflict, "friends.account_unavailable", "não é possível adicionar esta conta")
 			return
 		}
 
 		created, err := friendships.Request(r.Context(), account.ID, body.AccountID)
 		if errors.Is(err, store.ErrConflict) {
-			http.Error(w, "já existe um pedido entre vocês", http.StatusConflict)
+			apierr.Write(w, http.StatusConflict, "friends.request_exists", "já existe um pedido entre vocês")
 			return
 		}
 		if err != nil {
-			http.Error(w, "erro ao criar pedido de amizade", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "friends.request_create_failed", "erro ao criar pedido de amizade")
 			return
 		}
 
@@ -111,13 +112,13 @@ func handleListFriendRequests(friendships *store.FriendshipStore, profiles *stor
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
-			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.account_missing", "conta não encontrada no contexto")
 			return
 		}
 
 		pending, err := friendships.PendingForAccount(r.Context(), account.ID)
 		if err != nil {
-			http.Error(w, "erro ao buscar pedidos de amizade", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "friends.requests_fetch_failed", "erro ao buscar pedidos de amizade")
 			return
 		}
 
@@ -127,7 +128,7 @@ func handleListFriendRequests(friendships *store.FriendshipStore, profiles *stor
 		}
 		profileByAccount, err := profiles.GetManyByAccountIDs(r.Context(), otherIDs)
 		if err != nil {
-			http.Error(w, "erro ao buscar perfis", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "profile.fetch_many_failed", "erro ao buscar perfis")
 			return
 		}
 
@@ -158,7 +159,7 @@ func handleAcceptFriendRequest(hub *realtime.Hub, friendships *store.FriendshipS
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
-			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.account_missing", "conta não encontrada no contexto")
 			return
 		}
 
@@ -166,7 +167,7 @@ func handleAcceptFriendRequest(hub *realtime.Hub, friendships *store.FriendshipS
 		if err != nil {
 			// Id que não é UUID também cai aqui; para quem chamou, é igual a
 			// não encontrado.
-			http.Error(w, "pedido de amizade não encontrado", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "friends.request_not_found", "pedido de amizade não encontrado")
 			return
 		}
 
@@ -182,13 +183,13 @@ func handleDeleteFriendRequest(hub *realtime.Hub, friendships *store.FriendshipS
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
-			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.account_missing", "conta não encontrada no contexto")
 			return
 		}
 
 		removed, err := friendships.DeletePending(r.Context(), r.PathValue("id"), account.ID)
 		if err != nil {
-			http.Error(w, "pedido de amizade não encontrado", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "friends.request_not_found", "pedido de amizade não encontrado")
 			return
 		}
 

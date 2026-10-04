@@ -50,8 +50,11 @@ type SignupRequest struct {
 	AuthentikUsername *string
 	// LinkedExisting diz que a aprovação usou uma conta que já existia.
 	LinkedExisting bool
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// Language é o idioma do site quando o pedido foi feito (um de
+	// SupportedLanguages), ou nil.
+	Language  *string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // NewSignup são os campos que a pessoa preenche no formulário, já
@@ -65,6 +68,7 @@ type NewSignup struct {
 	ExistingAccount bool
 	EmailAccounts   *string
 	ClientIP        string
+	Language        *string
 }
 
 type SignupStore struct {
@@ -73,13 +77,13 @@ type SignupStore struct {
 
 const signupColumns = `id, full_name, coalesce(username, ''), email, coalesce(nickname, ''), reason,
 	existing_account, email_accounts, status, client_ip, telegram_message_id, decided_by, decided_at,
-	failure, authentik_user_pk, authentik_username, linked_existing, created_at, updated_at`
+	failure, authentik_user_pk, authentik_username, linked_existing, language, created_at, updated_at`
 
 func scanSignup(row pgx.Row) (SignupRequest, error) {
 	var s SignupRequest
 	err := row.Scan(&s.ID, &s.FullName, &s.Username, &s.Email, &s.Nickname, &s.Reason,
 		&s.ExistingAccount, &s.EmailAccounts, &s.Status, &s.ClientIP, &s.TelegramMessageID, &s.DecidedBy, &s.DecidedAt,
-		&s.Failure, &s.AuthentikUserPK, &s.AuthentikUsername, &s.LinkedExisting, &s.CreatedAt, &s.UpdatedAt)
+		&s.Failure, &s.AuthentikUserPK, &s.AuthentikUsername, &s.LinkedExisting, &s.Language, &s.CreatedAt, &s.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SignupRequest{}, ErrNotFound
 	}
@@ -90,11 +94,11 @@ func scanSignup(row pgx.Row) (SignupRequest, error) {
 // aberto com o mesmo e-mail ou nome de usuário.
 func (s *SignupStore) Create(ctx context.Context, n NewSignup) (SignupRequest, error) {
 	query := `
-		INSERT INTO signup_requests (full_name, username, email, nickname, reason, existing_account, email_accounts, client_ip)
-		VALUES ($1, NULLIF($2, ''), $3, NULLIF($4, ''), $5, $6, $7, $8)
+		INSERT INTO signup_requests (full_name, username, email, nickname, reason, existing_account, email_accounts, client_ip, language)
+		VALUES ($1, NULLIF($2, ''), $3, NULLIF($4, ''), $5, $6, $7, $8, $9)
 		RETURNING ` + signupColumns
 	req, err := scanSignup(s.pool.QueryRow(ctx, query, n.FullName, n.Username, n.Email, n.Nickname, n.Reason,
-		n.ExistingAccount, n.EmailAccounts, n.ClientIP))
+		n.ExistingAccount, n.EmailAccounts, n.ClientIP, n.Language))
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 		return SignupRequest{}, ErrConflict

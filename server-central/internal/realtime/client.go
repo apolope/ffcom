@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+
+	"a3sitsolutions.com/ffcom/server-central/internal/apierr"
 )
 
 const (
@@ -80,9 +82,10 @@ func (c *Client) ReadPump(onMessage func([]byte)) {
 	}
 }
 
-// SendError envia um envelope de erro só para este client, sem broadcast.
-func (c *Client) SendError(message string) {
-	payload, err := EncodeError(message)
+// SendError envia um frame "error" (code, message, params) só para este
+// client, sem broadcast.
+func (c *Client) SendError(p *apierr.Problem) {
+	payload, err := EncodeError(p)
 	if err != nil {
 		return
 	}

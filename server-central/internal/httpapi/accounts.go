@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"a3sitsolutions.com/ffcom/server-central/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-central/internal/store"
 )
 
@@ -21,17 +22,17 @@ func handleLookupAccounts(accounts *store.AccountStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body lookupAccountsRequest
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&body); err != nil {
-			http.Error(w, "corpo da requisição inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo da requisição inválido")
 			return
 		}
 		if len(body.Subjects) > maxLookupSubjects {
-			http.Error(w, "subjects demais numa consulta", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "accounts.too_many_subjects", "subjects demais numa consulta")
 			return
 		}
 
 		found, err := accounts.GetManyBySubjects(r.Context(), body.Subjects)
 		if err != nil {
-			http.Error(w, "erro ao buscar contas", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "accounts.fetch_failed", "erro ao buscar contas")
 			return
 		}
 

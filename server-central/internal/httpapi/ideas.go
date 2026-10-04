@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"a3sitsolutions.com/ffcom/server-central/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-central/internal/auth"
 	"a3sitsolutions.com/ffcom/server-central/internal/store"
 )
@@ -126,17 +127,17 @@ func handleListIdeas(ideas *store.IdeaStore, cfg IdeasConfig) http.Handler {
 			list, err = ideas.List(r.Context(), []string{store.IdeaImplemented}, viewerID, store.IdeaOrderRecent, 50)
 		case "review":
 			if !isAdmin {
-				http.Error(w, "só administradores veem a moderação", http.StatusForbidden)
+				apierr.Write(w, http.StatusForbidden, "ideas.admin_only_review", "só administradores veem a moderação")
 				return
 			}
 			list, err = ideas.List(r.Context(), []string{store.IdeaReview, store.IdeaChecking}, viewerID, store.IdeaOrderOldest, 100)
 		default:
-			http.Error(w, "view inválida", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "ideas.view_invalid", "view inválida")
 			return
 		}
 		if err != nil {
 			log.Printf("ideias: %v", err)
-			http.Error(w, "erro ao listar ideias", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "ideas.list_failed", "erro ao listar ideias")
 			return
 		}
 		writeJSON(w, http.StatusOK, toIdeaResponses(list, viewerID, isAdmin))
@@ -173,7 +174,7 @@ func handleIdeasMe(db *store.Store, cfg IdeasConfig) http.Handler {
 		used, penalty, err := db.Ideas.WandUsage(r.Context(), account.ID, day)
 		if err != nil {
 			log.Printf("ideias: %v", err)
-			http.Error(w, "erro ao ler o saldo", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "ideas.wand_balance_failed", "erro ao ler o saldo")
 			return
 		}
 		resp := ideasMeResponse{
@@ -235,23 +236,23 @@ func handleCreateAssist(db *store.Store, cfg IdeasConfig) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, _ := auth.AccountFromContext(r.Context())
 		if !a.enabled() {
-			http.Error(w, "a varinha não está disponível nesta instância", http.StatusServiceUnavailable)
+			apierr.Write(w, http.StatusServiceUnavailable, "ideas.wand_disabled", "a varinha não está disponível nesta instância")
 			return
 		}
 		var body struct {
 			Text string `json:"text"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&body); err != nil {
-			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo da requisição inválido")
 			return
 		}
 		text, ok := validIdeaText(body.Text)
 		if !ok {
-			http.Error(w, "o texto precisa ter entre 10 e 1000 caracteres", http.StatusBadRequest)
+			apierr.WriteParams(w, http.StatusBadRequest, "ideas.text_length", "o texto precisa ter entre 10 e 1000 caracteres", apierr.Params{"min": ideaMinChars, "max": ideaMaxChars})
 			return
 		}
 		if job, err := db.Ideas.PendingJob(r.Context(), account.ID, store.AssistImprove); err == nil {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": "a varinha ainda está trabalhando no pedido anterior", "id": job.ID})
+			apierr.WriteParams(w, http.StatusConflict, "ideas.wand_busy", "a varinha ainda está trabalhando no pedido anterior", apierr.Params{"id": job.ID})
 			return
 		}
 
@@ -259,11 +260,11 @@ func handleCreateAssist(db *store.Store, cfg IdeasConfig) http.Handler {
 		reserved, err := db.Ideas.ReserveWand(r.Context(), account.ID, day, cfg.WandPerDay)
 		if err != nil {
 			log.Printf("ideias: %v", err)
-			http.Error(w, "erro ao reservar o uso da varinha", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "ideas.wand_reserve_failed", "erro ao reservar o uso da varinha")
 			return
 		}
 		if !reserved {
-			http.Error(w, "você já usou a varinha todas as vezes de hoje", http.StatusTooManyRequests)
+			apierr.Write(w, http.StatusTooManyRequests, "ideas.wand_daily_limit", "você já usou a varinha todas as vezes de hoje")
 			return
 		}
 
@@ -281,13 +282,13 @@ func handleCreateAssist(db *store.Store, cfg IdeasConfig) http.Handler {
 		if err != nil {
 			log.Printf("ideias: %v", err)
 			_ = db.Ideas.RefundWand(r.Context(), account.ID, day)
-			http.Error(w, "erro ao criar o pedido", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "ideas.job_create_failed", "erro ao criar o pedido")
 			return
 		}
 		if err := a.submit(r.Context(), jobID, improvePrompt(text, top)); err != nil {
 			log.Printf("ideias: %v", err)
 			a.failImprove(r.Context(), jobID, "relay indisponível")
-			http.Error(w, "a varinha está indisponível agora; tente de novo em instantes", http.StatusBadGateway)
+			apierr.Write(w, http.StatusBadGateway, "ideas.wand_unavailable", "a varinha está indisponível agora; tente de novo em instantes")
 			return
 		}
 
@@ -302,7 +303,7 @@ func handleGetAssist(db *store.Store, cfg IdeasConfig) http.Handler {
 		account, _ := auth.AccountFromContext(r.Context())
 		job, err := db.Ideas.GetJob(r.Context(), r.PathValue("id"))
 		if err != nil || job.AccountID != account.ID || job.Kind != store.AssistImprove {
-			http.Error(w, "pedido não encontrado", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "ideas.job_not_found", "pedido não encontrado")
 			return
 		}
 		// Saldo de hoje (um pedido de ontem que fechou depois da meia-noite
@@ -337,12 +338,12 @@ func handleCreateIdea(db *store.Store, cfg IdeasConfig) http.Handler {
 			Text string `json:"text"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&body); err != nil {
-			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo da requisição inválido")
 			return
 		}
 		text, ok := validIdeaText(body.Text)
 		if !ok {
-			http.Error(w, "o texto precisa ter entre 10 e 1000 caracteres", http.StatusBadRequest)
+			apierr.WriteParams(w, http.StatusBadRequest, "ideas.text_length", "o texto precisa ter entre 10 e 1000 caracteres", apierr.Params{"min": ideaMinChars, "max": ideaMaxChars})
 			return
 		}
 
@@ -352,17 +353,17 @@ func handleCreateIdea(db *store.Store, cfg IdeasConfig) http.Handler {
 			log.Printf("ideias: %v", err)
 		}
 		if discarded >= ideaMaxDiscardsPerDay {
-			http.Error(w, "hoje já foram vários textos que não eram sugestões; tente de novo amanhã", http.StatusTooManyRequests)
+			apierr.Write(w, http.StatusTooManyRequests, "ideas.too_many_rejected", "hoje já foram vários textos que não eram sugestões; tente de novo amanhã")
 			return
 		}
 		ideaID, err := db.Ideas.Create(r.Context(), account.ID, text, day)
 		if errors.Is(err, store.ErrConflict) {
-			http.Error(w, "você já enviou uma sugestão hoje; amanhã tem outra", http.StatusConflict)
+			apierr.Write(w, http.StatusConflict, "ideas.daily_limit", "você já enviou uma sugestão hoje; amanhã tem outra")
 			return
 		}
 		if err != nil {
 			log.Printf("ideias: %v", err)
-			http.Error(w, "erro ao gravar a sugestão", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "ideas.save_failed", "erro ao gravar a sugestão")
 			return
 		}
 
@@ -380,7 +381,7 @@ func handleCreateIdea(db *store.Store, cfg IdeasConfig) http.Handler {
 		idea, err := db.Ideas.Get(r.Context(), ideaID, account.ID)
 		if err != nil {
 			log.Printf("ideias: %v", err)
-			http.Error(w, "erro ao ler a sugestão", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "ideas.job_read_failed", "erro ao ler a sugestão")
 			return
 		}
 		writeJSON(w, http.StatusAccepted, toIdeaResponse(idea, account.ID, isAdmin))
@@ -396,30 +397,30 @@ func handleVoteIdea(db *store.Store, cfg IdeasConfig) http.Handler {
 			Value int `json:"value"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&body); err != nil || body.Value < -1 || body.Value > 1 {
-			http.Error(w, "voto inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "ideas.vote_invalid", "voto inválido")
 			return
 		}
 		idea, err := db.Ideas.Get(r.Context(), r.PathValue("id"), account.ID)
 		if err != nil {
-			http.Error(w, "ideia não encontrada", http.StatusNotFound)
+			apierr.Write(w, http.StatusNotFound, "ideas.not_found", "ideia não encontrada")
 			return
 		}
 		if idea.Status != store.IdeaOpen && idea.Status != store.IdeaPlanned {
-			http.Error(w, "esta ideia não está aberta a votos", http.StatusConflict)
+			apierr.Write(w, http.StatusConflict, "ideas.not_open_for_votes", "esta ideia não está aberta a votos")
 			return
 		}
 		if idea.AccountID == account.ID {
-			http.Error(w, "não dá para votar na própria ideia", http.StatusForbidden)
+			apierr.Write(w, http.StatusForbidden, "ideas.own_vote", "não dá para votar na própria ideia")
 			return
 		}
 		if err := db.Ideas.Vote(r.Context(), idea.ID, account.ID, body.Value); err != nil {
 			log.Printf("ideias: %v", err)
-			http.Error(w, "erro ao votar", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "ideas.vote_failed", "erro ao votar")
 			return
 		}
 		idea, err = db.Ideas.Get(r.Context(), idea.ID, account.ID)
 		if err != nil {
-			http.Error(w, "erro ao ler a ideia", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "ideas.read_failed", "erro ao ler a ideia")
 			return
 		}
 		writeJSON(w, http.StatusOK, toIdeaResponse(idea, account.ID, isAdmin))
@@ -432,16 +433,16 @@ func handleVoteIdea(db *store.Store, cfg IdeasConfig) http.Handler {
 func handleDeleteIdea(db *store.Store, cfg IdeasConfig) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !auth.InGroupFromContext(r.Context(), cfg.AdminGroup) {
-			http.Error(w, "só administradores excluem ideias", http.StatusForbidden)
+			apierr.Write(w, http.StatusForbidden, "ideas.admin_only_delete", "só administradores excluem ideias")
 			return
 		}
 		if err := db.Ideas.Delete(r.Context(), r.PathValue("id")); err != nil {
 			if errors.Is(err, store.ErrNotFound) {
-				http.Error(w, "ideia não encontrada", http.StatusNotFound)
+				apierr.Write(w, http.StatusNotFound, "ideas.not_found", "ideia não encontrada")
 				return
 			}
 			log.Printf("ideias: %v", err)
-			http.Error(w, "erro ao excluir", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "ideas.delete_failed", "erro ao excluir")
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -454,7 +455,7 @@ func handleModerateIdea(db *store.Store, cfg IdeasConfig) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, _ := auth.AccountFromContext(r.Context())
 		if !auth.InGroupFromContext(r.Context(), cfg.AdminGroup) {
-			http.Error(w, "só administradores moderam ideias", http.StatusForbidden)
+			apierr.Write(w, http.StatusForbidden, "ideas.admin_only_moderate", "só administradores moderam ideias")
 			return
 		}
 		var body struct {
@@ -462,7 +463,7 @@ func handleModerateIdea(db *store.Store, cfg IdeasConfig) http.Handler {
 			ImplementedVersion *string `json:"implementedVersion"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&body); err != nil {
-			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo da requisição inválido")
 			return
 		}
 		switch body.Status {
@@ -470,28 +471,28 @@ func handleModerateIdea(db *store.Store, cfg IdeasConfig) http.Handler {
 			body.ImplementedVersion = nil
 		case store.IdeaImplemented:
 			if body.ImplementedVersion == nil || !versionPattern.MatchString(strings.TrimSpace(*body.ImplementedVersion)) {
-				http.Error(w, `informe a versão no formato do CHANGELOG, ex. "client v0.15.0"`, http.StatusBadRequest)
+				apierr.Write(w, http.StatusBadRequest, "ideas.version_invalid", `informe a versão no formato do CHANGELOG, ex. "client v0.15.0"`)
 				return
 			}
 			v := strings.TrimSpace(*body.ImplementedVersion)
 			body.ImplementedVersion = &v
 		default:
-			http.Error(w, "status inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "ideas.status_invalid", "status inválido")
 			return
 		}
 		id := r.PathValue("id")
 		if err := db.Ideas.SetStatus(r.Context(), id, body.Status, body.ImplementedVersion); err != nil {
 			if errors.Is(err, store.ErrNotFound) {
-				http.Error(w, "ideia não encontrada", http.StatusNotFound)
+				apierr.Write(w, http.StatusNotFound, "ideas.not_found", "ideia não encontrada")
 				return
 			}
 			log.Printf("ideias: %v", err)
-			http.Error(w, "erro ao moderar", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "ideas.moderate_failed", "erro ao moderar")
 			return
 		}
 		idea, err := db.Ideas.Get(r.Context(), id, account.ID)
 		if err != nil {
-			http.Error(w, "erro ao ler a ideia", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "ideas.read_failed", "erro ao ler a ideia")
 			return
 		}
 		writeJSON(w, http.StatusOK, toIdeaResponse(idea, account.ID, true))

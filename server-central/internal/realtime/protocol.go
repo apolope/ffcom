@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"a3sitsolutions.com/ffcom/server-central/internal/apierr"
 )
 
 const (
@@ -45,19 +47,19 @@ type IncomingPresenceIdle struct {
 
 // FrameType lê só o campo "type" de um frame vindo do client, para o
 // chamador decidir como decodificar o resto.
-func FrameType(raw []byte) (string, error) {
+func FrameType(raw []byte) (string, *apierr.Problem) {
 	var t typeEnvelope
 	if err := json.Unmarshal(raw, &t); err != nil {
-		return "", fmt.Errorf("frame não é JSON válido: %w", err)
+		return "", apierr.New("realtime.frame_invalid", fmt.Sprintf("frame não é JSON válido: %v", err))
 	}
 	return t.Type, nil
 }
 
 // DecodeIncomingPresenceIdle decodifica um frame "presence.idle".
-func DecodeIncomingPresenceIdle(raw []byte) (IncomingPresenceIdle, error) {
+func DecodeIncomingPresenceIdle(raw []byte) (IncomingPresenceIdle, *apierr.Problem) {
 	var m IncomingPresenceIdle
 	if err := json.Unmarshal(raw, &m); err != nil {
-		return IncomingPresenceIdle{}, fmt.Errorf("payload de presence.idle inválido: %w", err)
+		return IncomingPresenceIdle{}, invalidPayload(TypePresenceIdle, err)
 	}
 	return m, nil
 }
@@ -92,9 +94,15 @@ type dmCreatedEnvelope struct {
 	Message DirectMessageView `json:"message"`
 }
 
+// errorEnvelope é o frame "error", no mesmo formato dos erros da API HTTP
+// (code, message, params; ver docs/protocol.md, "Erros da API HTTP"). Error
+// repete Message para os clients anteriores ao code, que só liam esse campo.
 type errorEnvelope struct {
-	Type  string `json:"type"`
-	Error string `json:"error"`
+	Type    string        `json:"type"`
+	Code    string        `json:"code"`
+	Message string        `json:"message"`
+	Params  apierr.Params `json:"params,omitempty"`
+	Error   string        `json:"error"`
 }
 
 type typeEnvelope struct {
@@ -104,18 +112,18 @@ type typeEnvelope struct {
 // DecodeIncomingDM lê o campo "type" de raw e, se for "dm.create",
 // decodifica o restante em IncomingDMCreate. Tipos desconhecidos devolvem
 // erro para o chamador responder com Client.SendError.
-func DecodeIncomingDM(raw []byte) (IncomingDMCreate, error) {
+func DecodeIncomingDM(raw []byte) (IncomingDMCreate, *apierr.Problem) {
 	var t typeEnvelope
 	if err := json.Unmarshal(raw, &t); err != nil {
-		return IncomingDMCreate{}, fmt.Errorf("frame não é JSON válido: %w", err)
+		return IncomingDMCreate{}, apierr.New("realtime.frame_invalid", fmt.Sprintf("frame não é JSON válido: %v", err))
 	}
 	if t.Type != TypeDMCreate {
-		return IncomingDMCreate{}, fmt.Errorf("tipo de frame desconhecido: %q", t.Type)
+		return IncomingDMCreate{}, UnknownFrameType(t.Type)
 	}
 
 	var m IncomingDMCreate
 	if err := json.Unmarshal(raw, &m); err != nil {
-		return IncomingDMCreate{}, fmt.Errorf("payload de dm.create inválido: %w", err)
+		return IncomingDMCreate{}, invalidPayload(TypeDMCreate, err)
 	}
 	return m, nil
 }
@@ -126,9 +134,22 @@ func EncodeDMCreated(m DirectMessageView) ([]byte, error) {
 	return json.Marshal(dmCreatedEnvelope{Type: typeDMCreated, Message: m})
 }
 
-// EncodeError serializa um envelope de erro, enviado só ao client que causou o erro.
-func EncodeError(message string) ([]byte, error) {
-	return json.Marshal(errorEnvelope{Type: typeError, Error: message})
+// EncodeError serializa um frame "error", enviado só ao client que causou o erro.
+func EncodeError(p *apierr.Problem) ([]byte, error) {
+	return json.Marshal(errorEnvelope{Type: typeError, Code: p.Code, Message: p.Message, Params: p.Params, Error: p.Message})
+}
+
+// UnknownFrameType é o erro de um frame com "type" que a conexão não aceita.
+func UnknownFrameType(frameType string) *apierr.Problem {
+	return apierr.NewParams("realtime.frame_type_unknown", fmt.Sprintf("tipo de frame desconhecido: %q", frameType),
+		apierr.Params{"type": frameType})
+}
+
+// invalidPayload é o erro de um frame de tipo conhecido cujo payload não
+// decodifica.
+func invalidPayload(frameType string, err error) *apierr.Problem {
+	return apierr.NewParams("realtime.payload_invalid", fmt.Sprintf("payload de %s inválido: %v", frameType, err),
+		apierr.Params{"type": frameType})
 }
 
 // FriendRequestView é um pedido de amizade pendente do ponto de vista de

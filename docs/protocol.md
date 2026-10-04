@@ -21,13 +21,60 @@ Os dois servidores validam o mesmo Bearer JWT emitido pela instância central de
 
 ## Convenções gerais
 
-- **Erros HTTP:** texto simples via `http.Error` (não JSON) — `Content-Type: text/plain`, corpo é a mensagem de erro em português. Status codes usados: `400` (corpo/parâmetro inválido), `401` (token ausente/inválido), `403` (sem permissão), `404` (recurso não encontrado), `409` (conflito — ex. convite já usado), `410 Gone` (convite expirado), `426 Upgrade Required` (TLS obrigatório, só quando `REQUIRE_TLS=true`, ver abaixo), `429` (rate limit, ver abaixo).
+- **Erros HTTP:** JSON `{"code", "message", "params"?}` nos dois servidores (ver "Erros da API HTTP" abaixo). Status codes usados: `400` (corpo/parâmetro inválido), `401` (token ausente/inválido), `403` (sem permissão), `404` (recurso não encontrado), `409` (conflito — ex. convite já usado), `410 Gone` (convite expirado), `426 Upgrade Required` (TLS obrigatório, só quando `REQUIRE_TLS=true`, ver abaixo), `429` (rate limit, ver abaixo).
 - **Respostas de sucesso:** JSON, `Content-Type: application/json`, `camelCase` em todos os campos.
 - **Paginação de histórico:** keyset pagination por `created_at`, sempre os mesmos dois query params — `before` (RFC3339, opcional) e `limit` (opcional, default 50, máximo 200). O servidor devolve mais recentes primeiro; o `client` inverte para ordem cronológica antes de renderizar (`fetchChannelHistory`, `fetchThreadMessages`, `fetchDirectMessages` em `client/src/lib/`).
-- **Frames de WebSocket:** envelope JSON uniforme `{"type": "...", ...payload}` nos dois servidores. O client → servidor emite um tipo (`*.create`); o servidor → client responde com o `*.created` correspondente (broadcast, **incluindo o próprio autor**, para confirmar id/timestamp atribuídos pelo servidor) ou `"error"` (`{"type": "error", "error": "..."}`, só para quem causou o erro).
+- **Frames de WebSocket:** envelope JSON uniforme `{"type": "...", ...payload}` nos dois servidores. O client → servidor emite um tipo (`*.create`); o servidor → client responde com o `*.created` correspondente (broadcast, **incluindo o próprio autor**, para confirmar id/timestamp atribuídos pelo servidor) ou `"error"` (`{"type": "error", "code": "...", "message": "...", "params"?: {...}, "error": "..."}`, só para quem causou o erro; ver "Frame `error` do WebSocket" abaixo).
 - **CORS:** variável de ambiente `CORS_ALLOWED_ORIGINS` (lista separada por vírgula, vazia por padrão) em ambos os servidores, mesmo mecanismo (`internal/httpapi/cors.go`, idêntico nos dois). Preflight `OPTIONS` respondido com `204`; origem liberada ecoa em `Access-Control-Allow-Origin` + `Vary: Origin`; `Access-Control-Allow-Methods: GET, POST, PATCH, PUT, DELETE, OPTIONS` (lista fixa e abrangente — **atualizar aqui ao adicionar uma rota com método novo**, é a causa mais comum de erro de CORS neste projeto apesar da origem estar liberada, ver `docs/architecture.md`). O `CheckOrigin` do upgrader de WebSocket usa a mesma allowlist, com fallback ao comportamento padrão do gorilla (sem header `Origin`, ou `Origin == Host`, sempre passa).
 - **`GET /healthz`:** sem autenticação, nos dois servidores. `{"status":"ok","version":"..."}`.
 - **TLS obrigatório (`REQUIRE_TLS`):** desligado por padrão nos dois servidores. Quando `true`, toda requisição (exceto `/healthz`) precisa chegar com o header `X-Forwarded-Proto: https` (setado pelo proxy reverso na frente — nenhum dos dois binários termina TLS) ou é rejeitada com `426`. Ver `docs/architecture.md`, "Criptografia em trânsito obrigatória".
+
+## Erros da API HTTP
+
+Formato das respostas de erro do `server-central` e do `server-channel` (o mesmo vale para o frame `error` do WebSocket, abaixo). Decisão em `docs/architecture.md`, "Decisão: internacionalização".
+
+**Formato.** Todo erro HTTP responde `Content-Type: application/json; charset=utf-8` com:
+
+```json
+{"code": "friends.already_friends", "message": "vocês já são amigos"}
+{"code": "ideas.text_length", "message": "o texto precisa ter entre 10 e 1000 caracteres", "params": {"min": 10, "max": 1000}}
+```
+
+- `code`: identificador estável do motivo. É contrato: renomear um código é mudança de protocolo (client antigo deixa de traduzir).
+- `message`: o texto em português, só como reserva (código sem tradução, client antigo) e para logs. O client não compara esse texto.
+- `params` (opcional): valores interpolados na tradução como `{{nome}}` (formato do i18next), ex. `"errors.ideas.text_length": "o texto precisa ter entre {{min}} e {{max}} caracteres"`. Pode levar também um dado útil ao client, como `params.id` em `ideas.wand_busy`.
+- O status HTTP continua dizendo a classe do erro (`400`, `401`, `404`, `409`...), igual a antes; o `code` só detalha.
+
+**Como o client usa.** Em resposta fora de 2xx, lê o JSON e mostra `t('errors.' + code, params)` a partir de `locales/<idioma>.json`. Se a chave não existir no idioma, mostra `message`. Se o corpo não for JSON (proxy na frente, `server-channel` ainda sem o formato, rota inexistente, que o `ServeMux` responde com `404 page not found` em texto), mostra o texto cru ou um erro genérico pelo status.
+
+**Convenção de códigos.** `area.motivo`, os dois em `snake_case` minúsculo. Áreas em uso no `server-central`: `common`, `auth`, `accounts`, `profile`, `avatar`, `friends`, `dm`, `e2e`, `presence`, `servers`, `ideas`, `signup`; no `server-channel`: `common`, `auth`, `profile`, `permissions`, `channels`, `categories`, `messages`, `attachments`, `forum`, `invites`, `members`, `roles`, `overwrites`, `voice`; nos dois, `realtime` (frames de WebSocket mal formados). `common.*` vale para qualquer rota dos dois servidores (`common.invalid_body`, `common.account_missing`, `common.member_missing`, `common.rate_limited`, `common.tls_required`, `common.limit_invalid`, `common.before_invalid`, `common.name_required`...). Falta de permissão no `server-channel` é `permissions.required` (`params.permission`, o nome do bit, ex. `ManageRoles`) ou `permissions.required_either` (`params.permission` e `params.alternative`, ex. `ManageChannels` ou `CreateChannels`); o nome do bit não se traduz. Falha interna (`500`) é `<area>.<o_que>_failed` (ex. `servers.fetch_failed`). A mesma mensagem usa o mesmo código em todas as rotas. Cada código tem a chave `errors.<code>` em `locales/pt-BR.json` (com o texto da `message`, trocando os números por `{{params}}`) e em todos os outros idiomas. A chave é aninhada: `errors.friends.already_friends` é `{"errors": {"friends": {"already_friends": "..."}}}`.
+
+**No Go.** Pacote `internal/apierr`, igual nos dois servidores (cada módulo Go tem a sua cópia, com o teste):
+
+```go
+apierr.Write(w, http.StatusConflict, "friends.already_friends", "vocês já são amigos")
+apierr.WriteParams(w, http.StatusBadRequest, "ideas.text_length", "o texto precisa ter entre 10 e 1000 caracteres",
+	apierr.Params{"min": ideaMinChars, "max": ideaMaxChars})
+
+// Validação que só diz o motivo; o handler escolhe o status.
+p := apierr.New("signup.email_invalid", "e-mail inválido") // ou NewParams(code, message, params)
+apierr.WriteProblem(w, http.StatusBadRequest, p)
+```
+
+O código é sempre uma string literal: terceiro argumento de `Write`/`WriteParams`, primeiro de `New`/`NewParams`. Assim `scripts/check-locales.mjs` (no CI) e o teste `internal/apierr/apierr_test.go` (que lê `../../../locales/pt-BR.json`) acham todos os códigos por regex e falham se algum não tiver `errors.<code>`, ou se alguma chamada tiver o código numa variável. Código novo: criar a chave em `pt-BR.json` e `en.json` no mesmo commit.
+
+### Frame `error` do WebSocket
+
+Nos dois servidores, um frame que o servidor recusa (tipo desconhecido, payload inválido, conteúdo vazio ou longo demais, sem permissão, excesso de frames, falha interna) responde só a quem o mandou, com o mesmo `code`/`message`/`params` dos erros HTTP e as mesmas chaves `errors.<code>`:
+
+```json
+{"type": "error", "code": "messages.content_too_long", "message": "conteúdo excede o limite de 4000 caracteres", "params": {"max": 4000}, "error": "conteúdo excede o limite de 4000 caracteres"}
+```
+
+- `error` repete `message`. Fica só para os clients anteriores ao `code` (até a `client-v0.21.x`, que mostram `frame.error`); client novo lê `code` e cai em `message`. Pode sair quando nenhum client em uso depender dele.
+- Frame mal formado usa a área `realtime`: `realtime.frame_invalid` (não é JSON), `realtime.frame_type_unknown` e `realtime.payload_invalid` (os dois com `params.type`, o tipo do frame), `realtime.rate_limited` (excesso de frames no canal). A `message` desses pode trazer o detalhe do decoder Go, só útil em log; a tradução não usa.
+- No Go, `Client.SendError` recebe um `*apierr.Problem` (`client.SendError(apierr.New("messages.not_found", "mensagem não encontrada"))`), então o código também é literal e entra na mesma checagem. Os decoders de `internal/realtime` devolvem `*apierr.Problem` em vez de `error`.
+- Nenhum outro frame dos dois servidores leva texto para o usuário: `presence.update`, `friend.*`, `dm.created`, `message.*`, `thread.created` e `post.created` só carregam dados.
 
 ## `server-central`
 
@@ -38,7 +85,8 @@ Base URL: `VITE_SERVER_CENTRAL_URL` no client (`http://localhost:8081` em dev).
 | Método | Rota | Auth | Request | Response | Erros |
 |---|---|---|---|---|---|
 | GET | `/healthz` | não | — | `{status, version}` | — |
-| GET | `/api/me` | Bearer | — | `{accountId, oidcSubject, createdAt, e2ePublicKey, hasE2EKeyBackup, status, displayName?, customDisplayName?, avatarUrl?}` — `e2ePublicKey` é base64 ou `null` (nunca omitido); `displayName` é o nome escolhido no FFCom ou, sem ele, o do Authentik, e `customDisplayName` só vem quando há um escolhido | — |
+| GET | `/api/me` | Bearer | — | `{accountId, oidcSubject, createdAt, e2ePublicKey, hasE2EKeyBackup, status, language, displayName?, customDisplayName?, avatarUrl?}` — `e2ePublicKey` é base64 ou `null` (nunca omitido); `language` é o idioma da interface escolhido na conta (`pt-BR` ou `en`) ou `null` se nunca escolheu (nunca omitido); `displayName` é o nome escolhido no FFCom ou, sem ele, o do Authentik, e `customDisplayName` só vem quando há um escolhido | — |
+| PATCH | `/api/me` | Bearer | `{language?}`: só os campos presentes mudam; `language` é `pt-BR`, `en` ou `null` (apaga a escolha); fica só no FFCom (o Authentik não é alterado) | mesmo formato de `GET /api/me` | `400` `profile.language_unsupported` (`params.supported`) ou `common.invalid_body` |
 | PUT | `/api/me/display-name` | Bearer | `{displayName}` — até 64 bytes depois do trim, sem caractere de controle; vazio ou `null` volta ao nome do Authentik | mesmo formato de `GET /api/me` | `400` nome longo, com caractere de controle ou corpo inválido |
 | PUT | `/api/me/e2e-public-key` | Bearer | `{publicKey}` (base64, 32 bytes) | `204` | `400` tamanho inválido; `409` se a conta já tem backup da chave (rota de clients antigos) |
 | GET | `/api/me/e2e-key-backup` | Bearer | — | `{publicKey, backup}` (base64) — backup cifrado com a frase de recuperação, opaco para o servidor | `404` sem backup |
@@ -61,7 +109,7 @@ Base URL: `VITE_SERVER_CENTRAL_URL` no client (`http://localhost:8081` em dev).
 | GET | `/api/ideas?view=ranking\|implemented\|review` | opcional | — | `[Idea]` — `ranking` (padrão): publicadas e planejadas, maior pontuação primeiro, empate para a mais antiga; `implemented`: implementadas, mais recentes primeiro; `review`: fila de moderação | `403` `review` sem o grupo de admin |
 | GET | `/api/ideas/me` | Bearer | — | `{assistEnabled, wandLimit, wandLeft, wandUsed, wandPenalty, pendingAssist?, suggestedToday, todayIdea?: Idea, lastDiscarded?: Idea, discardsLeft, isAdmin}` — `lastDiscarded` é a última ideia de hoje descartada por não ser sugestão (com a dica em `feedback`), só enquanto não houver ideia do dia | — |
 | POST | `/api/ideas` | Bearer | `{text}` (10 a 1000 caracteres) | `202` + `Idea` em `checking`; vira `open`, `review` ou `discarded` (não é sugestão; não gasta o dia) quando a checagem final termina | `400` tamanho; `409` já enviou hoje; `429` já teve 3 textos descartados hoje |
-| POST | `/api/ideas/assist` | Bearer | `{text}` (10 a 1000 caracteres) | `202` `{id, status: "pending", wandLeft}` — gasta um uso da varinha | `400` tamanho; `409` `{error, id}` já há um pedido em andamento; `429` sem usos hoje; `502` relay fora do ar (uso devolvido); `503` varinha desligada |
+| POST | `/api/ideas/assist` | Bearer | `{text}` (10 a 1000 caracteres) | `202` `{id, status: "pending", wandLeft}` — gasta um uso da varinha | `400` tamanho; `409` `ideas.wand_busy` já há um pedido em andamento (o id dele vem em `params.id`); `429` sem usos hoje; `502` relay fora do ar (uso devolvido); `503` varinha desligada |
 | GET | `/api/ideas/assist/{id}` | Bearer | — | `{id, status: "pending"\|"done"\|"failed", wandLeft, result?: {offensive, notSuggestion, hint?, title, text, similar: [Idea]}}` — `notSuggestion` com `hint`: o texto não propõe nada a mudar, e o site mostra a dica sem trocar o texto | `404` inexistente ou de outra conta |
 | PUT | `/api/ideas/{id}/vote` | Bearer | `{value: 1\|-1\|0}` (like, dislike, tirar o voto) | `Idea` atualizada | `400`; `403` na própria ideia; `404`; `409` ideia fora de votação |
 | DELETE | `/api/ideas/{id}` | Bearer + grupo admin | — | `204` — apaga a ideia e os votos; se a ideia for de hoje, o autor pode enviar outra (diferente de `rejected`) | `403` sem o grupo; `404` |
@@ -73,8 +121,8 @@ Base URL: `VITE_SERVER_CENTRAL_URL` no client (`http://localhost:8081` em dev).
 
 `Idea`: `{id, title, body, author, status, score, likes, dislikes, myVote, mine, implementedVersion?, reviewReason?, createdAt}` — `author` é só o primeiro nome do perfil; `score` = likes × 2 − dislikes; `myVote` (1, −1 ou 0) e `mine` dependem do token (0 e falso para visitante); `reviewReason` (`conteudo_ofensivo` ou `verificacao_indisponivel`) só aparece para o admin e para quem escreveu; `feedback` (a dica do que faltou, em ideia descartada) só para quem escreveu. "Auth opcional" em `GET /api/ideas`: sem token a lista é pública; com token vêm o voto e a marca de quem pede. O grupo de admin vem da claim `groups` (scope `ffcom-groups`, pedido só pela home page) e é `ffcom-admins` por padrão (`IDEAS_ADMIN_GROUP`).
 
-| POST | `/api/signup-requests` | — (público) | `{fullName, username, email, nickname, reason, existingAccount, website}` — `website` é isca para robô e deve ir vazio; `username` 3 a 30 de `[a-z0-9._-]` começando por letra ou número, fora da lista de reservados (`admin`, `root`, `ffcom`, `suporte`...; ponto, hífen e sublinhado não contam na comparação); `nickname` 2 a 32; `reason` 10 a 500. Com `existingAccount: true` (a pessoa já tem conta no Authentik), `username` e `nickname` são ignorados | `201` `{status: "pending"}` — o pedido vai ao Telegram para aprovação, com a mesma resposta havendo ou não conta com aquele e-mail | `400` campo inválido (texto diz qual); `409` pedido em aberto ou conta já aprovada com o mesmo e-mail ou usuário, ou usuário já existe no Authentik (sem diferenciar maiúsculas); `429` 3 pedidos do mesmo IP em 24 h ou 20 no total na última hora; `503` cadastro desligado |
-| GET | `/api/signup-requests/username-available?username=` | — (público) | — | `200` `{available, message}` — `message` diz por que não (formato, reservado, pedido em aberto ou aprovado, já existe no Authentik). Só conforto para o formulário: o `POST` confere tudo de novo | `429` mais de 30 consultas por minuto do mesmo IP (burst 10); `503` cadastro desligado ou Authentik sem resposta |
+| POST | `/api/signup-requests` | — (público) | `{fullName, username, email, nickname, reason, existingAccount, website, language?}` — `website` é isca para robô e deve ir vazio; `language` (`pt-BR` ou `en`, outro valor é ignorado) é o idioma do e-mail de definir senha mandado na aprovação e, em conta criada por ela, o `settings.locale` no Authentik; `username` 3 a 30 de `[a-z0-9._-]` começando por letra ou número, fora da lista de reservados (`admin`, `root`, `ffcom`, `suporte`...; ponto, hífen e sublinhado não contam na comparação); `nickname` 2 a 32; `reason` 10 a 500. Com `existingAccount: true` (a pessoa já tem conta no Authentik), `username` e `nickname` são ignorados | `201` `{status: "pending"}` — o pedido vai ao Telegram para aprovação, com a mesma resposta havendo ou não conta com aquele e-mail | `400` campo inválido (texto diz qual); `409` pedido em aberto ou conta já aprovada com o mesmo e-mail ou usuário, ou usuário já existe no Authentik (sem diferenciar maiúsculas); `429` 3 pedidos do mesmo IP em 24 h ou 20 no total na última hora; `503` cadastro desligado |
+| GET | `/api/signup-requests/username-available?username=` | — (público) | — | `200` `{available, message, code?, params?}` — quando `available` é `false`, `code`, `message` e `params` dizem por que não (formato, reservado, pedido em aberto ou aprovado, já existe no Authentik), no mesmo formato dos erros (ver "Erros da API HTTP"). Só conforto para o formulário: o `POST` confere tudo de novo | `429` mais de 30 consultas por minuto do mesmo IP (burst 10); `503` cadastro desligado ou Authentik sem resposta |
 
 Decisão de um pedido de cadastro, no listener interno (porta `CLAUDE_CALLBACK_PORT`, fora do proxy público), chamada pelo `a3s-network-monitor` quando alguém clica nos botões da mensagem no Telegram (`callback_data` `ffcom-signup:approve:<id>` ou `ffcom-signup:reject:<id>`): `POST /internal/signup-requests/{id}/decision`, header `X-FFCom-Secret: <SIGNUP_DECISION_SECRET>`, corpo `{decision: "approve"|"reject", by}` (`by` é quem clicou, até 64 caracteres). Responde `200` `{ok, message}` sempre que o pedido foi tratado, inclusive aprovação que falhou (`ok: false`); `message` cabe no `answerCallbackQuery`. `401` segredo errado, `400` corpo inválido, `404` id inexistente. Quem edita a mensagem do Telegram com a decisão (e tira os botões) é o `server-central`.
 
@@ -92,7 +140,7 @@ Uma conexão por sessão do client, mantida aberta enquanto online; serve **pres
   - `friend.request.removed` — `{"type": "friend.request.removed", "id": "..."}`, para os dois lados quando um pedido pendente é recusado ou cancelado.
   - `friend.accepted` — `{"type": "friend.accepted", "requestId": "...", "accountId": "...", "displayName"?: "..."}`, para os dois lados quando uma amizade passa a valer (pedido aceito ou convite resgatado); `accountId` é o novo amigo de quem recebe o frame.
   - `friend.removed` — `{"type": "friend.removed", "accountId": "..."}`, para os dois lados quando uma amizade é desfeita; `accountId` é o ex-amigo de quem recebe o frame.
-  - `error` — `{"type": "error", "error": "..."}`.
+  - `error` — `{"type": "error", "code": "...", "message": "...", "params"?: {...}, "error": "..."}` (ver "Frame `error` do WebSocket"). Códigos: `dm.send_self`, `dm.nonce_invalid`, `dm.ciphertext_invalid`, `dm.send_friends_only`, `dm.send_failed` e os `realtime.*`.
 
 ### Rate limiting
 
@@ -162,13 +210,13 @@ Mesma rota para canal de **texto** e **forum** (`docs/architecture.md`, "Decisã
 - client → servidor: `thread.create` — `{"type": "thread.create", "title": "...", "content": "..."}` (abre thread + post inicial); `post.create` — `{"type": "post.create", "threadId": "...", "content": "..."}`.
 - servidor → client: `thread.created` — `{"type": "thread.created", "thread": Thread, "message": Message}`; `post.created` — `{"type": "post.created", "message": Message}`.
 
-Em ambos os casos: `error` para conteúdo vazio, acima do limite (mensagem: 4000 chars, título de thread: 200 chars), sem `SendMessages`, thread de outro canal, ou tipo de frame desconhecido. `message.update`/`message.delete` também retornam `error` para mensagem não encontrada, mensagem de outro canal, ou sem autoria/`Administrator`.
+Em ambos os casos: `error` para conteúdo vazio, acima do limite (mensagem: 4000 chars, título de thread: 200 chars), sem `SendMessages`, thread de outro canal, ou tipo de frame desconhecido. `message.update`/`message.delete` também retornam `error` para mensagem não encontrada, mensagem de outro canal, ou sem autoria/`Administrator`. Formato e códigos em "Frame `error` do WebSocket" (`messages.*`, `forum.*`, `realtime.*`).
 
 ### Rate limiting
 
 Dois token buckets em memória, chaves diferentes (ver `docs/architecture.md`, "Decisão: rate limiting em server-channel"):
 - **REST** (toda a API exceto `/healthz`, incluindo o handshake de `GET /api/channels/{id}/ws`): por usuário (`sub` do token verificado; IP quando não há token válido), `RATE_LIMIT_RPM` (padrão 120) / `RATE_LIMIT_BURST` (padrão 60). Orçamento por tela em `docs/rate-limits.md`. Excesso responde `429 Too Many Requests` com header `Retry-After`.
-- **Frames de WebSocket** (dentro de uma conexão de canal já aberta): por membro, `RATE_LIMIT_WS_RPM` (padrão 60) / `RATE_LIMIT_WS_BURST` (padrão 10). Excesso responde com um frame `error` (conexão permanece aberta, frame é descartado).
+- **Frames de WebSocket** (dentro de uma conexão de canal já aberta): por membro, `RATE_LIMIT_WS_RPM` (padrão 60) / `RATE_LIMIT_WS_BURST` (padrão 10). Excesso responde com um frame `error` de código `realtime.rate_limited` (conexão permanece aberta, frame é descartado).
 
 ## Não confirmado / fora do escopo deste documento
 

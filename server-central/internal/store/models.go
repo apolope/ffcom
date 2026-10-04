@@ -15,6 +15,24 @@ type Account struct {
 	// Status escolhido pela pessoa (PresenceStatus*), não o que os amigos
 	// veem: esse depende também das conexões abertas (ver realtime.Hub).
 	PresenceStatus string
+	// Idioma da interface escolhido pela pessoa (um de SupportedLanguages),
+	// nil se nunca escolheu.
+	Language *string
+}
+
+// SupportedLanguages são os idiomas que a conta pode escolher: os arquivos
+// de locales/ na raiz (coluna accounts.language, com o mesmo CHECK). Ver
+// docs/architecture.md, "Decisão: internacionalização".
+var SupportedLanguages = []string{"pt-BR", "en"}
+
+// ValidLanguage diz se lang é um dos SupportedLanguages.
+func ValidLanguage(lang string) bool {
+	for _, l := range SupportedLanguages {
+		if l == lang {
+			return true
+		}
+	}
+	return false
 }
 
 // Status de presença escolhidos pela pessoa (coluna accounts.presence_status).

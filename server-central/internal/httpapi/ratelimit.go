@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"a3sitsolutions.com/ffcom/server-central/internal/apierr"
 )
 
 // rateLimiter é um token bucket por chave (usuário, ou IP sem token válido;
@@ -127,7 +129,7 @@ func withRateLimit(limiter *rateLimiter, identify requestIdentifier, next http.H
 
 		if !limiter.allow(key) {
 			w.Header().Set("Retry-After", "1")
-			http.Error(w, "muitas requisições, tente novamente em instantes", http.StatusTooManyRequests)
+			apierr.Write(w, http.StatusTooManyRequests, "common.rate_limited", "muitas requisições, tente novamente em instantes")
 			return
 		}
 

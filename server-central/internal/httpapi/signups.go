@@ -15,6 +15,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"a3sitsolutions.com/ffcom/server-central/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-central/internal/authentik"
 	"a3sitsolutions.com/ffcom/server-central/internal/store"
 	"a3sitsolutions.com/ffcom/server-central/internal/telegram"
@@ -89,16 +90,16 @@ var reservedUsernames = map[string]bool{
 }
 
 // usernameProblem devolve por que username (já em minúsculas) não pode ser
-// pedido, ou "" se o formato é aceito. Não confere se está em uso.
-func usernameProblem(username string) string {
+// pedido, ou nil se o formato é aceito. Não confere se está em uso.
+func usernameProblem(username string) *apierr.Problem {
 	if !signupUsernamePattern.MatchString(username) {
-		return "o nome de usuário precisa ter de 3 a 30 caracteres: letras minúsculas sem acento, números, ponto, hífen ou sublinhado, começando por letra ou número"
+		return apierr.NewParams("signup.username_format", "o nome de usuário precisa ter de 3 a 30 caracteres: letras minúsculas sem acento, números, ponto, hífen ou sublinhado, começando por letra ou número", apierr.Params{"min": 3, "max": 30})
 	}
 	bare := strings.NewReplacer(".", "", "-", "", "_", "").Replace(username)
 	if reservedUsernames[bare] {
-		return "esse nome de usuário é reservado; escolha outro"
+		return apierr.New("signup.username_reserved", "esse nome de usuário é reservado; escolha outro")
 	}
-	return ""
+	return nil
 }
 
 // cleanLine tira espaços das pontas, junta espaços repetidos e recusa
@@ -165,35 +166,43 @@ type signupBody struct {
 	// Website é um campo escondido no formulário: gente não vê e não
 	// preenche, robô de formulário preenche.
 	Website string `json:"website"`
+	// Language é o idioma do site no envio (site/cadastro.js). Opcional:
+	// valor ausente ou não suportado só deixa o pedido sem idioma, e o
+	// Authentik segue o do navegador.
+	Language string `json:"language"`
 }
 
 // validate devolve o pedido normalizado ou a mensagem do primeiro campo
 // inválido.
-func (b signupBody) validate() (store.NewSignup, string) {
+func (b signupBody) validate() (store.NewSignup, *apierr.Problem) {
 	var n store.NewSignup
 	var ok bool
 	if n.FullName, ok = cleanLine(b.FullName, 2, 80); !ok {
-		return n, "o nome precisa ter entre 2 e 80 caracteres"
+		return n, apierr.NewParams("signup.full_name_length", "o nome precisa ter entre 2 e 80 caracteres", apierr.Params{"min": 2, "max": 80})
 	}
 	n.ExistingAccount = b.ExistingAccount
 	if !n.ExistingAccount {
 		n.Username = strings.ToLower(strings.TrimSpace(b.Username))
-		if problem := usernameProblem(n.Username); problem != "" {
+		if problem := usernameProblem(n.Username); problem != nil {
 			return n, problem
 		}
 	}
 	if n.Email, ok = validEmail(b.Email); !ok {
-		return n, "e-mail inválido"
+		return n, apierr.New("signup.email_invalid", "e-mail inválido")
 	}
 	if !n.ExistingAccount {
 		if n.Nickname, ok = cleanLine(b.Nickname, 2, 32); !ok {
-			return n, "o apelido precisa ter entre 2 e 32 caracteres"
+			return n, apierr.NewParams("signup.nickname_length", "o apelido precisa ter entre 2 e 32 caracteres", apierr.Params{"min": 2, "max": 32})
 		}
 	}
 	if n.Reason, ok = cleanText(b.Reason, 10, 500); !ok {
-		return n, "conte em 10 a 500 caracteres por que quer entrar no FFCom"
+		return n, apierr.NewParams("signup.reason_length", "conte em 10 a 500 caracteres por que quer entrar no FFCom", apierr.Params{"min": 10, "max": 500})
 	}
-	return n, ""
+	if store.ValidLanguage(b.Language) {
+		language := b.Language
+		n.Language = &language
+	}
+	return n, nil
 }
 
 type signupService struct {
@@ -211,12 +220,12 @@ func handleCreateSignup(db *store.Store, cfg SignupConfig) http.Handler {
 	s := newSignupService(db, cfg)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !cfg.enabled() {
-			http.Error(w, "cadastro indisponível no momento", http.StatusServiceUnavailable)
+			apierr.Write(w, http.StatusServiceUnavailable, "signup.unavailable", "cadastro indisponível no momento")
 			return
 		}
 		var body signupBody
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&body); err != nil {
-			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo da requisição inválido")
 			return
 		}
 		if body.Website != "" {
@@ -225,8 +234,8 @@ func handleCreateSignup(db *store.Store, cfg SignupConfig) http.Handler {
 			return
 		}
 		n, problem := body.validate()
-		if problem != "" {
-			http.Error(w, problem, http.StatusBadRequest)
+		if problem != nil {
+			apierr.WriteProblem(w, http.StatusBadRequest, problem)
 			return
 		}
 		n.ClientIP = clientIP(r)
@@ -236,22 +245,22 @@ func handleCreateSignup(db *store.Store, cfg SignupConfig) http.Handler {
 		if count, err := s.signups.CountSince(ctx, n.ClientIP, now.Add(-24*time.Hour)); err != nil {
 			log.Printf("cadastro: %v", err)
 		} else if count >= cfg.MaxPerIPPerDay {
-			http.Error(w, "muitos pedidos saíram desta rede hoje; tente de novo amanhã", http.StatusTooManyRequests)
+			apierr.Write(w, http.StatusTooManyRequests, "signup.ip_daily_limit", "muitos pedidos saíram desta rede hoje; tente de novo amanhã")
 			return
 		}
 		if count, err := s.signups.CountSince(ctx, "", now.Add(-time.Hour)); err != nil {
 			log.Printf("cadastro: %v", err)
 		} else if count >= cfg.MaxPerHour {
-			http.Error(w, "muitos pedidos agora; tente de novo daqui a uma hora", http.StatusTooManyRequests)
+			apierr.Write(w, http.StatusTooManyRequests, "signup.hourly_limit", "muitos pedidos agora; tente de novo daqui a uma hora")
 			return
 		}
 
 		if existing, err := s.signups.OpenOrApprovedFor(ctx, n.Email, n.Username); err == nil {
-			http.Error(w, conflictMessage(existing, n), http.StatusConflict)
+			apierr.WriteProblem(w, http.StatusConflict, conflictProblem(existing, n))
 			return
 		} else if !errors.Is(err, store.ErrNotFound) {
 			log.Printf("cadastro: %v", err)
-			http.Error(w, "erro ao conferir pedidos anteriores", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "signup.previous_check_failed", "erro ao conferir pedidos anteriores")
 			return
 		}
 		// O nome de usuário é público nos apps da instância, então conferir
@@ -262,7 +271,7 @@ func handleCreateSignup(db *store.Store, cfg SignupConfig) http.Handler {
 			if u, err := cfg.Authentik.FindUsername(ctx, n.Username); err != nil {
 				log.Printf("cadastro: conferir usuário no authentik: %v", err)
 			} else if u != nil {
-				http.Error(w, "esse nome de usuário já está em uso; escolha outro", http.StatusConflict)
+				apierr.Write(w, http.StatusConflict, "signup.username_taken", "esse nome de usuário já está em uso; escolha outro")
 				return
 			}
 		}
@@ -273,12 +282,12 @@ func handleCreateSignup(db *store.Store, cfg SignupConfig) http.Handler {
 
 		req, err := s.signups.Create(ctx, n)
 		if errors.Is(err, store.ErrConflict) {
-			http.Error(w, "já existe um pedido em análise com este e-mail ou nome de usuário", http.StatusConflict)
+			apierr.Write(w, http.StatusConflict, "signup.request_pending", "já existe um pedido em análise com este e-mail ou nome de usuário")
 			return
 		}
 		if err != nil {
 			log.Printf("cadastro: %v", err)
-			http.Error(w, "erro ao gravar o pedido", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "signup.save_failed", "erro ao gravar o pedido")
 			return
 		}
 		// Falha no Telegram não perde o pedido: o notificador tenta de novo.
@@ -307,7 +316,10 @@ func (s *signupService) emailAccounts(ctx context.Context, email string) *string
 // para o formulário avisar enquanto a pessoa digita:
 //
 //	GET /api/signup-requests/username-available?username=maria
-//	{"available": false, "message": "esse nome de usuário já está em uso; escolha outro"}
+//	{"available": false, "code": "signup.username_taken", "message": "esse nome de usuário já está em uso; escolha outro"}
+//
+// code, message e params (quando houver) seguem o formato dos erros da API
+// (docs/protocol.md, "Erros da API HTTP"), para o front traduzir o motivo.
 //
 // Público como o envio, e não revela nada que o envio não revele (o nome
 // de usuário é público nos apps da instância). Além do limite geral por
@@ -318,55 +330,66 @@ func handleUsernameAvailable(db *store.Store, cfg SignupConfig) http.Handler {
 	limiter := newRateLimiter(30, 10)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !cfg.enabled() {
-			http.Error(w, "cadastro indisponível no momento", http.StatusServiceUnavailable)
+			apierr.Write(w, http.StatusServiceUnavailable, "signup.unavailable", "cadastro indisponível no momento")
 			return
 		}
 		if !limiter.allow(clientIP(r)) {
 			w.Header().Set("Retry-After", "5")
-			http.Error(w, "muitas consultas; espere um pouco", http.StatusTooManyRequests)
+			apierr.Write(w, http.StatusTooManyRequests, "signup.too_many_checks", "muitas consultas; espere um pouco")
 			return
 		}
 		username := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("username")))
-		answer := func(available bool, message string) {
-			writeJSON(w, http.StatusOK, map[string]any{"available": available, "message": message})
+		answer := func(problem *apierr.Problem) {
+			out := map[string]any{"available": problem == nil, "message": ""}
+			if problem != nil {
+				out["code"] = problem.Code
+				out["message"] = problem.Message
+				if problem.Params != nil {
+					out["params"] = problem.Params
+				}
+			}
+			writeJSON(w, http.StatusOK, out)
 		}
-		if problem := usernameProblem(username); problem != "" {
-			answer(false, problem)
+		if problem := usernameProblem(username); problem != nil {
+			answer(problem)
 			return
 		}
 		ctx := r.Context()
 		if existing, err := s.signups.OpenOrApprovedFor(ctx, "", username); err == nil {
-			answer(false, conflictMessage(existing, store.NewSignup{Username: username}))
+			answer(conflictProblem(existing, store.NewSignup{Username: username}))
 			return
 		} else if !errors.Is(err, store.ErrNotFound) {
 			log.Printf("cadastro: %v", err)
-			http.Error(w, "erro ao conferir o nome", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "signup.username_check_failed", "erro ao conferir o nome")
 			return
 		}
 		u, err := cfg.Authentik.FindUsername(ctx, username)
 		if err != nil {
 			log.Printf("cadastro: conferir usuário no authentik: %v", err)
-			http.Error(w, "não deu para conferir agora", http.StatusServiceUnavailable)
+			apierr.Write(w, http.StatusServiceUnavailable, "signup.check_unavailable", "não deu para conferir agora")
 			return
 		}
 		if u != nil {
-			answer(false, "esse nome de usuário já está em uso; escolha outro")
+			answer(apierr.New("signup.username_taken", "esse nome de usuário já está em uso; escolha outro"))
 			return
 		}
-		answer(true, "")
+		answer(nil)
 	})
 }
 
-// conflictMessage explica por que um pedido novo esbarra em existing.
-func conflictMessage(existing store.SignupRequest, n store.NewSignup) string {
-	field := "este e-mail"
-	if existing.Email != n.Email {
-		field = "este nome de usuário"
+// conflictProblem explica por que um pedido novo esbarra em existing.
+func conflictProblem(existing store.SignupRequest, n store.NewSignup) *apierr.Problem {
+	byEmail := existing.Email == n.Email
+	switch {
+	case existing.Status == store.SignupApproved && byEmail:
+		return apierr.New("signup.email_approved", "já existe uma conta aprovada com este e-mail; confira o e-mail de definir senha ou entre no app")
+	case existing.Status == store.SignupApproved:
+		return apierr.New("signup.username_approved", "já existe uma conta aprovada com este nome de usuário; confira o e-mail de definir senha ou entre no app")
+	case byEmail:
+		return apierr.New("signup.email_pending", "já existe um pedido em análise com este e-mail")
+	default:
+		return apierr.New("signup.username_pending", "já existe um pedido em análise com este nome de usuário")
 	}
-	if existing.Status == store.SignupApproved {
-		return "já existe uma conta aprovada com " + field + "; confira o e-mail de definir senha ou entre no app"
-	}
-	return "já existe um pedido em análise com " + field
 }
 
 // notify manda o pedido ao Telegram e guarda o id da mensagem.
@@ -541,7 +564,9 @@ func (s *signupService) approve(ctx context.Context, id, by string) (bool, strin
 	}
 
 	if linked {
-		// Conta que já existia: tem senha, então não há e-mail a mandar.
+		// Conta que já existia: tem senha, então não há e-mail a mandar. O
+		// idioma do pedido não é gravado nela: a role da conta de serviço
+		// não tem change_user, e o idioma dos e-mails vem da requisição.
 		done, err := s.signups.FinishApproval(ctx, id, user.PK, user.Username, true, nil)
 		if err != nil {
 			log.Printf("cadastro: concluir pedido %s: %v", id, err)
@@ -552,7 +577,11 @@ func (s *signupService) approve(ctx context.Context, id, by string) (bool, strin
 	}
 
 	var warning *string
-	if err := s.cfg.Authentik.SendRecoveryEmail(ctx, user.PK, s.cfg.RecoveryEmailStage, s.cfg.RecoveryTokenDuration); err != nil {
+	language := authentik.DefaultLanguage
+	if req.Language != nil {
+		language = *req.Language
+	}
+	if err := s.cfg.Authentik.SendRecoveryEmail(ctx, user.PK, s.cfg.RecoveryEmailStage, s.cfg.RecoveryTokenDuration, language); err != nil {
 		log.Printf("cadastro: e-mail de senha do pedido %s: %v", id, err)
 		w := "O e-mail de definir senha não saiu; envie pela UI do Authentik (usuário > Enviar link de recuperação)."
 		warning = &w
@@ -633,14 +662,28 @@ func (s *signupService) resolveUser(ctx context.Context, req store.SignupRequest
 		// O nome do Authentik é o que o FFCom exibe em todo lugar (servidores,
 		// amigos, ideias), então vai o apelido; o nome completo fica nos
 		// atributos e no pedido.
-		Name:  req.Nickname,
-		Email: req.Email,
-		Attributes: map[string]any{
-			"ffcom_signup_request": req.ID,
-			"ffcom_full_name":      req.FullName,
-		},
+		Name:       req.Nickname,
+		Email:      req.Email,
+		Attributes: signupAttributes(req),
 	})
 	return user, false, err
+}
+
+// signupAttributes são os atributos do usuário criado pela aprovação. Com o
+// idioma do pedido, settings.locale já nasce nele (criar já é permitido à
+// conta de serviço; alterar depois não é). O e-mail de definir senha não
+// depende disso, porque leva o idioma no Accept-Language (ver
+// authentik.Client.SendRecoveryEmail), mas o settings.locale vale para o que
+// o Authentik mandar fora de uma requisição HTTP.
+func signupAttributes(req store.SignupRequest) map[string]any {
+	attrs := map[string]any{
+		"ffcom_signup_request": req.ID,
+		"ffcom_full_name":      req.FullName,
+	}
+	if req.Language != nil {
+		attrs["settings"] = map[string]any{"locale": *req.Language}
+	}
+	return attrs
 }
 
 func (s *signupService) addToGroup(ctx context.Context, userPK int64) error {
@@ -697,7 +740,7 @@ func registerSignupDecision(mux *http.ServeMux, db *store.Store, cfg SignupConfi
 	mux.HandleFunc("POST /internal/signup-requests/{id}/decision", func(w http.ResponseWriter, r *http.Request) {
 		secret := r.Header.Get("X-FFCom-Secret")
 		if cfg.DecisionSecret == "" || subtle.ConstantTimeCompare([]byte(secret), []byte(cfg.DecisionSecret)) != 1 {
-			http.Error(w, "segredo inválido", http.StatusUnauthorized)
+			apierr.Write(w, http.StatusUnauthorized, "auth.secret_invalid", "segredo inválido")
 			return
 		}
 		id := r.PathValue("id")
@@ -710,7 +753,7 @@ func registerSignupDecision(mux *http.ServeMux, db *store.Store, cfg SignupConfi
 			By       string `json:"by"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&body); err != nil {
-			http.Error(w, "corpo inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo da requisição inválido")
 			return
 		}
 		by, _ := cleanLine(body.By, 0, 64)
@@ -729,7 +772,7 @@ func registerSignupDecision(mux *http.ServeMux, db *store.Store, cfg SignupConfi
 		case "reject":
 			ok, message = s.reject(ctx, id, by)
 		default:
-			http.Error(w, "decision deve ser approve ou reject", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "signup.decision_invalid", "decision deve ser approve ou reject")
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"ok": ok, "message": message})

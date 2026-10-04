@@ -19,8 +19,8 @@ import (
 func TestSignupValidate(t *testing.T) {
 	ok := signupBody{FullName: "  Maria   da Silva ", Username: "Maria.Silva", Email: " Maria@Exemplo.com.br ", Nickname: "Mari", Reason: "Um amigo me indicou\r\n\r\npara jogar"}
 	n, problem := ok.validate()
-	if problem != "" {
-		t.Fatalf("pedido válido recusado: %s", problem)
+	if problem != nil {
+		t.Fatalf("pedido válido recusado: %+v", problem)
 	}
 	if n.FullName != "Maria da Silva" || n.Username != "maria.silva" || n.Email != "maria@exemplo.com.br" || n.Reason != "Um amigo me indicou\npara jogar" {
 		t.Fatalf("normalização errada: %+v", n)
@@ -41,7 +41,7 @@ func TestSignupValidate(t *testing.T) {
 		{FullName: "Maria", Email: "m@x.com", Reason: "motivo suficiente"},
 	}
 	for i, b := range bad {
-		if _, problem := b.validate(); problem == "" {
+		if _, problem := b.validate(); problem == nil {
 			t.Errorf("caso %d deveria ser recusado: %+v", i, b)
 		}
 	}
@@ -50,8 +50,19 @@ func TestSignupValidate(t *testing.T) {
 	// descartados.
 	existing := signupBody{FullName: "Maria", Username: "admin", Email: "m@x.com", Nickname: "x", Reason: "motivo suficiente", ExistingAccount: true}
 	n, problem = existing.validate()
-	if problem != "" || n.Username != "" || n.Nickname != "" || !n.ExistingAccount {
-		t.Fatalf("pedido de quem já tem conta: %q %+v", problem, n)
+	if problem != nil || n.Username != "" || n.Nickname != "" || !n.ExistingAccount {
+		t.Fatalf("pedido de quem já tem conta: %+v %+v", problem, n)
+	}
+
+	// Idioma é opcional: só os suportados são guardados, o resto vira nil
+	// sem recusar o pedido.
+	for lang, want := range map[string]string{"en": "en", "pt-BR": "pt-BR", "fr": "", "": "", "pt": ""} {
+		b := ok
+		b.Language = lang
+		n, problem := b.validate()
+		if problem != nil || (want == "") != (n.Language == nil) || (n.Language != nil && *n.Language != want) {
+			t.Errorf("idioma %q: %+v %v", lang, problem, n.Language)
+		}
 	}
 }
 
@@ -108,6 +119,34 @@ type fakeAuthentik struct {
 	members   map[int64]bool
 	recovery  []int64
 	failEmail bool
+	// recoveryLang guarda o Accept-Language de cada e-mail de senha, que é
+	// de onde o Authentik tira o idioma do e-mail.
+	recoveryLang []string
+	// patches conta as tentativas de alterar um usuário, que a role da
+	// conta de serviço não permite (o fake responde 403, como o Authentik).
+	patches int
+}
+
+// userIndex devolve a posição do usuário pk em f.users, ou -1.
+func (f *fakeAuthentik) userIndex(pk int64) int {
+	for i, u := range f.users {
+		if u.PK == pk {
+			return i
+		}
+	}
+	return -1
+}
+
+// locale devolve o settings.locale do usuário pk.
+func (f *fakeAuthentik) locale(pk int64) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if i := f.userIndex(pk); i >= 0 {
+		settings, _ := f.users[i].Attributes["settings"].(map[string]any)
+		locale, _ := settings["locale"].(string)
+		return locale
+	}
+	return ""
 }
 
 func (f *fakeAuthentik) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -158,7 +197,8 @@ func (f *fakeAuthentik) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			TokenDuration string `json:"token_duration"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		if f.failEmail || body.EmailStage != "stage-uuid" || body.TokenDuration != "days=3" {
+		lang := r.Header.Get("Accept-Language")
+		if f.failEmail || body.EmailStage != "stage-uuid" || body.TokenDuration != "days=3" || (lang != "pt-BR" && lang != "en") {
 			w.WriteHeader(http.StatusBadRequest)
 			fmt.Fprint(w, `{"non_field_errors":["sem fluxo de recuperação"]}`)
 			return
@@ -166,7 +206,12 @@ func (f *fakeAuthentik) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var pk int64
 		fmt.Sscanf(strings.TrimPrefix(path, "/core/users/"), "%d", &pk)
 		f.recovery = append(f.recovery, pk)
+		f.recoveryLang = append(f.recoveryLang, lang)
 		w.WriteHeader(http.StatusNoContent)
+	case strings.HasPrefix(path, "/core/users/") && (r.Method == http.MethodPatch || r.Method == http.MethodPut):
+		// A role ffcom-signup não tem change_user.
+		f.patches++
+		w.WriteHeader(http.StatusForbidden)
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}
@@ -215,13 +260,14 @@ func TestSignupEndToEnd(t *testing.T) {
 		return post(map[string]any{
 			"fullName": "Maria da Silva", "username": username, "email": email,
 			"nickname": "Mari", "reason": "Um amigo me chamou para o servidor", "website": website,
+			"language": "en",
 		})
 	}
 	signupExisting := func(email string) *httptest.ResponseRecorder {
 		t.Helper()
 		return post(map[string]any{
 			"fullName": "Bia Souza", "email": email, "existingAccount": true,
-			"reason": "Já uso outro serviço da infra e quero o FFCom",
+			"reason": "Já uso outro serviço da infra e quero o FFCom", "language": "pt-BR",
 		})
 	}
 	decide := func(id, decision, secret string) (int, map[string]any) {
@@ -295,6 +341,14 @@ func TestSignupEndToEnd(t *testing.T) {
 	if len(ak.users) != 1 || ak.users[0].Username != userA || ak.users[0].Attributes["name"] != "Mari" || !ak.members[1] || len(ak.recovery) != 1 {
 		t.Fatalf("authentik depois de aprovar: %+v %v %v", ak.users, ak.members, ak.recovery)
 	}
+	// O idioma do pedido já nasce no usuário, e o e-mail de senha sai nele
+	// (pelo Accept-Language da chamada).
+	if got := ak.locale(1); got != "en" {
+		t.Fatalf("settings.locale do usuário criado: %q", got)
+	}
+	if len(ak.recoveryLang) != 1 || ak.recoveryLang[0] != "en" {
+		t.Fatalf("Accept-Language do e-mail de senha: %v", ak.recoveryLang)
+	}
 	if len(tg.edited) != 1 || tg.edited[0]["reply_markup"] != nil || !strings.Contains(tg.edited[0]["text"].(string), "Aprovado") {
 		t.Fatalf("edição da mensagem: %v", tg.edited)
 	}
@@ -311,11 +365,12 @@ func TestSignupEndToEnd(t *testing.T) {
 	}
 
 	// Pedido de novo com o e-mail aprovado: conflito explicando.
-	if rec := signup("maria2"+suffix, emailA, ""); rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "aprovada") {
+	if rec := signup("maria2"+suffix, emailA, ""); rec.Code != http.StatusConflict || errorCode(t, rec) != "signup.email_approved" {
 		t.Fatalf("pedido com e-mail aprovado: %d %s", rec.Code, rec.Body.String())
 	}
-	// Nome de usuário que já existe no Authentik: recusado na hora.
-	if rec := signup(userA, "novo"+suffix+"@exemplo.com", ""); rec.Code != http.StatusConflict {
+	// Nome de usuário que já existe no Authentik: recusado na hora (o pedido
+	// aprovado com esse nome responde antes da consulta ao Authentik).
+	if rec := signup(userA, "novo"+suffix+"@exemplo.com", ""); rec.Code != http.StatusConflict || errorCode(t, rec) != "signup.username_approved" {
 		t.Fatalf("usuário existente: %d %s", rec.Code, rec.Body.String())
 	}
 
@@ -360,7 +415,8 @@ func TestSignupEndToEnd(t *testing.T) {
 	// sem e-mail de senha (a conta já tem uma).
 	ip = "c-" + suffix
 	ak.failEmail = false
-	ak.users = append(ak.users, authentik.User{PK: 99, Username: "Outro-Projeto" + suffix, Email: "Bia" + suffix + "@Exemplo.com", IsActive: true, Type: "internal"})
+	ak.users = append(ak.users, authentik.User{PK: 99, Username: "Outro-Projeto" + suffix, Email: "Bia" + suffix + "@Exemplo.com", IsActive: true, Type: "internal",
+		Attributes: map[string]any{"settings": map[string]any{"locale": "de", "theme": "dark"}}})
 	if rec := signup("bia"+suffix, "bia"+suffix+"@exemplo.com", ""); rec.Code != http.StatusCreated {
 		t.Fatalf("cadastro D: %d %s", rec.Code, rec.Body.String())
 	}
@@ -375,6 +431,10 @@ func TestSignupEndToEnd(t *testing.T) {
 	}
 	if len(ak.users) != usersBefore || !ak.members[99] || len(ak.recovery) != recoveryBefore {
 		t.Fatalf("vincular conta existente: %d usuários, grupo %v, %d e-mails", len(ak.users), ak.members, len(ak.recovery))
+	}
+	// A conta existente não é alterada: fica com o idioma que já tinha.
+	if got := ak.locale(99); got != "de" {
+		t.Fatalf("idioma da conta existente mudou: %q", got)
 	}
 	last := tg.edited[len(tg.edited)-1]
 	if last["reply_markup"] != nil || !strings.Contains(last["text"].(string), "Conta existente") {
@@ -402,6 +462,11 @@ func TestSignupEndToEnd(t *testing.T) {
 	}
 	if _, out := decide(idFrom(data[0]), "approve", "segredo"); out["ok"] != true || !ak.members[98] {
 		t.Fatalf("aprovar quem tem conta: %v %v", out, ak.members)
+	}
+	// Conta existente sem idioma no Authentik continua sem: nada tenta
+	// alterá-la (a conta de serviço não tem change_user).
+	if got := ak.locale(98); got != "" || ak.patches != 0 {
+		t.Fatalf("conta existente alterada: locale %q, %d tentativas", got, ak.patches)
 	}
 
 	// Diz ter conta, mas o e-mail não é de nenhuma: avisado no envio, e a
@@ -469,25 +534,62 @@ func TestSignupEndToEnd(t *testing.T) {
 		public.ServeHTTP(rec, req)
 		var out struct {
 			Available bool   `json:"available"`
+			Code      string `json:"code"`
 			Message   string `json:"message"`
 		}
 		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 			t.Fatalf("disponibilidade de %s: %d %s", username, rec.Code, rec.Body.String())
 		}
-		return out.Available, out.Message
+		if out.Available != (out.Code == "") || out.Available != (out.Message == "") {
+			t.Errorf("disponibilidade de %s: code e message não batem com available: %s", username, rec.Body.String())
+		}
+		return out.Available, out.Code
 	}
 	for username, want := range map[string]string{
 		"livre" + suffix:                       "",
 		"Livre" + suffix:                       "",
-		"ad-min":                               "reservado",
-		"x":                                    "de 3 a 30",
-		"outro-projeto" + suffix:               "em uso",
-		"ana" + suffix:                         "em análise",
-		strings.ToUpper(userA[:1]) + userA[1:]: "aprovada",
+		"ad-min":                               "signup.username_reserved",
+		"x":                                    "signup.username_format",
+		"outro-projeto" + suffix:               "signup.username_taken",
+		"ana" + suffix:                         "signup.username_pending",
+		strings.ToUpper(userA[:1]) + userA[1:]: "signup.username_approved",
 	} {
-		ok, message := available(username)
-		if ok != (want == "") || !strings.Contains(message, want) {
-			t.Errorf("disponibilidade de %s: %v %q, esperava %q", username, ok, message, want)
+		ok, code := available(username)
+		if ok != (want == "") || code != want {
+			t.Errorf("disponibilidade de %s: %v %q, esperava %q", username, ok, code, want)
 		}
+	}
+}
+
+// errorCode lê o code de uma resposta de erro no formato de apierr.
+func errorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
+	t.Helper()
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Fatalf("erro sem Content-Type JSON (%q): %s", ct, rec.Body.String())
+	}
+	var out struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil || out.Code == "" || out.Message == "" {
+		t.Fatalf("erro fora do formato {code, message}: %s", rec.Body.String())
+	}
+	return out.Code
+}
+
+// Sem idioma (pedido antigo, sem language), o e-mail de senha sai em pt-BR.
+func TestSendRecoveryEmailDefaultLanguage(t *testing.T) {
+	ak := &fakeAuthentik{members: map[int64]bool{}}
+	akSrv := httptest.NewServer(ak)
+	t.Cleanup(akSrv.Close)
+	client := authentik.New(akSrv.URL, "ak-token")
+	if err := client.SendRecoveryEmail(t.Context(), 5, "stage-uuid", "days=3", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.SendRecoveryEmail(t.Context(), 5, "stage-uuid", "days=3", "en"); err != nil {
+		t.Fatal(err)
+	}
+	if len(ak.recoveryLang) != 2 || ak.recoveryLang[0] != "pt-BR" || ak.recoveryLang[1] != "en" {
+		t.Fatalf("Accept-Language: %v", ak.recoveryLang)
 	}
 }

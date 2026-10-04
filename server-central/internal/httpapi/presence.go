@@ -9,6 +9,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"a3sitsolutions.com/ffcom/server-central/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-central/internal/auth"
 	"a3sitsolutions.com/ffcom/server-central/internal/realtime"
 	"a3sitsolutions.com/ffcom/server-central/internal/store"
@@ -45,13 +46,13 @@ func handlePresenceSnapshot(hub *realtime.Hub, friendships *store.FriendshipStor
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
-			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.account_missing", "conta não encontrada no contexto")
 			return
 		}
 
 		friendIDs, err := friendships.AcceptedFriendIDs(r.Context(), account.ID)
 		if err != nil {
-			http.Error(w, "erro ao buscar amigos", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "friends.fetch_failed", "erro ao buscar amigos")
 			return
 		}
 
@@ -79,7 +80,7 @@ func handlePresenceWS(hub *realtime.Hub, friendships *store.FriendshipStore, dir
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
-			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.account_missing", "conta não encontrada no contexto")
 			return
 		}
 
@@ -96,15 +97,15 @@ func handlePresenceWS(hub *realtime.Hub, friendships *store.FriendshipStore, dir
 
 		go client.WritePump()
 		client.ReadPump(func(raw []byte) {
-			frameType, err := realtime.FrameType(raw)
-			if err != nil {
-				client.SendError(err.Error())
+			frameType, prob := realtime.FrameType(raw)
+			if prob != nil {
+				client.SendError(prob)
 				return
 			}
 			if frameType == realtime.TypePresenceIdle {
-				idle, err := realtime.DecodeIncomingPresenceIdle(raw)
-				if err != nil {
-					client.SendError(err.Error())
+				idle, prob := realtime.DecodeIncomingPresenceIdle(raw)
+				if prob != nil {
+					client.SendError(prob)
 					return
 				}
 				broadcastIfChanged(hub, friendships, account.ID)(hub.SetIdle(account.ID, client, idle.Idle))
@@ -166,22 +167,22 @@ func handleSetPresenceStatus(hub *realtime.Hub, accounts *store.AccountStore, fr
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
-			http.Error(w, "conta não encontrada no contexto", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "common.account_missing", "conta não encontrada no contexto")
 			return
 		}
 
 		var body setPresenceStatusRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "corpo da requisição inválido", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "common.invalid_body", "corpo da requisição inválido")
 			return
 		}
 		if !store.ValidPresenceStatus(body.Status) {
-			http.Error(w, "status precisa ser online, busy, away ou invisible", http.StatusBadRequest)
+			apierr.Write(w, http.StatusBadRequest, "presence.status_invalid", "status precisa ser online, busy, away ou invisible")
 			return
 		}
 
 		if err := accounts.SetPresenceStatus(r.Context(), account.ID, body.Status); err != nil {
-			http.Error(w, "erro ao salvar status", http.StatusInternalServerError)
+			apierr.Write(w, http.StatusInternalServerError, "presence.save_failed", "erro ao salvar status")
 			return
 		}
 		broadcastIfChanged(hub, friendships, account.ID)(hub.SetChosen(account.ID, body.Status))
