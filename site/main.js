@@ -33,50 +33,51 @@
     aoAparecer(el, () => el.classList.add('visivel'), '0px 0px -60px 0px');
   });
 
-  // Chat do mock: alguém digita, a mensagem chega, a mais antiga sai. Nome
-  // e texto são chaves do arquivo de idioma (site.mock.*), marcadas com
-  // data-i18n para acompanhar a troca de idioma.
+  // Chat do mock: a mensagem chega, a mais antiga sai. Mesmo desenho do
+  // canal de texto do app (client/src/components/TextChannelView.tsx): nome,
+  // hora e texto na mesma linha, sem avatar e sem "digitando", que o app não
+  // tem. Nome e texto são chaves do arquivo de idioma (site.mock.*),
+  // marcadas com data-i18n para acompanhar a troca de idioma.
   const chat = document.getElementById('mock-chat');
-  const digitando = document.getElementById('mock-digitando');
+  const form = document.getElementById('mock-form');
   const conversa = [
-    ['site.mock.people.ana', '#e8590c', 'site.mock.chat1'],
-    ['site.mock.people.marina', '#3ba55c', 'site.mock.chat2'],
-    ['site.mock.people.beto', '#faa61a', 'site.mock.chat3'],
-    ['site.mock.people.lucas', '#aa3bff', 'site.mock.chat4'],
-    ['site.mock.people.ana', '#e8590c', 'site.mock.chat5'],
-    ['site.mock.people.marina', '#3ba55c', 'site.mock.chat6'],
+    ['site.mock.people.ana', 'site.mock.chat1'],
+    ['site.mock.people.marina', 'site.mock.chat2'],
+    ['site.mock.people.beto', 'site.mock.chat3'],
+    ['site.mock.people.lucas', 'site.mock.chat4'],
+    ['site.mock.people.ana', 'site.mock.chat5'],
+    ['site.mock.people.marina', 'site.mock.chat6'],
   ];
 
-  const novaMensagem = ([chaveNome, cor, chaveTexto]) => {
-    const nome = t(chaveNome);
+  // Relógio de mentira, seguindo as mensagens fixas do HTML (até 19:55).
+  let minutos = 19 * 60 + 56;
+  const hora = () => {
+    const h = String(Math.floor(minutos / 60) % 24).padStart(2, '0');
+    const m = String(minutos % 60).padStart(2, '0');
+    minutos += 1 + Math.floor(Math.random() * 2);
+    return `${h}:${m}`;
+  };
+
+  const novaMensagem = ([chaveNome, chaveTexto]) => {
     const msg = document.createElement('div');
     msg.className = 'mock-msg entrando';
-    const av = document.createElement('span');
-    av.className = 'av';
-    av.style.setProperty('--c', cor);
-    av.textContent = nome[0];
-    const corpo = document.createElement('div');
     const b = document.createElement('b');
-    b.textContent = nome;
+    b.textContent = t(chaveNome);
     b.dataset.i18n = chaveNome;
-    const p = document.createElement('p');
-    p.textContent = t(chaveTexto);
-    p.dataset.i18n = chaveTexto;
-    corpo.append(b, p);
-    msg.append(av, corpo);
+    const quando = document.createElement('time');
+    quando.textContent = hora();
+    const texto = document.createElement('span');
+    texto.textContent = t(chaveTexto);
+    texto.dataset.i18n = chaveTexto;
+    msg.append(b, quando, texto);
     return msg;
   };
 
   const rodarChat = async () => {
     let i = 0;
     for (;;) {
-      if (document.hidden) { await espera(1000); continue; }
-      const item = conversa[i % conversa.length];
-      digitando.querySelector('b').textContent = t(item[0]);
-      digitando.classList.add('ativo');
-      await espera(1600 + Math.random() * 900);
-      digitando.classList.remove('ativo');
-
+      await espera(2600 + Math.random() * 1600);
+      if (document.hidden) continue;
       const msgs = chat.querySelectorAll('.mock-msg');
       if (msgs.length >= 3) {
         const velha = msgs[0];
@@ -84,12 +85,11 @@
         await espera(280);
         velha.remove();
       }
-      digitando.before(novaMensagem(item));
+      form.before(novaMensagem(conversa[i % conversa.length]));
       i += 1;
-      await espera(2200 + Math.random() * 1200);
     }
   };
-  if (chat && digitando) i18n.ready.then(() => aoAparecer(chat, rodarChat));
+  if (chat && form) i18n.ready.then(() => aoAparecer(chat, rodarChat));
 
   // Terminal: digita os comandos e solta a saída, como numa instalação real.
   const code = document.getElementById('terminal-code');
