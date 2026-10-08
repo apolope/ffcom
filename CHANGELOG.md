@@ -15,6 +15,12 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## client v0.23.0 · 2026-10-08
+- Em chamada, quem está falando ganha um anel verde: no ícone do microfone, na tela da chamada, e no avatar, na lista da sala na barra lateral.
+- A lista de quem está em cada sala de voz, na barra lateral, não muda mais de ordem sozinha: as pessoas aparecem em ordem alfabética.
+- As mensagens dos canais de texto e de fórum mostram o nome de quem enviou, em vez de um pedaço do id.
+- Passar o mouse sobre uma mensagem com imagem não abre mais um espaço vazio abaixo dela: os botões Editar e Apagar aparecem por cima, no canto.
+
 ## site v0.8.0 · 2026-10-03
 - O site agora tem versão em inglês: abre no idioma do seu navegador (português para quem usa português, inglês para os demais) e dá para trocar no rodapé.
 - O histórico de versões, o cadastro e a área de ideias também aparecem em inglês, inclusive os avisos de erro.

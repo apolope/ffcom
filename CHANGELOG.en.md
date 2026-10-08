@@ -15,6 +15,12 @@ One section per published tag, in the exact format below (the site and the CI ch
 
 `<component>` is one of: `client` (the app), `central` (server-central), `channel` (server-channel), `channel-image` (the server-channel container image), `site` (this home page). Items accept `code` in backticks and **bold**. Text outside the sections (like this) is ignored by the site.
 
+## client v0.23.0 · 2026-10-08
+- In a call, whoever is speaking gets a green ring: around the microphone icon on the call screen, and around their avatar in the room list in the sidebar.
+- The list of who is in each voice room, in the sidebar, no longer reorders itself: people are listed alphabetically.
+- Messages in text and forum channels show the sender's name instead of part of their id.
+- Hovering over a message with an image no longer opens an empty gap below it: the Edit and Delete buttons appear on top, in the corner.
+
 ## site v0.8.0 · 2026-10-03
 - The site now has an English version: it opens in your browser language (Portuguese for Portuguese speakers, English for everyone else) and you can switch it in the footer.
 - The version history, the sign-up form and the ideas area also show up in English, error notices included.
