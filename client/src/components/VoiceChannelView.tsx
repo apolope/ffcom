@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { participantAudioOf } from '../lib/participantAudio'
 import { formatNumber } from '../lib/format'
+import { isAndroidApp } from '../lib/platform'
 import { formatShortcut } from '../lib/shortcut'
 import { MuteShortcutSetting } from './MuteShortcutSetting'
 import { ParticipantVolumeControls } from './ParticipantVolumeControls'
@@ -279,7 +280,9 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
               />
               {t('voice.soundOnJoinLeave')}
             </label>
-            {voicePrefs.pushToTalk ? (
+            {/* Atalhos de teclado não existem no app Android: lá o apertar
+                para falar é só o botão "Segure para falar". */}
+            {isAndroidApp() ? null : voicePrefs.pushToTalk ? (
               <>
                 <MuteShortcutSetting
                   label={t('voice.shortcut.pushToTalkLabel')}

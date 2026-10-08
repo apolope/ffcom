@@ -238,3 +238,172 @@ jobs:
               await github.rest.repos.updateReleaseAsset({ owner, repo, asset_id: uploaded[name], name });
             }
             core.info(`índice publicado em ${rel.html_url}`);
+
+  # App Android (ver docs/android-runbook.md e docs/architecture.md, "Decisão:
+  # app Android com Capacitor (fase 1)"). Em paralelo ao desktop-windows e com
+  # o mesmo modelo: APK na release da versão e índice fixo android-stable. A
+  # WebView do app carrega o client publicado (capacitor.config.ts), então o
+  # dist/ embutido no APK é só o fallback do Capacitor. Só em tag.
+  android:
+    name: App Android
+    needs: [security-scan, changelog, locales]
+    if: startsWith(github.ref, 'refs/tags/client-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - uses: android-actions/setup-android@v4
+
+      # versionCode = X*1000000 + Y*1000 + Z: sempre crescente entre versões,
+      # como o Android exige para instalar por cima (Y e Z abaixo de 1000).
+      - name: Versão
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/client-}"
+          NUMBER="${TAG#v}"
+          if ! [[ "$NUMBER" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || [ "${BASH_REMATCH[2]}" -ge 1000 ] || [ "${BASH_REMATCH[3]}" -ge 1000 ]; then
+            echo "::error::Tag client-${TAG} fora do formato X.Y.Z (Y e Z abaixo de 1000) que o versionCode do APK exige."
+            exit 1
+          fi
+          CODE=$(( 10#${BASH_REMATCH[1]} * 1000000 + 10#${BASH_REMATCH[2]} * 1000 + 10#${BASH_REMATCH[3]} ))
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "number=${NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "code=${CODE}" >> "$GITHUB_OUTPUT"
+
+      # Chave de assinatura do APK (docs/android-runbook.md, "Pré-requisitos
+      # manuais"). Sem ela o job falha: um APK assinado com outra chave não
+      # instala por cima do que as pessoas já têm.
+      - name: Keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          missing=()
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            [ -n "${!name}" ] || missing+=("$name")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Faltam os secrets do APK: ${missing[*]}. Ver docs/android-runbook.md, Pré-requisitos manuais, item 1."
+            exit 1
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/ffcom-android.jks"
+          echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/ffcom-android.jks" >> "$GITHUB_ENV"
+
+      # As senhas e o alias vão por variável de ambiente para o signingConfigs
+      # do android/app/build.gradle, que só assina com ANDROID_KEYSTORE_FILE
+      # definido (passo anterior).
+      - name: Build do APK
+        working-directory: client
+        env:
+          VITE_APP_VERSION: ${{ steps.version.outputs.tag }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          npm ci
+          npm run build
+          npx cap sync android
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon \
+            "-PffcomVersionName=${{ steps.version.outputs.number }}" \
+            "-PffcomVersionCode=${{ steps.version.outputs.code }}"
+
+      # Confere a assinatura e monta os arquivos da release: o APK com a
+      # versão no nome, a cópia com nome estável para o site e o latest.json
+      # que o app vai consultar (fase 2 do runbook), apontando para o APK da
+      # release da versão, como o latest.yml do desktop.
+      - name: APK e latest.json
+        env:
+          NUMBER: ${{ steps.version.outputs.number }}
+          CODE: ${{ steps.version.outputs.code }}
+          BASE: https://github.com/${{ github.repository }}/releases/download/client-${{ steps.version.outputs.tag }}
+        run: |
+          APK=client/android/app/build/outputs/apk/release/app-release.apk
+          APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner"
+          "$APKSIGNER" verify --print-certs "$APK"
+          mkdir -p android-release
+          cp "$APK" "android-release/FFCom-${NUMBER}.apk"
+          cp "$APK" android-release/FFCom.apk
+          SHA256=$(sha256sum "$APK" | cut -d' ' -f1)
+          jq -n --arg version "$NUMBER" --argjson versionCode "$CODE" \
+            --arg url "${BASE}/FFCom-${NUMBER}.apk" --arg sha256 "$SHA256" \
+            '{version: $version, versionCode: $versionCode, url: $url, sha256: $sha256}' > android-release/latest.json
+          cat android-release/latest.json
+
+      # Mesmo texto e mesma release do desktop-windows: quem chegar primeiro
+      # cria, e o outro só anexa o seu arquivo (a action trata a corrida).
+      - name: Notas da versão
+        run: bash scripts/changelog-notes.sh "client-${{ steps.version.outputs.tag }}" > "$RUNNER_TEMP/release-notes.md"
+
+      - name: Release da versão
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: client-${{ steps.version.outputs.tag }}
+          name: FFCom ${{ steps.version.outputs.tag }}
+          body_path: ${{ runner.temp }}/release-notes.md
+          files: android-release/FFCom-${{ steps.version.outputs.number }}.apk
+          fail_on_unmatched_files: true
+          make_latest: false
+
+      # Release fixa lida pelo app (latest.json) e pelo botão de download do
+      # site (FFCom.apk, nome estável). Pre-release, como a desktop-stable, e
+      # com a mesma troca por nome temporário para o download não ficar em 404
+      # durante o upload.
+      - name: Índice android-stable
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const { owner, repo } = context.repo;
+            const tag = 'android-stable';
+            let rel;
+            try {
+              rel = (await github.rest.repos.getReleaseByTag({ owner, repo, tag })).data;
+            } catch (e) {
+              if (e.status !== 404) throw e;
+              rel = (await github.rest.repos.createRelease({
+                owner, repo, tag_name: tag, target_commitish: context.sha,
+                name: 'App Android: versão atual',
+                body: 'Índice (latest.json) lido pelo app Android para se atualizar e APK com nome fixo (FFCom.apk) para o botão de download do site. Não é uma versão; ver docs/android-runbook.md e docs/architecture.md, "Decisão: app Android com Capacitor (fase 1)".',
+                prerelease: true, make_latest: 'false',
+              })).data;
+            }
+
+            const finals = ['latest.json', 'FFCom.apk'];
+            const suffix = `.new-${context.runId}`;
+            const uploaded = {};
+            for (const name of finals) {
+              const data = fs.readFileSync(`android-release/${name}`);
+              const res = await github.rest.repos.uploadReleaseAsset({
+                owner, repo, release_id: rel.id, name: name + suffix, data,
+                headers: { 'content-type': 'application/octet-stream', 'content-length': data.length },
+              });
+              uploaded[name] = res.data.id;
+            }
+
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets, { owner, repo, release_id: rel.id, per_page: 100 });
+            for (const a of assets) {
+              const stale = finals.includes(a.name) || (/\.new-\d+$/.test(a.name) && !a.name.endsWith(suffix));
+              if (stale) await github.rest.repos.deleteReleaseAsset({ owner, repo, asset_id: a.id });
+            }
+            for (const name of finals) {
+              await github.rest.repos.updateReleaseAsset({ owner, repo, asset_id: uploaded[name], name });
+            }
+            core.info(`índice publicado em ${rel.html_url}`);

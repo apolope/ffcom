@@ -290,5 +290,5 @@ O usuário escolhe o idioma e tudo muda junto: telas, mensagens de erro, notific
 
 ## Fora de escopo da v1 (registrado para não esquecer)
 
-- [ ] Cliente mobile: app Android em andamento, ver o passo a passo e as decisões em [`docs/android-runbook.md`](docs/android-runbook.md) (fases 1 a 6)
+- [ ] Cliente mobile: app Android em andamento, ver o passo a passo e as decisões em [`docs/android-runbook.md`](docs/android-runbook.md) (fases 1 a 6). **Fase 1 feita em 2026-10-08** (casca Capacitor em `client/android/`, permissões, voltar que minimiza, ícone e splash, job `android` no `deploy-ffcom-client.yml` com o índice `android-stable`; ver "Decisão: app Android com Capacitor (fase 1)"). Verificado só com `assembleDebug`, sem aparelho. Falta antes da próxima tag `client-v*`: gerar a keystore e cadastrar os secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` e `ANDROID_KEY_PASSWORD` (sem eles o job `android` falha); depois, o "Conferir" da fase 1 num aparelho
 - [ ] Federação entre instâncias de `server-central`
