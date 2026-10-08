@@ -139,6 +139,7 @@
     "openNav": "Open servers and channels"
   },
   "channels": {
+    "dragToMoveMember": "Drag to another voice room",
     "title": "Channels",
     "uncategorized": "Channels",
     "loadFailed": "failed to load categories/channels",
@@ -256,6 +257,11 @@
       "desktop": "The key also works with the app in the background, without blocking it in other programs.",
       "browser": "In the browser, it only works while this window is focused."
     },
+    "mic": {
+      "permissionDenied": "Microphone permission denied by the browser. You are in the room listening only.",
+      "notFound": "No microphone found. You are in the room listening only: connect a microphone and turn it on with the microphone button.",
+      "inUse": "The microphone is in use by another application. You are in the room listening only."
+    },
     "camera": {
       "permissionDenied": "Camera permission denied by the browser.",
       "notFound": "No camera found.",
@@ -305,6 +311,7 @@
       "noBans": "Nobody is banned."
     },
     "permissions": {
+      "moveMembers": "Move members between voice rooms",
       "viewChannels": "View channels",
       "sendMessages": "Send messages",
       "voice": "Connect and speak in voice",
@@ -333,6 +340,7 @@
     }
   },
   "notifications": {
+    "moveMemberFailed": "Could not move the person to another room.",
     "title": "Notifications",
     "serverOrderSaveFailed": "Failed to save the server order. Retrying…",
     "structureOrderSaveFailed": "Failed to save the category and channel order. Retrying…",
@@ -651,6 +659,9 @@
     "voice": {
       "connect_denied": "no permission to join this voice channel",
       "livekit_unavailable": "LiveKit unavailable",
+      "move_denied": "no permission to move members between these voice channels",
+      "move_invalid": "provide the member and the destination channel",
+      "move_not_connected": "the member is not in any voice channel",
       "token_failed": "error generating voice token"
     }
   },
@@ -700,8 +711,8 @@
       "intro1": "Anyone know if Saturday's barbecue is still on?",
       "intro2": "It is. I'll bring the charcoal and the speaker.",
       "intro3": "I'll hop into grandma's room at 8pm to sort it out.",
-      "typing": "is typing",
       "input": "Message #general",
+      "send": "Send",
       "chat1": "Posted the trip photos in the right channel this time.",
       "chat2": "They look great! The beach one is going in a frame.",
       "chat3": "Found grandma's cake recipe. Should I post it in #recipes?",

@@ -29,6 +29,7 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
     micEnabled,
     cameraEnabled,
     cameraError,
+    micError,
     screenSharing,
     screenShareAudio,
     audioPlaybackBlocked,
@@ -183,6 +184,7 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
               )
             })}
           </ul>
+          {micError && <p className="message-error voice-media-error">{micError}</p>}
           {cameraError && <p className="message-error voice-media-error">{cameraError}</p>}
           {screenSharing && !screenShareAudio && (
             <p className="voice-media-hint">

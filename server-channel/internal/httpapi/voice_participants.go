@@ -71,6 +71,13 @@ func (p *voicePresence) get(ctx context.Context) (map[string][]livekit.Participa
 	return snapshot, nil
 }
 
+// invalidate descarta a foto, para o próximo get buscar de novo.
+func (p *voicePresence) invalidate() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.snapshot = nil
+}
+
 // GET /api/voice/participants — quem está conectado agora em cada canal de
 // voz que o membro consegue ver (ViewChannels, mesma regra de
 // GET /api/channels), para a barra lateral mostrar a sala antes de entrar.

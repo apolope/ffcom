@@ -23,6 +23,9 @@ export const PERMISSIONS = {
   CreateCategories: 8192,
   ReorderCategories: 16384,
   DeleteCategories: 32768,
+  // Arrastar alguém de uma sala de voz para outra (de canal: precisa nas
+  // duas salas, e Voice no destino).
+  MoveMembers: 65536,
 } as const
 
 export function hasPermission(effective: number, bit: number): boolean {

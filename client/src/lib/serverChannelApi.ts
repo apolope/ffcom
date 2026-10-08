@@ -623,6 +623,18 @@ export async function fetchVoiceParticipants(
   return body.channels
 }
 
+// POST /api/voice/move — leva quem está numa sala de voz para outra (requer
+// MoveMembers nas duas salas e Voice no destino). O client da pessoa movida
+// troca de sala sozinho, avisado pelo LiveKit.
+export function moveVoiceParticipant(
+  baseUrl: string,
+  accessToken: string,
+  memberId: string,
+  channelId: string,
+): Promise<void> {
+  return postJsonOrThrow(baseUrl, '/api/voice/move', accessToken, 'POST', { memberId, channelId })
+}
+
 function toWebSocketUrl(baseUrl: string, channelId: string): string {
   const url = new URL(`${baseUrl}/api/channels/${channelId}/ws`)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'

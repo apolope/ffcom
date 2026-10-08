@@ -58,6 +58,9 @@ export interface UseVoiceChannelResult {
   micEnabled: boolean
   cameraEnabled: boolean
   cameraError: string | undefined
+  // Microfone não abriu (sem dispositivo, permissão negada, em uso): a
+  // pessoa continua na sala, só ouvindo, até conseguir abrir.
+  micError: string | undefined
   screenSharing: boolean
   // Compartilhando tela com áudio (a pessoa marcou "Compartilhar áudio").
   screenShareAudio: boolean
@@ -181,6 +184,10 @@ export function useVoiceChannel(
   // depois de outro join (troca de canal) ou de sair desiste sozinho.
   const joinSeqRef = useRef(0)
   const [target, setTarget] = useState<VoiceTarget>()
+  // join chamado de dentro dos handlers da sala (ser movido de sala).
+  const joinRef = useRef<(target: VoiceTarget, issued?: { token: string; url: string }) => Promise<void>>(
+    async () => {},
+  )
   const targetRef = useRef<VoiceTarget | undefined>(undefined)
   const micToggleSoundRef = useRef(micToggleSound)
   useEffect(() => {
@@ -215,6 +222,7 @@ export function useVoiceChannel(
   const [participants, setParticipants] = useState<VoiceParticipant[]>([])
   const [micEnabled, setMicEnabled] = useState(false)
   const [cameraError, setCameraError] = useState<DisplayError>()
+  const [micError, setMicError] = useState<DisplayError>()
   const [audioPlaybackBlocked, setAudioPlaybackBlocked] = useState(false)
   const [noiseSuppressionError, setNoiseSuppressionError] = useState<DisplayError>()
 
@@ -382,6 +390,7 @@ export function useVoiceChannel(
       setParticipants([])
       setMicEnabled(false)
       setCameraError(undefined)
+      setMicError(undefined)
       setAudioPlaybackBlocked(false)
       setNoiseSuppressionError(undefined)
     },
@@ -457,7 +466,9 @@ export function useVoiceChannel(
       .catch(() => {})
   }, [])
 
-  const join = useCallback(async (next: VoiceTarget) => {
+  // issued: token já emitido pelo servidor (ao ser movido de sala, ver
+  // VOICE_MOVE_TOPIC), em vez de pedir um com POST .../voice/token.
+  const join = useCallback(async (next: VoiceTarget, issued?: { token: string; url: string }) => {
     const current = targetRef.current
     if (
       roomRef.current &&
@@ -476,7 +487,7 @@ export function useVoiceChannel(
     setStatus('connecting')
     setError(undefined)
     try {
-      const { token, url } = await fetchVoiceToken(next.baseUrl, next.channelId, accessToken)
+      const { token, url } = issued ?? (await fetchVoiceToken(next.baseUrl, next.channelId, accessToken))
       if (seq !== joinSeqRef.current) return
       // webAudioMix: o áudio remoto toca por um AudioContext com um GainNode
       // por track em vez do volume do <audio> (limitado a 100%), para o
@@ -554,6 +565,19 @@ export function useVoiceChannel(
         refreshParticipants(room)
       })
       room.on(RoomEvent.ActiveSpeakersChanged, () => refreshParticipants(room))
+      // Alguém com MoveMembers puxou você para outra sala. Só vale vindo do
+      // servidor (sem participante de origem): um participante comum também
+      // consegue mandar dados com qualquer tópico.
+      room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
+        if (topic !== VOICE_MOVE_TOPIC || participant || roomRef.current !== room) return
+        const move = parseVoiceMove(payload)
+        const from = targetRef.current
+        if (!move || !from) return
+        void joinRef.current(
+          { ...from, channelId: move.channelId, channelName: move.channelName },
+          { token: move.token, url: move.url },
+        )
+      })
       room.on(RoomEvent.Disconnected, () => disconnect(room))
       // Os <audio> das vozes remotas são criados depois do clique em
       // "Entrar" (quando cada track chega), e o navegador pode bloquear o
@@ -574,27 +598,39 @@ export function useVoiceChannel(
       if (forceRelay) console.info('[ffcom] forceRelay: ICE só por TURN')
       await room.connect(url, token, forceRelay ? { rtcConfig: { iceTransportPolicy: 'relay' } } : undefined)
       if (seq !== joinSeqRef.current) return
-      if (pushToTalkRef.current) {
-        // Pede a permissão e publica já mutado, para o primeiro aperto abrir
-        // na hora (sem o seletor de permissão com a tecla apertada) e sem
-        // transmitir nada ao entrar. O setMicrophoneEnabled(true) seguinte
-        // só desmuta a publicação existente.
-        const micTrack = await createLocalAudioTrack(room.options.audioCaptureDefaults)
-        try {
-          await micTrack.mute()
-          await room.localParticipant.publishTrack(micTrack, { source: Track.Source.Microphone })
-        } catch (err) {
-          // Não publicada, a track não sai com o disconnect: sem isso o
-          // microfone ficaria capturado (luz acesa) depois do erro.
-          micTrack.stop()
-          throw err
+      setMicError(undefined)
+      try {
+        if (pushToTalkRef.current) {
+          // Pede a permissão e publica já mutado, para o primeiro aperto abrir
+          // na hora (sem o seletor de permissão com a tecla apertada) e sem
+          // transmitir nada ao entrar. O setMicrophoneEnabled(true) seguinte
+          // só desmuta a publicação existente.
+          const micTrack = await createLocalAudioTrack(room.options.audioCaptureDefaults)
+          try {
+            await micTrack.mute()
+            await room.localParticipant.publishTrack(micTrack, { source: Track.Source.Microphone })
+          } catch (err) {
+            // Não publicada, a track não sai com o disconnect: sem isso o
+            // microfone ficaria capturado (luz acesa) depois do erro.
+            micTrack.stop()
+            throw err
+          }
+          micDesiredRef.current = false
+          setMicEnabled(false)
+        } else {
+          await room.localParticipant.setMicrophoneEnabled(true)
+          micDesiredRef.current = true
+          setMicEnabled(true)
         }
+      } catch (err) {
+        // Sem microfone (ou sem permissão) a pessoa ainda pode ouvir: fica
+        // na sala com o microfone fechado e o aviso na tela. Outras falhas
+        // (publicar a track) seguem derrubando a entrada.
+        if (seq !== joinSeqRef.current) return
+        if (!isMediaDeviceError(err)) throw err
         micDesiredRef.current = false
         setMicEnabled(false)
-      } else {
-        await room.localParticipant.setMicrophoneEnabled(true)
-        micDesiredRef.current = true
-        setMicEnabled(true)
+        setMicError(micErrorMessage(err))
       }
       // Com o microfone aberto, ele sai sem supressão nenhuma até o RNNoise
       // entrar (o WASM já vem baixando desde o começo do join); não espera
@@ -625,6 +661,10 @@ export function useVoiceChannel(
     syncNoiseSuppression,
   ])
 
+  useEffect(() => {
+    joinRef.current = join
+  }, [join])
+
   const leave = useCallback(() => {
     joinSeqRef.current++
     disconnect(roomRef.current)
@@ -654,11 +694,18 @@ export function useVoiceChannel(
       .setMicrophoneEnabled(next)
       .then(() => {
         setMicEnabled(next)
+        setMicError(undefined)
         if (micToggleSoundRef.current) playMicToggleSound(next)
+        // Se o microfone não abriu ao entrar, a track nasce agora e precisa
+        // da supressão escolhida.
+        if (next) syncNoiseSuppression(room)
         refreshParticipants(room)
       })
-      .catch(() => refreshParticipants(room))
-  }, [refreshParticipants])
+      .catch((err) => {
+        if (isMediaDeviceError(err)) setMicError(micErrorMessage(err))
+        refreshParticipants(room)
+      })
+  }, [refreshParticipants, syncNoiseSuppression])
 
   // Push-to-talk aperta e solta mais rápido do que setMicrophoneEnabled
   // resolve; chamadas sobrepostas poderiam terminar fora de ordem e deixar o
@@ -683,9 +730,14 @@ export function useVoiceChannel(
             await room.localParticipant.setMicrophoneEnabled(want)
             if (room.localParticipant.isMicrophoneEnabled !== want && ++stuck >= 3) break
           }
-        } catch {
+          if (roomRef.current === room && room.localParticipant.isMicrophoneEnabled) {
+            setMicError(undefined)
+            syncNoiseSuppression(room)
+          }
+        } catch (err) {
           // Dispositivo sumiu ou permissão revogada: o estado real aparece
           // abaixo.
+          if (roomRef.current === room && isMediaDeviceError(err)) setMicError(micErrorMessage(err))
         } finally {
           if (micBusyRoomRef.current === room) micBusyRoomRef.current = undefined
           if (roomRef.current === room) {
@@ -695,7 +747,7 @@ export function useVoiceChannel(
         }
       })()
     },
-    [refreshParticipants],
+    [refreshParticipants, syncNoiseSuppression],
   )
 
   // O bipe toca no aperto e no soltar, sem esperar a troca resolver: no
@@ -784,6 +836,7 @@ export function useVoiceChannel(
   // ativo (useErrorText renderiza de novo quando ele muda).
   const errorText = useErrorText(error)
   const cameraErrorText = useErrorText(cameraError)
+  const micErrorText = useErrorText(micError)
   const noiseSuppressionErrorText = useErrorText(noiseSuppressionError)
 
   return {
@@ -794,6 +847,7 @@ export function useVoiceChannel(
     micEnabled,
     cameraEnabled,
     cameraError: cameraErrorText,
+    micError: micErrorText,
     screenSharing,
     screenShareAudio,
     audioPlaybackBlocked,
@@ -817,4 +871,43 @@ function cameraErrorMessage(err: unknown): DisplayError {
   }
   if (name === 'NotReadableError') return new LocalizedError(() => i18n.t('voice.camera.inUse'))
   return err instanceof Error ? err : new LocalizedError(() => i18n.t('voice.camera.failed'))
+}
+
+// Erros do getUserMedia ao abrir o microfone: o dispositivo não existe, a
+// permissão foi negada ou outro programa está com ele.
+const MEDIA_DEVICE_ERRORS = new Set(['NotFoundError', 'OverconstrainedError', 'NotAllowedError', 'NotReadableError'])
+
+function isMediaDeviceError(err: unknown): boolean {
+  return err instanceof Error && MEDIA_DEVICE_ERRORS.has(err.name)
+}
+
+function micErrorMessage(err: unknown): DisplayError {
+  const name = err instanceof Error ? err.name : ''
+  if (name === 'NotAllowedError') return new LocalizedError(() => i18n.t('voice.mic.permissionDenied'))
+  if (name === 'NotReadableError') return new LocalizedError(() => i18n.t('voice.mic.inUse'))
+  return new LocalizedError(() => i18n.t('voice.mic.notFound'))
+}
+
+// Tópico da mensagem do servidor que manda trocar de sala (POST
+// /api/voice/move). Mesmo valor de VoiceMoveTopic em
+// server-channel/internal/httpapi/voice_move.go.
+const VOICE_MOVE_TOPIC = 'ffcom.voice.move'
+
+interface VoiceMove {
+  channelId: string
+  channelName: string
+  token: string
+  url: string
+}
+
+function parseVoiceMove(payload: Uint8Array): VoiceMove | undefined {
+  try {
+    const move = JSON.parse(new TextDecoder().decode(payload)) as Partial<VoiceMove>
+    if (typeof move.channelId !== 'string' || typeof move.token !== 'string' || typeof move.url !== 'string') {
+      return undefined
+    }
+    return { channelId: move.channelId, channelName: move.channelName ?? '', token: move.token, url: move.url }
+  } catch {
+    return undefined
+  }
 }

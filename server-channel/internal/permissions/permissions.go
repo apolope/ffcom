@@ -42,6 +42,10 @@ const (
 	CreateCategories
 	ReorderCategories
 	DeleteCategories
+	// MoveMembers (arrastar alguém de uma sala de voz para outra) é de
+	// canal: quem move precisa dele na sala de origem e na de destino. Ver
+	// docs/architecture.md, "Decisão: mover membro entre salas de voz".
+	MoveMembers
 )
 
 // StructureBits são todos os bits que dão alguma administração da

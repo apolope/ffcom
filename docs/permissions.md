@@ -36,6 +36,7 @@ O client espelha os bits em `client/src/lib/permissions.ts` só para decidir o q
 | `CreateCategories` | 8192 | Criar categorias | base | `POST /api/categories`. |
 | `ReorderCategories` | 16384 | Ordenar categorias | base | `PUT /api/categories/order` (arrastar e soltar) e `PATCH /api/categories/{id}` sem `name`. |
 | `DeleteCategories` | 32768 | Excluir categorias | base | `DELETE /api/categories/{id}`. Os canais da categoria ficam sem categoria. |
+| `MoveMembers` | 65536 | Mover membros entre salas de voz | canal | `POST /api/voice/move`: arrastar quem está numa sala de voz para outra. Quem move precisa dele na sala de origem e na de destino, e também de `Voice` no destino. A permissão de quem é movido no destino não conta: dá para puxar alguém para uma sala fechada a ele. |
 
 ### Estrutura (categorias e canais)
 

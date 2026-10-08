@@ -53,6 +53,7 @@ import {
   deleteChannelOverwrite,
   fetchChannelOverwrites,
   joinServer,
+  moveVoiceParticipant,
   setChannelOverwrite,
   updateCategory,
   updateChannel,
@@ -338,6 +339,18 @@ function App() {
   const permissionsChannel = findChannelForDialog(categories, permissionsChannelId)
   const hasVoiceChannel = categories.some((category) => category.channels.some((c) => c.type === 'voice'))
   const voiceParticipants = useVoiceParticipants(server?.baseUrl ?? '', accessToken ?? '', hasVoiceChannel)
+  // Pela permissão base: um overwrite de canal pode mudar isso sala a sala,
+  // e o servidor confere nas duas salas ao mover.
+  const canMoveMembers = me ? hasPermission(me.permissions, PERMISSIONS.MoveMembers) || !!me.isOwner : false
+  const moveToVoiceChannel = useCallback(
+    (memberId: string, channelId: string) => {
+      if (!serverBaseUrl || !accessToken) return
+      moveVoiceParticipant(serverBaseUrl, accessToken, memberId, channelId).catch((err) =>
+        notify(errorMessage(err, i18n.t('notifications.moveMemberFailed')), 'error'),
+      )
+    },
+    [serverBaseUrl, accessToken, notify],
+  )
 
   const [selectedChannelId, setSelectedChannelId] = useState<string>()
   // Canal a abrir quando a estrutura do servidor escolhido chegar: a barra
@@ -583,6 +596,8 @@ function App() {
                       selectedChannelId={selectedChannelId}
                       unreadChannelIds={unreadChannelIds}
                       voiceParticipants={voiceParticipants}
+                      canMoveMembers={canMoveMembers}
+                      onMoveVoiceParticipant={moveToVoiceChannel}
                       members={members}
                       selfMemberId={me?.memberId}
                       onSelectChannel={(id) => {

@@ -1029,6 +1029,27 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** o atraso incomodar (nesse ponto, webhook do LiveKit empurrando para um feed de estrutura por servidor, o mesmo que o indicador de não lida adiou), ou quando a lista precisar de ícone de mudo/câmera.
 
+## Decisão: mover membro entre salas de voz — aviso do servidor pelo LiveKit, com o token do destino
+
+**Contexto:** quem organiza uma comunidade quer arrastar alguém de uma sala de voz para outra, como no Discord. Tem que exigir permissão própria, e quem move precisa poder puxar a pessoa mesmo para uma sala em que ela, sozinha, não poderia entrar.
+
+**Alternativas consideradas:**
+- **`MoveParticipant` da RoomService do LiveKit:** move a conexão no servidor de mídia, mas o client teria de tratar o evento de sala trocada e atualizar a chamada (nome, alvo da barra "Conectado em") por fora do fluxo de `join`. Também não fica claro se existe fora do LiveKit Cloud. Descartada.
+- **Feed próprio do `server-channel` para avisar o client:** hoje só existe WebSocket por canal de texto, não por membro. Criar um só para isso é mais peça do que o recurso pede. Adiado (é o mesmo feed que o indicador de não lida e a lista de voz adiaram).
+- **`SendData` da RoomService, só para a pessoa, de dentro da sala em que ela está:** escolhida. O LiveKit já entrega, e o client já tem o fluxo de entrar em outra sala.
+
+**Decisão:**
+1. **Bit `MoveMembers` (65536), de canal:** quem move precisa dele na sala de origem e na de destino, e precisa de `Voice` no destino (só puxa para onde ele mesmo pode estar). A permissão de quem é movido no destino não conta.
+2. **`POST /api/voice/move` `{memberId, channelId}`** (`internal/httpapi/voice_move.go`) procura a sala atual da pessoa numa foto nova do LiveKit (descarta a cache de 5s de `voicePresence`), confere as permissões e manda `SendData` com tópico `ffcom.voice.move` só para a identity dela. O corpo leva `{channelId, channelName, token, url}`: o token do destino já assinado, porque a pessoa pode não ter `Voice` lá e o `POST .../voice/token` dela daria `403`. `409` se ela não está em sala nenhuma; `204` se já está no destino.
+3. **Client:** `useVoiceChannel` só obedece à mensagem com esse tópico quando ela chega **sem participante de origem**, que é como chega o que o servidor manda. Qualquer participante consegue publicar dados com qualquer tópico, mas sempre com a própria identity. Aí chama `join` com o token recebido em vez de pedir um. A `ChannelSidebar` deixa arrastar a pessoa da lista de uma sala para a linha (ou a lista) de outra quando a permissão base tem `MoveMembers`; o servidor confere sala a sala.
+
+**Escopo aceito:**
+- **A tela não segue a pessoa movida:** a chamada troca de sala e a barra "Conectado em" mostra a nova, mas o canal aberto na tela continua o mesmo.
+- **Client antigo ignora o aviso** e continua na sala; o `204` não garante que a pessoa trocou.
+- **Arrastar aparece pela permissão base:** quem só tem `MoveMembers` por overwrite de um canal não vê o arrasto.
+
+**Revisitar quando:** existir um feed por membro no `server-channel` (o aviso pode ir por ele), ou quando for preciso desconectar alguém da voz sem mover.
+
 ## Decisão: UI de overwrite de canal por role — diálogo próprio, "herdar / permitir / negar" só nos bits do tipo de canal
 
 **Contexto:** a API de overwrite (`GET/PUT/DELETE /api/channels/{id}/overwrites[/{roleId}]`, ver "Sistema de permissões/roles") existia desde o início sem tela; canal privado só dava para fazer via `curl`. Ela exige `ManageRoles`, não `ManageChannels`.

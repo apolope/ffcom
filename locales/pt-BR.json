@@ -140,6 +140,7 @@
     "openNav": "Abrir servidores e canais"
   },
   "channels": {
+    "dragToMoveMember": "Arraste para outra sala de voz",
     "title": "Canais",
     "uncategorized": "Canais",
     "loadFailed": "falha ao carregar categorias/canais",
@@ -257,6 +258,11 @@
       "desktop": "A tecla funciona também com o app em segundo plano, sem bloquear a tecla nos outros programas.",
       "browser": "No navegador, só funciona com esta janela em foco."
     },
+    "mic": {
+      "permissionDenied": "Permissão do microfone negada pelo navegador. Você está na sala só ouvindo.",
+      "notFound": "Nenhum microfone encontrado. Você está na sala só ouvindo: conecte um microfone e ligue-o no botão do microfone.",
+      "inUse": "O microfone está em uso por outro aplicativo. Você está na sala só ouvindo."
+    },
     "camera": {
       "permissionDenied": "Permissão da câmera negada pelo navegador.",
       "notFound": "Nenhuma câmera encontrada.",
@@ -306,6 +312,7 @@
       "noBans": "Ninguém banido."
     },
     "permissions": {
+      "moveMembers": "Mover membros entre salas de voz",
       "viewChannels": "Ver canais",
       "sendMessages": "Enviar mensagens",
       "voice": "Conectar e falar em voz",
@@ -334,6 +341,7 @@
     }
   },
   "notifications": {
+    "moveMemberFailed": "Não foi possível mover a pessoa de sala.",
     "title": "Notificações",
     "serverOrderSaveFailed": "Falha ao salvar a ordem dos servidores. Tentando de novo…",
     "structureOrderSaveFailed": "Falha ao salvar a ordem das categorias e canais. Tentando de novo…",
@@ -652,6 +660,9 @@
     "voice": {
       "connect_denied": "sem permissão para entrar neste canal de voz",
       "livekit_unavailable": "LiveKit indisponível",
+      "move_denied": "sem permissão para mover membros entre estes canais de voz",
+      "move_invalid": "informe o membro e o canal de destino",
+      "move_not_connected": "o membro não está em nenhum canal de voz",
       "token_failed": "erro ao gerar token de voz"
     }
   },
@@ -701,8 +712,8 @@
       "intro1": "Alguém sabe se o churrasco de sábado está de pé?",
       "intro2": "Está sim. Eu levo o carvão e a caixa de som.",
       "intro3": "Entro na sala da vó às 20h pra combinar.",
-      "typing": "está digitando",
-      "input": "Conversar em #geral",
+      "input": "Enviar mensagem em #geral",
+      "send": "Enviar",
       "chat1": "Mandei as fotos da viagem no canal certo dessa vez.",
       "chat2": "Ficaram lindas! A da praia vai pro porta-retrato.",
       "chat3": "Achei a receita do bolo da vó. Posto em #receitas?",

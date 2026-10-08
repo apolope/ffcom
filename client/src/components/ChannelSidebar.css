@@ -316,6 +316,21 @@
   box-shadow: 0 0 0 2px var(--status-online);
 }
 
+.sidebar-voice-participant.draggable {
+  cursor: grab;
+}
+
+.sidebar-voice-participant.dragging {
+  opacity: 0.4;
+}
+
+/* Sala de voz para onde a pessoa arrastada vai. */
+.channel-row.drop-into {
+  outline: 1px dashed var(--accent-border);
+  outline-offset: -1px;
+  border-radius: 4px;
+}
+
 .voice-participant-self {
   opacity: 0.7;
 }

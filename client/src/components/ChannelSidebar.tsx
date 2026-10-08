@@ -1,6 +1,6 @@
 import { Fragment, useState, type DragEvent } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
-import type { Category, ChannelType, KnownServer, Member } from '../types'
+import type { Category, Channel, ChannelType, KnownServer, Member } from '../types'
 import { UNCATEGORIZED_ID, type ChannelOrderGroup, type VoiceParticipant } from '../lib/serverChannelApi'
 import type { StructurePermissions } from '../lib/permissions'
 import './ChannelSidebar.css'
@@ -23,6 +23,9 @@ interface ChannelSidebarProps {
   // Quem está em cada sala de voz, por id do canal (hooks/useVoiceParticipants.ts).
   // members resolve o apelido atual; selfMemberId marca "você".
   voiceParticipants: Record<string, VoiceParticipant[]>
+  // Pode arrastar quem está numa sala de voz para outra (MoveMembers).
+  canMoveMembers: boolean
+  onMoveVoiceParticipant: (memberId: string, channelId: string) => void
   members: Member[]
   selfMemberId: string | undefined
   onSelectChannel: (channelId: string) => void
@@ -46,10 +49,14 @@ interface ChannelSidebarProps {
 
 // O que está sendo arrastado e onde cairia. Canal solto no cabeçalho ou no
 // vão de uma categoria (channelId ausente) vai para o fim dela.
-type DragItem = { kind: 'category'; id: string } | { kind: 'channel'; id: string; fromCategoryId: string }
+type DragItem =
+  | { kind: 'category'; id: string }
+  | { kind: 'channel'; id: string; fromCategoryId: string }
+  | { kind: 'participant'; id: string; fromChannelId: string }
 type DropTarget =
   | { kind: 'category'; id: string; after: boolean }
   | { kind: 'channel'; categoryId: string; channelId?: string; after: boolean }
+  | { kind: 'voice'; channelId: string }
 
 function sameDrop(a: DropTarget | undefined, b: DropTarget) {
   return JSON.stringify(a) === JSON.stringify(b)
@@ -67,6 +74,8 @@ export function ChannelSidebar({
   selectedChannelId,
   unreadChannelIds,
   voiceParticipants,
+  canMoveMembers,
+  onMoveVoiceParticipant,
   members,
   selfMemberId,
   onSelectChannel,
@@ -115,7 +124,20 @@ export function ChannelSidebar({
     }
   }
 
-  function handleChannelDragOver(event: DragEvent<HTMLLIElement>, categoryId: string, channelId: string) {
+  // Pessoa arrastada cai em qualquer sala de voz que não seja a dela: na
+  // linha do canal ou na lista de quem já está lá.
+  function handleVoiceDragOver(event: DragEvent<HTMLLIElement>, channelId: string) {
+    if (dragging?.kind !== 'participant' || dragging.fromChannelId === channelId) return
+    event.stopPropagation()
+    updateDrop(event, { kind: 'voice', channelId })
+  }
+
+  function handleChannelDragOver(event: DragEvent<HTMLLIElement>, categoryId: string, channel: Channel) {
+    if (dragging?.kind === 'participant') {
+      if (channel.type === 'voice') handleVoiceDragOver(event, channel.id)
+      return
+    }
+    const channelId = channel.id
     if (dragging?.kind !== 'channel') return
     // Sem isto, o dragover da categoria em volta trocaria o alvo para "fim
     // da categoria".
@@ -139,6 +161,9 @@ export function ChannelSidebar({
     if (dragging?.kind === 'channel' && dropTarget?.kind === 'channel' && dropTarget.channelId !== dragging.id) {
       const groups = channelDropGroups(categories, dragging, dropTarget)
       if (groups) onReorderChannels(groups)
+    }
+    if (dragging?.kind === 'participant' && dropTarget?.kind === 'voice') {
+      onMoveVoiceParticipant(dragging.id, dropTarget.channelId)
     }
     endDrag()
   }
@@ -226,6 +251,7 @@ export function ChannelSidebar({
                   if (dropTarget?.kind === 'channel' && dropTarget.channelId === channel.id && channel.id !== dragging?.id) {
                     rowClass += dropTarget.after ? ' drop-after' : ' drop-before'
                   }
+                  if (dropTarget?.kind === 'voice' && dropTarget.channelId === channel.id) rowClass += ' drop-into'
                   return (
                     <Fragment key={channel.id}>
                       <li
@@ -237,7 +263,7 @@ export function ChannelSidebar({
                           setDragging({ kind: 'channel', id: channel.id, fromCategoryId: category.id })
                         }}
                         onDragEnd={endDrag}
-                        onDragOver={(event) => handleChannelDragOver(event, category.id, channel.id)}
+                        onDragOver={(event) => handleChannelDragOver(event, category.id, channel)}
                       >
                         <button
                           type="button"
@@ -284,16 +310,27 @@ export function ChannelSidebar({
                         )}
                       </li>
                       {channel.type === 'voice' && voiceParticipants[channel.id] && (
-                        <li>
+                        <li onDragOver={(event) => handleVoiceDragOver(event, channel.id)}>
                           <ul className="voice-participants" aria-label={t('channels.voiceRoom', { name: channel.name })}>
                             {sortedByName(voiceParticipants[channel.id], participantName).map((p) => (
                               <li
                                 key={p.memberId}
                                 className={
-                                  speakingIn(channel.id)?.has(p.memberId)
-                                    ? 'sidebar-voice-participant speaking'
-                                    : 'sidebar-voice-participant'
+                                  'sidebar-voice-participant' +
+                                  (speakingIn(channel.id)?.has(p.memberId) ? ' speaking' : '') +
+                                  (canMoveMembers ? ' draggable' : '') +
+                                  (dragging?.kind === 'participant' && dragging.id === p.memberId ? ' dragging' : '')
                                 }
+                                draggable={canMoveMembers}
+                                title={canMoveMembers ? t('channels.dragToMoveMember') : undefined}
+                                onDragStart={(event) => {
+                                  // Não arrasta o canal em volta junto.
+                                  event.stopPropagation()
+                                  event.dataTransfer.effectAllowed = 'move'
+                                  event.dataTransfer.setData('text/plain', p.memberId)
+                                  setDragging({ kind: 'participant', id: p.memberId, fromChannelId: channel.id })
+                                }}
+                                onDragEnd={endDrag}
                               >
                                 <VoiceParticipantAvatar
                                   member={memberById.get(p.memberId)}

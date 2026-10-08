@@ -48,6 +48,7 @@ function permissionOptions(t: TFunction): { bit: number; label: string }[] {
     { bit: PERMISSIONS.CreateChannels, label: t('roles.permissions.createChannels') },
     { bit: PERMISSIONS.ReorderChannels, label: t('roles.permissions.reorderChannels') },
     { bit: PERMISSIONS.DeleteChannels, label: t('roles.permissions.deleteChannels') },
+    { bit: PERMISSIONS.MoveMembers, label: t('roles.permissions.moveMembers') },
     { bit: PERMISSIONS.KickMembers, label: t('roles.permissions.kickMembers') },
     { bit: PERMISSIONS.BanMembers, label: t('roles.permissions.banMembers') },
     { bit: PERMISSIONS.Administrator, label: t('roles.permissions.administrator') },

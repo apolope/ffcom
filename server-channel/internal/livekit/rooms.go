@@ -102,6 +102,21 @@ func (c *RoomClient) ListParticipants(ctx context.Context, room string) ([]Parti
 	return out, nil
 }
 
+// SendData manda data a identities dentro da sala, como mensagem do
+// servidor (o client recebe sem participante de origem, o que nenhum outro
+// participante consegue forjar). data vai em base64 no JSON, que é como o
+// Twirp lê campos bytes.
+func (c *RoomClient) SendData(ctx context.Context, room string, identities []string, topic string, data []byte) error {
+	body := map[string]any{
+		"room":                   room,
+		"data":                   data,
+		"destination_identities": identities,
+		"topic":                  topic,
+	}
+	var resp struct{}
+	return c.call(ctx, "SendData", adminGrant{RoomAdmin: true, Room: room}, body, &resp)
+}
+
 // adminGrant é o grant de administração da RoomService: roomList para
 // ListRooms, roomAdmin + room para operações numa sala específica.
 type adminGrant struct {
