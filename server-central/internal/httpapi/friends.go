@@ -10,6 +10,7 @@ import (
 
 	"a3sitsolutions.com/ffcom/server-central/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-central/internal/auth"
+	"a3sitsolutions.com/ffcom/server-central/internal/push"
 	"a3sitsolutions.com/ffcom/server-central/internal/realtime"
 	"a3sitsolutions.com/ffcom/server-central/internal/store"
 )
@@ -72,7 +73,7 @@ func handleCreateFriendInvite(invites *store.FriendInviteStore) http.Handler {
 // POST /api/friends/invites/{code}/redeem — resgata um convite de amizade,
 // criando a amizade já como "accepted" entre quem criou o código e quem
 // resgatou (resgatar é o consentimento mútuo, ver docs/architecture.md).
-func handleRedeemFriendInvite(hub *realtime.Hub, invites *store.FriendInviteStore, friendships *store.FriendshipStore, profiles *store.ProfileStore) http.Handler {
+func handleRedeemFriendInvite(hub *realtime.Hub, invites *store.FriendInviteStore, friendships *store.FriendshipStore, profiles *store.ProfileStore, dispatcher *push.Dispatcher) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
@@ -128,6 +129,9 @@ func handleRedeemFriendInvite(hub *realtime.Hub, invites *store.FriendInviteStor
 			return
 		}
 		notifyFriendAccepted(r.Context(), hub, profiles, friendship)
+		// Quem criou o convite fica sabendo pelo celular; quem resgatou está
+		// com o app aberto.
+		pushFromAccount(dispatcher, profiles, push.TypeFriendAccepted, invite.CreatedByAccountID, account.ID, "")
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"a3sitsolutions.com/ffcom/server-central/internal/auth"
+	"a3sitsolutions.com/ffcom/server-central/internal/push"
 	"a3sitsolutions.com/ffcom/server-central/internal/realtime"
 	"a3sitsolutions.com/ffcom/server-central/internal/storage"
 	"a3sitsolutions.com/ffcom/server-central/internal/store"
@@ -23,7 +24,11 @@ import (
 // ideasCfg configura as sugestões de melhoria da home (ver
 // internal/httpapi/ideas.go) e signupCfg os pedidos de cadastro (ver
 // internal/httpapi/signups.go).
-func NewRouter(verifier *auth.Verifier, db *store.Store, avatarFiles *storage.AvatarStore, avatarMaxBytes int64, allowedOrigins []string, version string, rateLimitRPM, rateLimitBurst int, requireTLS bool, ideasCfg IdeasConfig, signupCfg SignupConfig) http.Handler {
+//
+// pushDispatcher entrega as notificações push (ver internal/httpapi/push.go);
+// nil quando FCM_SERVICE_ACCOUNT_JSON não está definida, e aí o push fica
+// desligado sem afetar o resto.
+func NewRouter(verifier *auth.Verifier, db *store.Store, avatarFiles *storage.AvatarStore, avatarMaxBytes int64, allowedOrigins []string, version string, rateLimitRPM, rateLimitBurst int, requireTLS bool, ideasCfg IdeasConfig, signupCfg SignupConfig, pushDispatcher *push.Dispatcher) http.Handler {
 	mux := http.NewServeMux()
 	hub := realtime.NewHub()
 
@@ -52,16 +57,23 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, avatarFiles *storage.Av
 	mux.Handle("PUT /api/servers/order", protected(handleReorderServers(db.KnownServers)))
 	mux.Handle("DELETE /api/servers/{id}", protected(handleRemoveServer(db.KnownServers)))
 	mux.Handle("GET /api/presence", protected(handlePresenceSnapshot(hub, db.Friendships)))
-	mux.Handle("GET /api/presence/ws", protected(handlePresenceWS(hub, db.Friendships, db.DirectMessages, upgrader)))
+	mux.Handle("GET /api/presence/ws", protected(handlePresenceWS(hub, db.Friendships, db.DirectMessages, db.Profiles, pushDispatcher, upgrader)))
 	mux.Handle("GET /api/friends", protected(handleListFriends(db.Friendships, db.Profiles, db.Accounts, db.DirectMessages)))
 	mux.Handle("DELETE /api/friends/{accountId}", protected(handleDeleteFriend(hub, db.Friendships)))
 	mux.Handle("POST /api/friends/invites", protected(handleCreateFriendInvite(db.FriendInvites)))
-	mux.Handle("POST /api/friends/invites/{code}/redeem", protected(handleRedeemFriendInvite(hub, db.FriendInvites, db.Friendships, db.Profiles)))
+	mux.Handle("POST /api/friends/invites/{code}/redeem", protected(handleRedeemFriendInvite(hub, db.FriendInvites, db.Friendships, db.Profiles, pushDispatcher)))
 	mux.Handle("GET /api/friends/requests", protected(handleListFriendRequests(db.Friendships, db.Profiles)))
-	mux.Handle("POST /api/friends/requests", protected(handleCreateFriendRequest(hub, db.Friendships, db.Accounts, db.Profiles)))
-	mux.Handle("POST /api/friends/requests/{id}/accept", protected(handleAcceptFriendRequest(hub, db.Friendships, db.Profiles)))
+	mux.Handle("POST /api/friends/requests", protected(handleCreateFriendRequest(hub, db.Friendships, db.Accounts, db.Profiles, pushDispatcher)))
+	mux.Handle("POST /api/friends/requests/{id}/accept", protected(handleAcceptFriendRequest(hub, db.Friendships, db.Profiles, pushDispatcher)))
 	mux.Handle("DELETE /api/friends/requests/{id}", protected(handleDeleteFriendRequest(hub, db.Friendships)))
 	mux.Handle("GET /api/dms/{accountId}/messages", protected(handleListDMs(db.Friendships, db.DirectMessages)))
+	mux.Handle("PUT /api/push/devices", protected(handleRegisterPushDevice(db.Push)))
+	mux.Handle("DELETE /api/push/devices", protected(handleDeletePushDevice(db.Push)))
+	mux.Handle("POST /api/push/grants", protected(handleCreatePushGrant(db.Push)))
+	mux.Handle("GET /api/push/mutes", protected(handleListPushMutes(db.Push)))
+	mux.Handle("PUT /api/push/mutes", protected(handleSetPushMute(db.Push)))
+	// Chamada por server-channel, sem conta: o grant é a credencial.
+	mux.Handle("POST "+pushNotifyPath, handlePushNotify(db.Push, pushDispatcher, newPushLimits()))
 
 	optional := auth.OptionalAccount(verifier, db.Accounts)
 	mux.Handle("GET /api/ideas", optional(handleListIdeas(db.Ideas, ideasCfg)))

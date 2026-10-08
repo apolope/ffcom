@@ -69,6 +69,22 @@ func (h *Hub) Broadcast(channelID string, payload []byte) {
 	}
 }
 
+// MemberIDs devolve os membros com pelo menos uma conexão aberta no canal
+// channelID agora. Usado para não mandar notificação push a quem já está
+// vendo o canal (ver internal/httpapi/push.go).
+func (h *Hub) MemberIDs(channelID string) map[string]bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	out := make(map[string]bool, len(h.channels[channelID]))
+	for client := range h.channels[channelID] {
+		if client.MemberID != "" {
+			out[client.MemberID] = true
+		}
+	}
+	return out
+}
+
 // Close encerra todas as conexões registradas no graceful shutdown (ver
 // main.go): fecha a fila de saída de cada client, o que faz o WritePump
 // mandar um close frame e fechar o conn, e o ReadPump do handler retorna

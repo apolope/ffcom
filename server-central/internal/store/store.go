@@ -1,6 +1,6 @@
 // Package store concentra o acesso a dados do server-central: conexão com
 // Postgres, migrations e repositórios por entidade (accounts, profiles,
-// friendships, known_servers, ideas, signup_requests).
+// friendships, known_servers, ideas, signup_requests, push).
 package store
 
 import (
@@ -28,6 +28,7 @@ type Store struct {
 	DirectMessages *DirectMessageStore
 	Ideas          *IdeaStore
 	Signups        *SignupStore
+	Push           *PushStore
 }
 
 // Open conecta ao Postgres em databaseURL, aplica as migrations pendentes e
@@ -58,6 +59,7 @@ func Open(ctx context.Context, databaseURL string) (*Store, error) {
 		DirectMessages: &DirectMessageStore{pool: pool},
 		Ideas:          &IdeaStore{pool: pool},
 		Signups:        &SignupStore{pool: pool},
+		Push:           &PushStore{pool: pool},
 	}, nil
 }
 

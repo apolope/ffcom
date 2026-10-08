@@ -14,6 +14,7 @@ import (
 	"a3sitsolutions.com/ffcom/server-channel/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
 	"a3sitsolutions.com/ffcom/server-channel/internal/permissions"
+	"a3sitsolutions.com/ffcom/server-channel/internal/push"
 	"a3sitsolutions.com/ffcom/server-channel/internal/realtime"
 	"a3sitsolutions.com/ffcom/server-channel/internal/storage"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
@@ -68,7 +69,7 @@ func newUpgrader(allowedOrigins map[string]bool) websocket.Upgrader {
 // docs/architecture.md, "Decisão: rate limiting em server-channel") — o
 // limiter por IP em withRateLimit só cobre o handshake HTTP inicial, não
 // protege contra flood de mensagens depois do upgrade.
-func handleChannelWS(hub *realtime.Hub, channels *store.ChannelStore, roles *store.RoleStore, overwrites *store.ChannelOverwriteStore, messages *store.MessageStore, attachments *store.AttachmentStore, files *storage.FileStore, upgrader websocket.Upgrader, wsLimiter *rateLimiter) http.Handler {
+func handleChannelWS(hub *realtime.Hub, channels *store.ChannelStore, roles *store.RoleStore, overwrites *store.ChannelOverwriteStore, messages *store.MessageStore, attachments *store.AttachmentStore, files *storage.FileStore, upgrader websocket.Upgrader, wsLimiter *rateLimiter, notifier *push.Notifier) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		channelID := r.PathValue("id")
 
@@ -121,7 +122,10 @@ func handleChannelWS(hub *realtime.Hub, channels *store.ChannelStore, roles *sto
 		}
 
 		client := realtime.NewClient(conn)
+		client.MemberID = member.ID
 		hub.Register(channelID, client)
+		// Notificação push das mensagens criadas nesta conexão (ver push.go).
+		pushMessage := messagePusher(notifier, hub, member)
 		defer hub.Unregister(channelID, client)
 
 		go client.WritePump()
@@ -135,7 +139,7 @@ func handleChannelWS(hub *realtime.Hub, channels *store.ChannelStore, roles *sto
 					client.SendError(apierr.New("forum.post_denied", "sem permissão para postar neste canal"))
 					return
 				}
-				handleIncomingForumFrame(r.Context(), hub, messages, channelID, member.ID, client, raw)
+				handleIncomingForumFrame(r.Context(), hub, messages, channelID, member.ID, client, raw, pushMessage)
 			})
 			return
 		}
@@ -144,7 +148,7 @@ func handleChannelWS(hub *realtime.Hub, channels *store.ChannelStore, roles *sto
 				client.SendError(apierr.New("realtime.rate_limited", "muitas mensagens, aguarde um instante"))
 				return
 			}
-			handleIncomingTextFrame(r.Context(), hub, messages, attachments, files, channelID, member.ID, effective, canSend, client, raw)
+			handleIncomingTextFrame(r.Context(), hub, messages, attachments, files, channelID, member.ID, effective, canSend, client, raw, pushMessage)
 		})
 	})
 }
@@ -155,7 +159,7 @@ func handleChannelWS(hub *realtime.Hub, channels *store.ChannelStore, roles *sto
 // checados por mensagem dentro de cada handler, não pelo bit SendMessages —
 // ver docs/architecture.md, "Decisão: editar/apagar mensagem de texto").
 // Qualquer outro tipo é rejeitado com error.
-func handleIncomingTextFrame(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, attachments *store.AttachmentStore, files *storage.FileStore, channelID, memberID string, effective int64, canSend bool, client *realtime.Client, raw []byte) {
+func handleIncomingTextFrame(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, attachments *store.AttachmentStore, files *storage.FileStore, channelID, memberID string, effective int64, canSend bool, client *realtime.Client, raw []byte, pushMessage func(store.Message, string, string)) {
 	frameType, prob := realtime.FrameType(raw)
 	if prob != nil {
 		client.SendError(prob)
@@ -168,7 +172,7 @@ func handleIncomingTextFrame(ctx context.Context, hub *realtime.Hub, messages *s
 			client.SendError(apierr.New("messages.send_denied", "sem permissão para enviar mensagens neste canal"))
 			return
 		}
-		handleIncomingMessage(ctx, hub, messages, channelID, memberID, client, raw)
+		handleIncomingMessage(ctx, hub, messages, channelID, memberID, client, raw, pushMessage)
 	case realtime.TypeMessageUpdate:
 		handleIncomingMessageUpdate(ctx, hub, messages, attachments, channelID, memberID, client, raw)
 	case realtime.TypeMessageDelete:
@@ -178,7 +182,7 @@ func handleIncomingTextFrame(ctx context.Context, hub *realtime.Hub, messages *s
 	}
 }
 
-func handleIncomingMessage(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, channelID, authorMemberID string, client *realtime.Client, raw []byte) {
+func handleIncomingMessage(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, channelID, authorMemberID string, client *realtime.Client, raw []byte, pushMessage func(store.Message, string, string)) {
 	incoming, prob := realtime.DecodeIncoming(raw)
 	if prob != nil {
 		client.SendError(prob)
@@ -209,6 +213,7 @@ func handleIncomingMessage(ctx context.Context, hub *realtime.Hub, messages *sto
 		return
 	}
 	hub.Broadcast(channelID, payload)
+	pushMessage(m, "", "")
 }
 
 // handleIncomingMessageUpdate edita uma mensagem existente. Só o autor pode
@@ -339,7 +344,7 @@ func handleIncomingMessageDelete(ctx context.Context, hub *realtime.Hub, message
 // handleIncomingForumFrame despacha um frame recebido num canal forum:
 // "thread.create" ou "post.create" (ver realtime.FrameType). Qualquer outro
 // tipo é rejeitado com error.
-func handleIncomingForumFrame(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, channelID, authorMemberID string, client *realtime.Client, raw []byte) {
+func handleIncomingForumFrame(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, channelID, authorMemberID string, client *realtime.Client, raw []byte, pushMessage func(store.Message, string, string)) {
 	frameType, prob := realtime.FrameType(raw)
 	if prob != nil {
 		client.SendError(prob)
@@ -348,9 +353,9 @@ func handleIncomingForumFrame(ctx context.Context, hub *realtime.Hub, messages *
 
 	switch frameType {
 	case realtime.TypeThreadCreate:
-		handleIncomingThreadCreate(ctx, hub, messages, channelID, authorMemberID, client, raw)
+		handleIncomingThreadCreate(ctx, hub, messages, channelID, authorMemberID, client, raw, pushMessage)
 	case realtime.TypePostCreate:
-		handleIncomingPostCreate(ctx, hub, messages, channelID, authorMemberID, client, raw)
+		handleIncomingPostCreate(ctx, hub, messages, channelID, authorMemberID, client, raw, pushMessage)
 	default:
 		client.SendError(realtime.UnknownFrameType(frameType))
 	}
@@ -359,7 +364,7 @@ func handleIncomingForumFrame(ctx context.Context, hub *realtime.Hub, messages *
 // handleIncomingThreadCreate abre uma thread num canal forum: cria a linha
 // em threads e o post inicial em messages (ThreadID preenchido) numa única
 // operação lógica, depois faz broadcast de "thread.created" com os dois.
-func handleIncomingThreadCreate(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, channelID, authorMemberID string, client *realtime.Client, raw []byte) {
+func handleIncomingThreadCreate(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, channelID, authorMemberID string, client *realtime.Client, raw []byte, pushMessage func(store.Message, string, string)) {
 	incoming, prob := realtime.DecodeThreadCreate(raw)
 	if prob != nil {
 		client.SendError(prob)
@@ -406,12 +411,13 @@ func handleIncomingThreadCreate(ctx context.Context, hub *realtime.Hub, messages
 		return
 	}
 	hub.Broadcast(channelID, payload)
+	pushMessage(m, thread.Title, "")
 }
 
 // handleIncomingPostCreate responde numa thread existente. Confere que a
 // thread pertence ao canal desta conexão antes de gravar, para não permitir
 // postar via o id de uma thread de outro canal forum.
-func handleIncomingPostCreate(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, channelID, authorMemberID string, client *realtime.Client, raw []byte) {
+func handleIncomingPostCreate(ctx context.Context, hub *realtime.Hub, messages *store.MessageStore, channelID, authorMemberID string, client *realtime.Client, raw []byte, pushMessage func(store.Message, string, string)) {
 	incoming, prob := realtime.DecodePostCreate(raw)
 	if prob != nil {
 		client.SendError(prob)
@@ -457,4 +463,5 @@ func handleIncomingPostCreate(ctx context.Context, hub *realtime.Hub, messages *
 		return
 	}
 	hub.Broadcast(channelID, payload)
+	pushMessage(m, thread.Title, "")
 }

@@ -9,6 +9,7 @@ import (
 
 	"a3sitsolutions.com/ffcom/server-central/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-central/internal/auth"
+	"a3sitsolutions.com/ffcom/server-central/internal/push"
 	"a3sitsolutions.com/ffcom/server-central/internal/realtime"
 	"a3sitsolutions.com/ffcom/server-central/internal/store"
 )
@@ -28,7 +29,7 @@ import (
 // Se o outro lado já tinha mandado um pedido para a conta autenticada, o
 // pedido dele é aceito na hora em vez de criar um segundo (os dois querem a
 // amizade).
-func handleCreateFriendRequest(hub *realtime.Hub, friendships *store.FriendshipStore, accounts *store.AccountStore, profiles *store.ProfileStore) http.Handler {
+func handleCreateFriendRequest(hub *realtime.Hub, friendships *store.FriendshipStore, accounts *store.AccountStore, profiles *store.ProfileStore, dispatcher *push.Dispatcher) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
@@ -77,6 +78,7 @@ func handleCreateFriendRequest(hub *realtime.Hub, friendships *store.FriendshipS
 				return
 			}
 			notifyFriendAccepted(r.Context(), hub, profiles, accepted)
+			pushFromAccount(dispatcher, profiles, push.TypeFriendAccepted, body.AccountID, account.ID, "")
 			writeFriendRequestResult(r.Context(), w, http.StatusOK, accepted, body.AccountID, profiles)
 			return
 		default:
@@ -101,6 +103,7 @@ func handleCreateFriendRequest(hub *realtime.Hub, friendships *store.FriendshipS
 		} else {
 			log.Printf("server-central: erro ao codificar friend.request: %v", err)
 		}
+		pushFromAccount(dispatcher, profiles, push.TypeFriendRequest, body.AccountID, account.ID, created.ID)
 
 		writeFriendRequestResult(r.Context(), w, http.StatusCreated, created, body.AccountID, profiles)
 	})
@@ -155,7 +158,7 @@ func handleListFriendRequests(friendships *store.FriendshipStore, profiles *stor
 }
 
 // POST /api/friends/requests/{id}/accept — só quem recebeu o pedido aceita.
-func handleAcceptFriendRequest(hub *realtime.Hub, friendships *store.FriendshipStore, profiles *store.ProfileStore) http.Handler {
+func handleAcceptFriendRequest(hub *realtime.Hub, friendships *store.FriendshipStore, profiles *store.ProfileStore, dispatcher *push.Dispatcher) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
@@ -172,6 +175,7 @@ func handleAcceptFriendRequest(hub *realtime.Hub, friendships *store.FriendshipS
 		}
 
 		notifyFriendAccepted(r.Context(), hub, profiles, accepted)
+		pushFromAccount(dispatcher, profiles, push.TypeFriendAccepted, accepted.RequesterID, account.ID, "")
 		writeFriendRequestResult(r.Context(), w, http.StatusOK, accepted, accepted.RequesterID, profiles)
 	})
 }

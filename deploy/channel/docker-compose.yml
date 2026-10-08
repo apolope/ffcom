@@ -141,6 +141,9 @@ services:
       # "Decisão: upload de anexo em mensagem".
       ATTACHMENTS_DIR: /data/attachments
       ATTACHMENT_MAX_MB: ${ATTACHMENT_MAX_MB:-}
+      # Notificações push do app Android pelo server-central. Vazio = a
+      # instância oficial; "off" desliga. Ver README.md, "Notificações push".
+      FFCOM_CENTRAL_URL: ${FFCOM_CENTRAL_URL:-}
       # Instância de teste = canário: segue qualquer versão nova (inclusive
       # minor), enquanto o padrão para quem autohospeda é só patch. Dá para
       # fixar (X.Y.Z) ou restringir (X.Y) pelo .env sem mexer aqui.

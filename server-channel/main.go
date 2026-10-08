@@ -17,6 +17,7 @@ import (
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
 	"a3sitsolutions.com/ffcom/server-channel/internal/httpapi"
 	"a3sitsolutions.com/ffcom/server-channel/internal/livekit"
+	"a3sitsolutions.com/ffcom/server-channel/internal/push"
 	"a3sitsolutions.com/ffcom/server-channel/internal/realtime"
 	"a3sitsolutions.com/ffcom/server-channel/internal/storage"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
@@ -104,6 +105,15 @@ func main() {
 		log.Fatalf("server-channel: %v", err)
 	}
 
+	// Notificações push pelo server-central (ver docs/architecture.md,
+	// "Decisão: notificações push (fase 6)"). FFCOM_CENTRAL_URL vazia usa a
+	// instância oficial; "off" desliga. Central fora do ar não afeta nada
+	// além do push.
+	notifier := push.New(os.Getenv("FFCOM_CENTRAL_URL"), httpapi.NewPushResolver(db))
+	if notifier == nil {
+		log.Printf("server-channel: FFCOM_CENTRAL_URL=off; notificações push desligadas")
+	}
+
 	hub := realtime.NewHub()
 	router := httpapi.NewRouter(
 		hub,
@@ -122,6 +132,7 @@ func main() {
 		envInt("RATE_LIMIT_BURST", 60),
 		envInt("RATE_LIMIT_WS_RPM", 60),
 		envInt("RATE_LIMIT_WS_BURST", 10),
+		notifier,
 	)
 
 	srv := &http.Server{Addr: ":" + port, Handler: router}

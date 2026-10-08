@@ -6,7 +6,7 @@ Referência técnica dos endpoints REST e frames de WebSocket expostos por `serv
 
 Três componentes: `client` (SPA React, web/PWA e Electron), `server-central` (instância única oficial: contas, amigos, presença, DMs, diretório de servidores conhecidos) e `server-channel` (uma instância por comunidade self-hosted: categorias, canais, mensagens, permissões, convites, voz).
 
-**Não existe comunicação direta `server-central` ↔ `server-channel`** — confirmado lendo `server.go` dos dois componentes: nenhum dos dois faz requisição HTTP para o outro. O `client` é o único que fala com ambos, cada um numa base URL própria (`SERVER_CENTRAL_URL`, fixa por build, e `KnownServer.baseUrl`, uma por servidor adicionado ao diretório — ver `docs/architecture.md`, "diretório de servidores conhecidos: `address` é a base URL completa"). Ver `docs/architecture.md`, "Decisão: protocolo entre client, server-central e server-channel".
+**A única chamada direta entre os dois servidores é a de notificação push:** o `server-channel` chama `POST /api/push/notify` do `server-central` a cada mensagem nova, sem conta, levando os grants que os membros lhe entregaram (ver "Notificações push" abaixo). O `server-central` nunca chama o `server-channel`. Fora isso, o `client` é o único que fala com ambos, cada um numa base URL própria (`SERVER_CENTRAL_URL`, fixa por build, e `KnownServer.baseUrl`, uma por servidor adicionado ao diretório; ver `docs/architecture.md`, "diretório de servidores conhecidos: `address` é a base URL completa"). Ver `docs/architecture.md`, "Decisão: protocolo entre client, server-central e server-channel".
 
 ## Autenticação
 
@@ -47,7 +47,7 @@ Formato das respostas de erro do `server-central` e do `server-channel` (o mesmo
 
 **Como o client usa.** Em resposta fora de 2xx, lê o JSON e mostra `t('errors.' + code, params)` a partir de `locales/<idioma>.json`. Se a chave não existir no idioma, mostra `message`. Se o corpo não for JSON (proxy na frente, `server-channel` ainda sem o formato, rota inexistente, que o `ServeMux` responde com `404 page not found` em texto), mostra o texto cru ou um erro genérico pelo status.
 
-**Convenção de códigos.** `area.motivo`, os dois em `snake_case` minúsculo. Áreas em uso no `server-central`: `common`, `auth`, `accounts`, `profile`, `avatar`, `friends`, `dm`, `e2e`, `presence`, `servers`, `ideas`, `signup`; no `server-channel`: `common`, `auth`, `profile`, `permissions`, `channels`, `categories`, `messages`, `attachments`, `forum`, `invites`, `members`, `roles`, `overwrites`, `voice`; nos dois, `realtime` (frames de WebSocket mal formados). `common.*` vale para qualquer rota dos dois servidores (`common.invalid_body`, `common.account_missing`, `common.member_missing`, `common.rate_limited`, `common.tls_required`, `common.limit_invalid`, `common.before_invalid`, `common.name_required`...). Falta de permissão no `server-channel` é `permissions.required` (`params.permission`, o nome do bit, ex. `ManageRoles`) ou `permissions.required_either` (`params.permission` e `params.alternative`, ex. `ManageChannels` ou `CreateChannels`); o nome do bit não se traduz. Falha interna (`500`) é `<area>.<o_que>_failed` (ex. `servers.fetch_failed`). A mesma mensagem usa o mesmo código em todas as rotas. Cada código tem a chave `errors.<code>` em `locales/pt-BR.json` (com o texto da `message`, trocando os números por `{{params}}`) e em todos os outros idiomas. A chave é aninhada: `errors.friends.already_friends` é `{"errors": {"friends": {"already_friends": "..."}}}`.
+**Convenção de códigos.** `area.motivo`, os dois em `snake_case` minúsculo. Áreas em uso no `server-central`: `common`, `auth`, `accounts`, `profile`, `avatar`, `friends`, `dm`, `e2e`, `presence`, `servers`, `ideas`, `signup`, `push`; no `server-channel`: `common`, `auth`, `profile`, `permissions`, `channels`, `categories`, `messages`, `attachments`, `forum`, `invites`, `members`, `roles`, `overwrites`, `voice`, `push`; nos dois, `realtime` (frames de WebSocket mal formados). `common.*` vale para qualquer rota dos dois servidores (`common.invalid_body`, `common.account_missing`, `common.member_missing`, `common.rate_limited`, `common.tls_required`, `common.limit_invalid`, `common.before_invalid`, `common.name_required`...). Falta de permissão no `server-channel` é `permissions.required` (`params.permission`, o nome do bit, ex. `ManageRoles`) ou `permissions.required_either` (`params.permission` e `params.alternative`, ex. `ManageChannels` ou `CreateChannels`); o nome do bit não se traduz. Falha interna (`500`) é `<area>.<o_que>_failed` (ex. `servers.fetch_failed`). A mesma mensagem usa o mesmo código em todas as rotas. Cada código tem a chave `errors.<code>` em `locales/pt-BR.json` (com o texto da `message`, trocando os números por `{{params}}`) e em todos os outros idiomas. A chave é aninhada: `errors.friends.already_friends` é `{"errors": {"friends": {"already_friends": "..."}}}`.
 
 **No Go.** Pacote `internal/apierr`, igual nos dois servidores (cada módulo Go tem a sua cópia, com o teste):
 
@@ -106,6 +106,12 @@ Base URL: `VITE_SERVER_CENTRAL_URL` no client (`http://localhost:8081` em dev).
 | POST | `/api/friends/requests/{id}/accept` | Bearer | — | `200` `{status: "accepted", request: FriendRequest}` | `404` (inexistente, já respondido, ou quem chama não é o destinatário) |
 | DELETE | `/api/friends/requests/{id}` | Bearer | — | `204` — recusa (destinatário) ou cancela (remetente) | `404` |
 | GET | `/api/dms/{accountId}/messages?before=&limit=` | Bearer | — | `{messages: [DirectMessage]}` | `403` se não são amigos |
+| PUT | `/api/push/devices` | Bearer | `{token, platform?}`: token FCM do aparelho; `platform` só `android` (padrão). Token já registrado por outra conta passa para esta; até 20 aparelhos por conta, o usado há mais tempo sai | `204` | `400` `push.device_token_invalid`, `push.platform_invalid` |
+| DELETE | `/api/push/devices` | Bearer | `{token}` (no corpo) | `204`, também para token que não é da conta | `400` |
+| POST | `/api/push/grants` | Bearer | `{serverAddress}`: exatamente o `address` de um servidor da lista da conta | `201` `{token, serverAddress}`: o grant em claro sai só aqui (o banco guarda o hash). Até 10 por conta e servidor; tirar o servidor da lista apaga todos | `400` `push.server_address_required`; `404` `push.server_unknown` (fora da lista) |
+| GET | `/api/push/mutes` | Bearer | sem corpo | `{mutes: [{serverAddress, channelId?}]}`: sem `channelId`, o servidor inteiro está silenciado | nenhum |
+| PUT | `/api/push/mutes` | Bearer | `{serverAddress, channelId?, muted}`: um item por vez; sem `channelId` vale para o servidor inteiro | `204` | `400` `push.channel_id_invalid` ou sem `muted`; `404` `push.server_unknown` |
+| POST | `/api/push/notify` | não (chamada pelo `server-channel`; o grant é a credencial) | ver "Notificações push" | `202` `{status: "accepted"}`, sempre igual | `400` corpo inválido; `429` limite por IP |
 | GET | `/api/ideas?view=ranking\|implemented\|review` | opcional | — | `[Idea]` — `ranking` (padrão): publicadas e planejadas, maior pontuação primeiro, empate para a mais antiga; `implemented`: implementadas, mais recentes primeiro; `review`: fila de moderação | `403` `review` sem o grupo de admin |
 | GET | `/api/ideas/me` | Bearer | — | `{assistEnabled, wandLimit, wandLeft, wandUsed, wandPenalty, pendingAssist?, suggestedToday, todayIdea?: Idea, lastDiscarded?: Idea, discardsLeft, isAdmin}` — `lastDiscarded` é a última ideia de hoje descartada por não ser sugestão (com a dica em `feedback`), só enquanto não houver ideia do dia | — |
 | POST | `/api/ideas` | Bearer | `{text}` (10 a 1000 caracteres) | `202` + `Idea` em `checking`; vira `open`, `review` ou `discarded` (não é sugestão; não gasta o dia) quando a checagem final termina | `400` tamanho; `409` já enviou hoje; `429` já teve 3 textos descartados hoje |
@@ -144,7 +150,7 @@ Uma conexão por sessão do client, mantida aberta enquanto online; serve **pres
 
 ### Rate limiting
 
-Token bucket em memória por usuário, aplicado a toda a API exceto `/healthz` (`RATE_LIMIT_RPM`, padrão 120; `RATE_LIMIT_BURST`, padrão 60; chave = `sub` do token verificado, ou IP via `X-Forwarded-For`/`RemoteAddr` quando não há token válido). Excesso responde `429 Too Many Requests` com header `Retry-After`. Ver `docs/architecture.md`, "Decisão: rate limiting em server-central".
+Token bucket em memória por usuário, aplicado a toda a API exceto `/healthz` (`RATE_LIMIT_RPM`, padrão 120; `RATE_LIMIT_BURST`, padrão 60; chave = `sub` do token verificado, ou IP via `X-Forwarded-For`/`RemoteAddr` quando não há token válido). Excesso responde `429 Too Many Requests` com header `Retry-After`. Ver `docs/architecture.md`, "Decisão: rate limiting em server-central". `POST /api/push/notify` fica fora desse limite e tem os próprios: 600 chamadas por minuto por IP (excesso: `429`), 1200 notificações por minuto por servidor e 60 por minuto por grant (excesso: a notificação é descartada, sem mudar a resposta).
 
 ## `server-channel`
 
@@ -158,6 +164,8 @@ Base URL: `KnownServer.baseUrl`, uma por servidor cadastrado no client (endereç
 | POST | `/api/join` | Bearer (sem `RequireMember`) | `{code?}` | `200` (já membro) ou `201` `{memberId, founder?}` | `403` sem convite (exceto fundador) ou banido, `404`/`410`/`409` convite inválido |
 | GET | `/api/me` | Bearer + membro | — | `{memberId, oidcSubject, nickname?, joinedAt, isOwner?, permissions, roleIds?}` | `403` só quando o `sub` não é membro (nunca entrou, expulso ou banido): a rota não exige bit, e o client usa esse 403 para mostrar o aviso de membro expulso |
 | PATCH | `/api/me` | Bearer + membro | `{nickname: string \| null}` | `Me` (mesmo shape de GET) | `400` apelido > 64 chars |
+| PUT | `/api/me/push-grant` | Bearer + membro | `{token, serverAddress}`: o grant de `POST /api/push/grants` do central e o endereço deste servidor como o app o conhece (o mesmo enviado ao central) | `204`; troca o grant anterior do membro (um por membro). Sai num kick ou ban | `400` `push.grant_invalid`, `push.server_address_required` |
+| DELETE | `/api/me/push-grant` | Bearer + membro | `{token}` opcional: com ele, só apaga se for o guardado | `204` | nenhum |
 | GET | `/api/members` | Bearer + membro | — | `{members: [{id, nickname?, joinedAt, isOwner?, roleIds?}]}` — só membros ativos, sem quem foi expulso | — |
 | POST | `/api/members/{memberId}/kick` | Bearer + membro + `KickMembers` | — | `204` | `400` alvo é você mesmo, `403` alvo é o dono, `404` membro, `409` já expulso |
 | POST | `/api/members/{memberId}/ban` | Bearer + membro + `BanMembers` | `{reason?}` | `204` | `400` alvo é você mesmo, `403` alvo é o dono, `404` membro |
@@ -218,6 +226,56 @@ Em ambos os casos: `error` para conteúdo vazio, acima do limite (mensagem: 4000
 Dois token buckets em memória, chaves diferentes (ver `docs/architecture.md`, "Decisão: rate limiting em server-channel"):
 - **REST** (toda a API exceto `/healthz`, incluindo o handshake de `GET /api/channels/{id}/ws`): por usuário (`sub` do token verificado; IP quando não há token válido), `RATE_LIMIT_RPM` (padrão 120) / `RATE_LIMIT_BURST` (padrão 60). Orçamento por tela em `docs/rate-limits.md`. Excesso responde `429 Too Many Requests` com header `Retry-After`.
 - **Frames de WebSocket** (dentro de uma conexão de canal já aberta): por membro, `RATE_LIMIT_WS_RPM` (padrão 60) / `RATE_LIMIT_WS_BURST` (padrão 10). Excesso responde com um frame `error` de código `realtime.rate_limited` (conexão permanece aberta, frame é descartado).
+
+## Notificações push
+
+Só o app Android usa. Decisão em `docs/architecture.md`, "Decisão: notificações push (fase 6)"; passo a passo em `docs/android-runbook.md`, fase 6.
+
+**Fluxo do app:**
+1. Depois do login: `PUT /api/push/devices {token, platform: "android"}` no central, com o token FCM do aparelho (e de novo quando o FCM trocar o token). No logout: `DELETE /api/push/devices {token}`.
+2. Para cada servidor da lista (e a cada servidor adicionado): `POST /api/push/grants {serverAddress}` no central, com o `address` do `KnownServer`, e então `PUT /api/me/push-grant {token, serverAddress}` nesse `server-channel`, com o mesmo `serverAddress`. Servidor antigo, sem a rota, responde `404` (texto do `ServeMux`) e fica sem push, sem erro na tela.
+3. Silenciar: `PUT /api/push/mutes {serverAddress, channelId?, muted: true}`; `GET /api/push/mutes` para mostrar o estado nos menus.
+
+**`server-channel` para o central:** a cada mensagem nova (texto, fórum ou com anexo), `POST <FFCOM_CENTRAL_URL>/api/push/notify` com
+
+```json
+{"serverAddress": "https://chat.exemplo.com", "channelId": "...", "channelName": "geral", "author": "Marina",
+ "text": "Ficaram lindas!", "messageId": "...", "threadId": "...", "threadTitle": "...", "attachment": "foto.jpg",
+ "grants": ["...", "..."]}
+```
+
+- `grants`: até 500 por chamada; o `server-channel` manda um lote por `serverAddress` guardado com os grants. Só entram membros ativos com `ViewChannels` no canal, menos o autor e quem está com o WebSocket do canal aberto.
+- `threadId`/`threadTitle` só em fórum; `attachment` (nome do arquivo) só em mensagem com anexo; `serverName` é aceito, mas o central prefere o nome que a pessoa deu ao servidor na lista dela.
+- O central confere cada grant contra `serverAddress` (grant de outro endereço não vale), o silêncio e os limites, e responde sempre `202 {"status":"accepted"}`.
+
+**Mensagem FCM:** só dados (sem o campo `notification`), `android.priority: HIGH`, TTL de 24 h. Todos os valores são texto (exigência do FCM). Campo novo pode aparecer em qualquer versão; o app ignora o que não conhece. Renomear ou mudar o sentido de um campo exige outro `v`.
+
+| Campo | Tipos | Conteúdo |
+|---|---|---|
+| `v` | todos | versão do formato, hoje `"1"` |
+| `type` | todos | `channel_message`, `dm`, `friend_request` ou `friend_accepted` |
+| `sentAt` | todos | quando o central montou a notificação, RFC3339 UTC |
+| `serverAddress` | `channel_message` | endereço do servidor, igual ao `address` do `KnownServer` |
+| `serverName` | `channel_message` | nome do servidor na lista da pessoa, até 100 caracteres |
+| `channelId`, `channelName` | `channel_message` | canal da mensagem; nome até 100 caracteres |
+| `author` | todos | nome de quem mandou (apelido no servidor, ou nome do perfil), até 64 caracteres; em `dm` e `friend_*`, o nome de exibição da conta, que pode vir vazio |
+| `text` | `channel_message` | texto da mensagem, até 300 caracteres (cortado com `…`); vazio quando é só anexo |
+| `messageId` | `channel_message` | id da mensagem no `server-channel` |
+| `threadId`, `threadTitle` | `channel_message`, opcionais | thread do fórum |
+| `attachment` | `channel_message`, opcional | nome do arquivo anexado |
+| `accountId` | `dm`, `friend_request`, `friend_accepted` | conta de quem mandou a DM, pediu ou aceitou (abre a conversa ou o pedido) |
+| `requestId` | `friend_request` | id do pedido, o mesmo de `GET /api/friends/requests` |
+
+Exemplos:
+
+```json
+{"v": "1", "type": "channel_message", "sentAt": "2026-10-08T14:03:00Z", "serverAddress": "https://chat.exemplo.com",
+ "serverName": "Família da Ana", "channelId": "...", "channelName": "geral", "author": "Marina", "text": "Ficaram lindas!", "messageId": "..."}
+{"v": "1", "type": "dm", "sentAt": "2026-10-08T14:03:00Z", "accountId": "...", "author": "Marina"}
+{"v": "1", "type": "friend_request", "sentAt": "2026-10-08T14:03:00Z", "accountId": "...", "author": "Marina", "requestId": "..."}
+```
+
+O app monta o texto na tela no idioma dele: a DM vira "Nova mensagem de <author>", porque o conteúdo é cifrado de ponta a ponta e não passa pelo push. As de canal agrupam por `serverAddress` + `channelId`.
 
 ## Não confirmado / fora do escopo deste documento
 

@@ -11,6 +11,7 @@ import (
 
 	"a3sitsolutions.com/ffcom/server-central/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-central/internal/auth"
+	"a3sitsolutions.com/ffcom/server-central/internal/push"
 	"a3sitsolutions.com/ffcom/server-central/internal/realtime"
 	"a3sitsolutions.com/ffcom/server-central/internal/store"
 )
@@ -76,7 +77,7 @@ func handlePresenceSnapshot(hub *realtime.Hub, friendships *store.FriendshipStor
 // status de presença e avatar nas listas de membros") e "dm.create" (DMs em
 // tempo real na mesma conexão, ver "Decisão: DMs entregues no WebSocket de
 // presença"), processado em handleIncomingDM (internal/httpapi/dms.go).
-func handlePresenceWS(hub *realtime.Hub, friendships *store.FriendshipStore, directMessages *store.DirectMessageStore, upgrader websocket.Upgrader) http.Handler {
+func handlePresenceWS(hub *realtime.Hub, friendships *store.FriendshipStore, directMessages *store.DirectMessageStore, profiles *store.ProfileStore, dispatcher *push.Dispatcher, upgrader websocket.Upgrader) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		account, ok := auth.AccountFromContext(r.Context())
 		if !ok {
@@ -111,7 +112,7 @@ func handlePresenceWS(hub *realtime.Hub, friendships *store.FriendshipStore, dir
 				broadcastIfChanged(hub, friendships, account.ID)(hub.SetIdle(account.ID, client, idle.Idle))
 				return
 			}
-			handleIncomingDM(r.Context(), hub, friendships, directMessages, account.ID, client, raw)
+			handleIncomingDM(r.Context(), hub, friendships, directMessages, profiles, dispatcher, account.ID, client, raw)
 		})
 
 		broadcastIfChanged(hub, friendships, account.ID)(hub.Unregister(account.ID, client))
