@@ -459,6 +459,21 @@
       "remove_failed": "erro ao remover servidor",
       "reorder_failed": "erro ao reordenar servidores"
     },
+    "push": {
+      "channel_id_invalid": "channelId inválido",
+      "device_delete_failed": "erro ao remover o aparelho",
+      "device_save_failed": "erro ao registrar o aparelho",
+      "device_token_invalid": "token do aparelho inválido",
+      "grant_create_failed": "erro ao criar o token de notificação",
+      "grant_delete_failed": "erro ao remover o token de notificação",
+      "grant_invalid": "token de notificação inválido",
+      "grant_save_failed": "erro ao salvar o token de notificação",
+      "mute_save_failed": "erro ao salvar o silêncio",
+      "mutes_fetch_failed": "erro ao buscar os silêncios",
+      "platform_invalid": "plataforma não suportada",
+      "server_address_required": "serverAddress é obrigatório",
+      "server_unknown": "servidor não está na sua lista"
+    },
     "ideas": {
       "admin_only_delete": "só administradores excluem ideias",
       "admin_only_moderate": "só administradores moderam ideias",

@@ -13,6 +13,7 @@ import (
 	"a3sitsolutions.com/ffcom/server-channel/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
 	"a3sitsolutions.com/ffcom/server-channel/internal/permissions"
+	"a3sitsolutions.com/ffcom/server-channel/internal/push"
 	"a3sitsolutions.com/ffcom/server-channel/internal/realtime"
 	"a3sitsolutions.com/ffcom/server-channel/internal/storage"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
@@ -39,7 +40,7 @@ const multipartMemoryThreshold = 10 << 20
 // hub.Broadcast do fluxo via WebSocket, então quem está com o canal aberto
 // recebe a mensagem em tempo real por qualquer um dos dois caminhos,
 // inclusive quem enviou (mesmo critério já usado no resto do sistema).
-func handleCreateMessageWithAttachment(hub *realtime.Hub, channels *store.ChannelStore, roles *store.RoleStore, overwrites *store.ChannelOverwriteStore, messages *store.MessageStore, attachments *store.AttachmentStore, files *storage.FileStore, attachmentMaxBytes int64) http.Handler {
+func handleCreateMessageWithAttachment(hub *realtime.Hub, channels *store.ChannelStore, roles *store.RoleStore, overwrites *store.ChannelOverwriteStore, messages *store.MessageStore, attachments *store.AttachmentStore, files *storage.FileStore, attachmentMaxBytes int64, notifier *push.Notifier) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		channelID := r.PathValue("id")
 
@@ -156,6 +157,11 @@ func handleCreateMessageWithAttachment(hub *realtime.Hub, channels *store.Channe
 		} else {
 			hub.Broadcast(channelID, payload)
 		}
+		attachmentName := ""
+		if hasFile {
+			attachmentName = filename
+		}
+		messagePusher(notifier, hub, member)(m, "", attachmentName)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)

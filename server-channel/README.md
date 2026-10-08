@@ -260,6 +260,38 @@ A imagem antiga ficava com o nome gerado pelo build (ex.
 `server-channel-app`) ou com a tag `0.x`; depois de confirmar que está tudo
 no ar, dá para apagá-la com `docker image rm`.
 
+## Notificações push (`FFCOM_CENTRAL_URL`)
+
+Quem usa o app Android recebe notificação de mensagem nova com o app
+fechado. O Firebase, que entrega a notificação no celular, só aceita pedidos
+do `server-central` oficial; este servidor não guarda credencial nenhuma do
+Google. O caminho é este:
+
+1. O app pede ao `server-central` um token de notificação para este servidor
+   (só sai para servidor que está na lista da pessoa) e o entrega aqui
+   (`PUT /api/me/push-grant`). Ele fica guardado na tabela
+   `member_push_grants`, um por membro, e é apagado num kick ou ban.
+2. A cada mensagem nova, depois de entregar a mensagem a quem está conectado,
+   o servidor monta numa fila separada a lista de quem deve ser avisado:
+   membros com token, que podem ver o canal (`ViewChannels`), menos o autor e
+   menos quem está com aquele canal aberto agora.
+3. Manda ao `server-central` (`POST /api/push/notify`) os tokens dessas
+   pessoas, o endereço do servidor, o canal (id e nome), o nome de quem
+   escreveu e o texto da mensagem (ou o nome do anexo). O central confere os
+   tokens e os silêncios de cada pessoa e repassa ao Firebase. **O texto só
+   passa em trânsito:** o central não grava nada da mensagem.
+
+Nada disso atrasa a mensagem: se o central estiver fora do ar ou lento, a
+conversa segue normal e só a notificação se perde, com uma linha no log.
+
+| Variável | Valores | Padrão |
+| --- | --- | --- |
+| `FFCOM_CENTRAL_URL` | vazio: a instância oficial (`https://central.ffcom.a3sitsolutions.com.br`); uma URL: outro `server-central` (fork ou instância de testes); `off`: não manda nada ao central, e ninguém recebe push deste servidor | vazio |
+
+Em desenvolvimento local, use `off` ou o central local
+(`http://host.docker.internal:8082` com o `scripts/dev-local.ps1`), para não
+mandar tokens de teste à instância oficial.
+
 ## TLS / HTTPS
 
 O `app` deste compose fala HTTP puro na porta `8080` (mesmo valendo para

@@ -38,3 +38,21 @@ func TestHubCloseFechaFilasEIgnoraRegistroTardio(t *testing.T) {
 	}
 	hub.Unregister("c1", late)
 }
+
+func TestHubMemberIDs(t *testing.T) {
+	hub := NewHub()
+	a, b, anon := newTestClient(), newTestClient(), newTestClient()
+	a.MemberID, b.MemberID = "m1", "m2"
+	hub.Register("c1", a)
+	hub.Register("c2", b)
+	hub.Register("c1", anon)
+
+	got := hub.MemberIDs("c1")
+	if len(got) != 1 || !got["m1"] {
+		t.Fatalf("MemberIDs(c1) = %v, esperado só m1", got)
+	}
+	hub.Unregister("c1", a)
+	if got := hub.MemberIDs("c1"); len(got) != 0 {
+		t.Fatalf("depois do Unregister, MemberIDs(c1) = %v", got)
+	}
+}

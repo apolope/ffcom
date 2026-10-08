@@ -15,6 +15,7 @@ import (
 	"a3sitsolutions.com/ffcom/server-central/internal/auth"
 	"a3sitsolutions.com/ffcom/server-central/internal/authentik"
 	"a3sitsolutions.com/ffcom/server-central/internal/httpapi"
+	"a3sitsolutions.com/ffcom/server-central/internal/push"
 	"a3sitsolutions.com/ffcom/server-central/internal/relay"
 	"a3sitsolutions.com/ffcom/server-central/internal/storage"
 	"a3sitsolutions.com/ffcom/server-central/internal/store"
@@ -84,7 +85,8 @@ func main() {
 	requireTLS := envBool("REQUIRE_TLS", false)
 	ideasCfg := ideasConfigFromEnv()
 	signupCfg := signupConfigFromEnv()
-	router := httpapi.NewRouter(verifier, db, avatarFiles, avatarMaxBytes, parseAllowedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS")), version, rateLimitRPM, rateLimitBurst, requireTLS, ideasCfg, signupCfg)
+	pushDispatcher := pushDispatcherFromEnv(db)
+	router := httpapi.NewRouter(verifier, db, avatarFiles, avatarMaxBytes, parseAllowedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS")), version, rateLimitRPM, rateLimitBurst, requireTLS, ideasCfg, signupCfg, pushDispatcher)
 
 	// Listener interno, numa porta que o proxy público não encaminha: o
 	// a3s-claude-relay devolve por ali o resultado da varinha e da checagem
@@ -174,6 +176,25 @@ func signupConfigFromEnv() httpapi.SignupConfig {
 	cfg.RecoveryEmailStage = requireEnv("AUTHENTIK_RECOVERY_EMAIL_STAGE")
 	cfg.DecisionSecret = requireEnv("SIGNUP_DECISION_SECRET")
 	return cfg
+}
+
+// pushDispatcherFromEnv liga as notificações push do app Android quando
+// FCM_SERVICE_ACCOUNT_JSON tem a chave da conta de serviço do Firebase (o
+// JSON numa linha ou o caminho do arquivo). Sem ela, devolve nil: as rotas
+// de push continuam respondendo, mas nada é enviado. Chave inválida impede
+// o boot, para o erro não passar despercebido. Ver docs/architecture.md,
+// "Decisão: notificações push (fase 6)".
+func pushDispatcherFromEnv(db *store.Store) *push.Dispatcher {
+	raw := os.Getenv("FCM_SERVICE_ACCOUNT_JSON")
+	if raw == "" {
+		log.Printf("server-central: FCM_SERVICE_ACCOUNT_JSON vazio; notificações push desligadas")
+		return nil
+	}
+	sender, err := push.NewFCMSender(raw)
+	if err != nil {
+		log.Fatalf("server-central: %v", err)
+	}
+	return push.NewDispatcher(sender, db.Push, 4, 2000)
 }
 
 func requireEnv(name string) string {

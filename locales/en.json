@@ -458,6 +458,21 @@
       "remove_failed": "error removing server",
       "reorder_failed": "error reordering servers"
     },
+    "push": {
+      "channel_id_invalid": "invalid channelId",
+      "device_delete_failed": "error removing the device",
+      "device_save_failed": "error registering the device",
+      "device_token_invalid": "invalid device token",
+      "grant_create_failed": "error creating the notification token",
+      "grant_delete_failed": "error removing the notification token",
+      "grant_invalid": "invalid notification token",
+      "grant_save_failed": "error saving the notification token",
+      "mute_save_failed": "error saving the mute",
+      "mutes_fetch_failed": "error fetching mutes",
+      "platform_invalid": "unsupported platform",
+      "server_address_required": "serverAddress is required",
+      "server_unknown": "server is not in your list"
+    },
     "ideas": {
       "admin_only_delete": "only administrators can delete ideas",
       "admin_only_moderate": "only administrators can moderate ideas",

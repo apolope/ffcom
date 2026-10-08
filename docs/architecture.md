@@ -1923,6 +1923,37 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** entrar um terceiro idioma (aí, `CHANGELOG.<idioma>.md` pelo mesmo esquema, e os scripts passam a percorrer a lista de arquivos), ou se a tradução de cada release virar o gargalo para publicar.
 
+## Decisão: notificações push (fase 6)
+
+**Contexto:** o app Android (ver [`android-runbook.md`](android-runbook.md), fase 6) precisa avisar de mensagem nova com o app fechado: toda mensagem de canal, DM e pedido ou aceite de amizade. Só o Firebase Cloud Messaging (FCM) acorda um app Android fora da Play Store sem serviço próprio rodando, e a credencial do FCM (conta de serviço do projeto Firebase) é uma só para todos os aparelhos. Ela não pode ir para cada `server-channel`, que é self-hosted e de qualquer pessoa. E o `server-channel` não sabe quem é cada membro no `server-central`: o membro é só o `sub` do Authentik.
+
+**Alternativas consideradas:**
+- **Credencial do FCM em cada `server-channel`:** cada servidor mandaria direto ao Google. Exige entregar a chave a terceiros, e qualquer servidor poderia notificar qualquer aparelho de que soubesse o token. Descartada.
+- **`server-channel` chama o central identificando a pessoa pelo `sub`:** o central teria de confiar que o servidor fala a verdade sobre quem é membro, e um servidor mal-intencionado notificaria qualquer conta do FFCom. Descartada.
+- **Notificação montada pelo FCM (campo `notification`):** o Android mostra sozinho, sem agrupar por canal e sem o app decidir nada. Descartada em favor de mensagens só de dados.
+- **SDK do Google (`firebase.google.com/go`):** traz dezenas de módulos para um único POST e um JWT. Descartado, como o SDK do LiveKit (ver "Decisão: integração de voz com LiveKit").
+- **Grant por pessoa e servidor, emitido pelo central:** escolhida. É o que o runbook decidiu com o dono.
+
+**Decisão:**
+1. **Grant:** o app pede `POST /api/push/grants {serverAddress}` ao central, que só aceita endereço que está em `known_servers` da conta e devolve um token aleatório de 32 bytes (base64url) uma única vez. O banco guarda só o SHA-256, preso à linha de `known_servers` por chave estrangeira com `ON DELETE CASCADE`: tirar o servidor da lista apaga os grants e os silêncios dele, sem código a mais. Até 10 grants por conta e servidor (cada aparelho pede o seu; os mais velhos saem).
+2. **Entrega ao servidor:** o app manda `PUT /api/me/push-grant {token, serverAddress}` ao `server-channel`, que guarda um grant por membro (`member_push_grants`). `serverAddress` é o endereço como o app o conhece, o mesmo do `known_servers`. O grant sai num kick ou ban (`MemberStore.Kick`) e num `DELETE /api/me/push-grant`. O `server-channel` não tem como saber o próprio endereço público, por isso ele vem do app.
+3. **Mensagem nova:** depois do broadcast, o handler (WebSocket de texto e fórum, e o `POST` com anexo) só enfileira. Um worker do `internal/push` do `server-channel` calcula os destinatários (membros ativos com grant, menos o autor, menos quem estava com o WebSocket daquele canal aberto na hora da mensagem, segundo o `realtime.Hub`, e só quem tem `ViewChannels` no canal, com roles, `@everyone` e overwrites de uma vez) e chama `POST /api/push/notify` no central, um lote por endereço, até 500 grants por chamada. Fila cheia descarta; erro só vai para o log. O endereço do central é `FFCOM_CENTRAL_URL` (vazia: a instância oficial `https://central.ffcom.a3sitsolutions.com.br`; `off`: push desligado).
+4. **Central:** `POST /api/push/notify` não tem conta (o grant é a credencial) e fica fora do rate limit geral, com limites próprios: 600 chamadas por minuto por IP, 1200 notificações por minuto por servidor e 60 por minuto por grant. Só vale grant cujo servidor tem exatamente o `serverAddress` da chamada; grant desconhecido, de outro servidor, silenciado ou acima do limite é ignorado, e a resposta é sempre `202 {"status":"accepted"}`. O nome do servidor na notificação é o que a pessoa deu a ele na lista dela. O texto é cortado em 300 caracteres e só existe em memória até o FCM; nada é gravado.
+5. **FCM:** `internal/push` do central assina localmente o JWT RS256 da conta de serviço (`FCM_SERVICE_ACCOUNT_JSON`, o JSON numa linha ou o caminho do arquivo), troca por token OAuth2 em cache até um minuto antes de expirar e chama `messages:send` da API HTTP v1 com mensagem só de dados, `android.priority: HIGH` e TTL de 24 h. Token que o FCM responde `UNREGISTERED` é apagado. O envio roda em 4 workers com fila de 2000; quem gera a notificação nunca espera o Google. Sem a variável, o push fica desligado e as rotas continuam respondendo. Chave inválida impede o boot.
+6. **DM e amizade:** o próprio central notifica. A DM leva só quem mandou (o conteúdo é cifrado de ponta a ponta e o servidor não o conhece); pedido de amizade vai a quem recebe; aceite (pelo pedido ou por convite resgatado) vai a quem não fez a ação.
+7. **Silêncio:** `GET/PUT /api/push/mutes`, um servidor inteiro ou um canal, guardado na conta. `PUT` muda um item por vez, para dois aparelhos não sobrescreverem a lista um do outro. O central confere a cada notificação de canal.
+8. **Formato:** campos de dados versionados (`v: "1"`) e documentados em [`protocol.md`](protocol.md), "Notificações push", porque o `FirebaseMessagingService` do app depende deles.
+
+**Escopo aceito:**
+- **O endereço não prova quem chama:** um terceiro que conheça o grant e o endereço consegue notificar a pessoa em nome daquele servidor. O grant só sai do app para o próprio servidor, então só esse servidor (ou quem o comprometer) o tem; é a mesma confiança que a pessoa já deposita no servidor que lê as mensagens dela.
+- **DM notifica mesmo com o app aberto em outro aparelho:** o central não sabe qual aparelho está em uso. Quem decide esconder com o app em primeiro plano é o app.
+- **Destinatários calculados na fila, não na mensagem:** mudança de role no meio segundo entre a mensagem e o worker vale para a notificação.
+- **Rollback do `server-channel`** para versão sem push deixa a tabela `member_push_grants` parada; um kick feito nessa versão não apaga o grant, mas membro expulso não é destinatário (`removed_at`).
+
+**Verificado:** testes de integração com Postgres nos dois módulos (`scripts/test-go.ps1`): grant só para servidor da lista; tirar o servidor revoga; `notify` com grant de outro servidor e com grant desconhecido não entrega nada e responde igual; silêncio de canal e de servidor; texto truncado; token `UNREGISTERED` apagado; destinatários sem o autor, sem quem está com o canal aberto, sem quem não tem `ViewChannels`, sem expulso; criar mensagem com o push desligado, com o central lento e com o central fora responde `201` na hora. O JWT e o cache do token OAuth2 contra um FCM falso (`internal/push/fcm_test.go`). A entrega real pelo Firebase num aparelho fica para a fase 6 do client.
+
+**Revisitar quando:** houver cliente iOS (APNs pelo mesmo FCM, mudando só `platform`), se for preciso notificar menção em vez de toda mensagem, ou se o volume pedir que o `server-channel` junte várias mensagens numa chamada.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); entra como tema separado no TODO.

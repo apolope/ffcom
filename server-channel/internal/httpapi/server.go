@@ -7,6 +7,7 @@ import (
 
 	"a3sitsolutions.com/ffcom/server-channel/internal/auth"
 	"a3sitsolutions.com/ffcom/server-channel/internal/livekit"
+	"a3sitsolutions.com/ffcom/server-channel/internal/push"
 	"a3sitsolutions.com/ffcom/server-channel/internal/realtime"
 	"a3sitsolutions.com/ffcom/server-channel/internal/storage"
 	"a3sitsolutions.com/ffcom/server-channel/internal/store"
@@ -41,7 +42,10 @@ import (
 //
 // liveKitAPIURL é onde server-channel consulta a RoomService do LiveKit
 // (quem está em cada sala de voz, ver voice_participants.go).
-func NewRouter(hub *realtime.Hub, verifier *auth.Verifier, db *store.Store, attachmentFiles *storage.FileStore, attachmentMaxBytes int64, allowedOrigins []string, liveKitAPIKey, liveKitAPISecret, liveKitPublicURL, liveKitAPIURL, version string, requireTLS bool, restRateLimitRPM, restRateLimitBurst, wsRateLimitRPM, wsRateLimitBurst int) http.Handler {
+//
+// notifier leva as mensagens novas ao server-central para notificação push
+// (ver push.go); nil com FFCOM_CENTRAL_URL=off, e aí nada é enviado.
+func NewRouter(hub *realtime.Hub, verifier *auth.Verifier, db *store.Store, attachmentFiles *storage.FileStore, attachmentMaxBytes int64, allowedOrigins []string, liveKitAPIKey, liveKitAPISecret, liveKitPublicURL, liveKitAPIURL, version string, requireTLS bool, restRateLimitRPM, restRateLimitBurst, wsRateLimitRPM, wsRateLimitBurst int, notifier *push.Notifier) http.Handler {
 	mux := http.NewServeMux()
 
 	allowed := make(map[string]bool, len(allowedOrigins))
@@ -63,6 +67,8 @@ func NewRouter(hub *realtime.Hub, verifier *auth.Verifier, db *store.Store, atta
 	mux.Handle("GET /api/me", protected(handleMe(db.Roles)))
 	mux.Handle("PATCH /api/me", protected(handleUpdateMe(db.Members, db.Roles)))
 	mux.Handle("PUT /api/me/profile-name", protected(handleSetProfileName(db.Members, db.Roles)))
+	mux.Handle("PUT /api/me/push-grant", protected(handleSetPushGrant(db.Members)))
+	mux.Handle("DELETE /api/me/push-grant", protected(handleDeletePushGrant(db.Members)))
 	mux.Handle("GET /api/members", protected(handleListMembers(db.Members, db.Roles)))
 	mux.Handle("POST /api/members/{memberId}/kick", protected(handleKickMember(db.Members, db.Roles)))
 	mux.Handle("POST /api/members/{memberId}/ban", protected(handleBanMember(db.Members, db.Roles, db.MemberBans)))
@@ -79,11 +85,11 @@ func NewRouter(hub *realtime.Hub, verifier *auth.Verifier, db *store.Store, atta
 	mux.Handle("PATCH /api/channels/{id}", protected(handleUpdateChannel(db.Categories, db.Channels, db.Roles)))
 	mux.Handle("DELETE /api/channels/{id}", protected(handleDeleteChannel(db.Channels, db.Attachments, attachmentFiles, db.Roles)))
 	mux.Handle("GET /api/channels/{id}/messages", protected(handleListMessages(db.Channels, db.Roles, db.ChannelOverwrites, db.Messages, db.Attachments)))
-	mux.Handle("POST /api/channels/{id}/messages", protected(handleCreateMessageWithAttachment(hub, db.Channels, db.Roles, db.ChannelOverwrites, db.Messages, db.Attachments, attachmentFiles, attachmentMaxBytes)))
+	mux.Handle("POST /api/channels/{id}/messages", protected(handleCreateMessageWithAttachment(hub, db.Channels, db.Roles, db.ChannelOverwrites, db.Messages, db.Attachments, attachmentFiles, attachmentMaxBytes, notifier)))
 	mux.Handle("GET /api/attachments/{id}", protected(handleGetAttachment(db.Attachments, db.Messages, db.Roles, db.ChannelOverwrites, attachmentFiles)))
 	mux.Handle("GET /api/channels/{id}/threads", protected(handleListThreads(db.Channels, db.Roles, db.ChannelOverwrites, db.Messages)))
 	mux.Handle("GET /api/threads/{id}/messages", protected(handleListThreadMessages(db.Roles, db.ChannelOverwrites, db.Messages)))
-	mux.Handle("GET /api/channels/{id}/ws", protected(handleChannelWS(hub, db.Channels, db.Roles, db.ChannelOverwrites, db.Messages, db.Attachments, attachmentFiles, upgrader, wsLimiter)))
+	mux.Handle("GET /api/channels/{id}/ws", protected(handleChannelWS(hub, db.Channels, db.Roles, db.ChannelOverwrites, db.Messages, db.Attachments, attachmentFiles, upgrader, wsLimiter, notifier)))
 	mux.Handle("POST /api/channels/{id}/voice/token", protected(handleVoiceToken(db.Channels, db.Roles, db.ChannelOverwrites, liveKitAPIKey, liveKitAPISecret, liveKitPublicURL)))
 	liveKitRooms := livekit.NewRoomClient(liveKitAPIURL, liveKitAPIKey, liveKitAPISecret)
 	voicePresence := newVoicePresence(liveKitRooms, 5*time.Second)

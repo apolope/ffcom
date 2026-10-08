@@ -101,7 +101,8 @@ func (l *rateLimiter) allow(key string) bool {
 // contexto, para a autenticação não verificar o token de novo.
 type requestIdentifier func(r *http.Request) (*http.Request, string, string, bool)
 
-// withRateLimit aplica o limiter a todas as rotas, exceto /healthz (usado
+// withRateLimit aplica o limiter a todas as rotas, exceto /healthz e
+// POST /api/push/notify (ver push.go). /healthz é usado
 // pelo HEALTHCHECK do Docker e por monitoramento externo, não deve competir
 // por orçamento de requisições com tráfego de cliente real).
 //
@@ -116,7 +117,9 @@ type requestIdentifier func(r *http.Request) (*http.Request, string, string, boo
 // continua segurando flood anônimo. Ver docs/rate-limits.md.
 func withRateLimit(limiter *rateLimiter, identify requestIdentifier, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" {
+		// POST /api/push/notify vem de server-channel, sem conta, e tem
+		// limites próprios (pushLimits em push.go).
+		if r.URL.Path == "/healthz" || r.URL.Path == pushNotifyPath {
 			next.ServeHTTP(w, r)
 			return
 		}

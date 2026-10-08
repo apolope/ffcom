@@ -10,6 +10,7 @@ import (
 
 	"a3sitsolutions.com/ffcom/server-central/internal/apierr"
 	"a3sitsolutions.com/ffcom/server-central/internal/auth"
+	"a3sitsolutions.com/ffcom/server-central/internal/push"
 	"a3sitsolutions.com/ffcom/server-central/internal/realtime"
 	"a3sitsolutions.com/ffcom/server-central/internal/store"
 )
@@ -33,7 +34,7 @@ const (
 // entregue; a entrega em tempo real (via realtime.Hub.SendTo) é
 // best-effort para quem estiver online agora — o destinatário offline lê a
 // mensagem depois via GET /api/dms/{accountId}/messages.
-func handleIncomingDM(ctx context.Context, hub *realtime.Hub, friendships *store.FriendshipStore, directMessages *store.DirectMessageStore, senderID string, client *realtime.Client, raw []byte) {
+func handleIncomingDM(ctx context.Context, hub *realtime.Hub, friendships *store.FriendshipStore, directMessages *store.DirectMessageStore, profiles *store.ProfileStore, dispatcher *push.Dispatcher, senderID string, client *realtime.Client, raw []byte) {
 	incoming, prob := realtime.DecodeIncomingDM(raw)
 	if prob != nil {
 		client.SendError(prob)
@@ -82,6 +83,9 @@ func handleIncomingDM(ctx context.Context, hub *realtime.Hub, friendships *store
 	// mesmo padrão de "message.created" em server-channel.
 	hub.SendTo(incoming.RecipientID, payload)
 	hub.SendTo(senderID, payload)
+	// Push para os aparelhos do destinatário: só quem mandou, porque o
+	// conteúdo é cifrado de ponta a ponta e o servidor não o conhece.
+	pushFromAccount(dispatcher, profiles, push.TypeDM, incoming.RecipientID, senderID, "")
 }
 
 // GET /api/dms/{accountId}/messages?before=RFC3339&limit=N — histórico

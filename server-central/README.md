@@ -55,6 +55,25 @@ instância central de Authentik (blueprint declarativo no repositório
 essa instância — ver
 `D:\Dev\a3s-network\docs\procedures\integrar-app-com-authentik.md`).
 
+## Notificações push
+
+O `server-central` é quem fala com o Firebase Cloud Messaging para avisar o
+app Android de mensagem nova, DM e pedido ou aceite de amizade. Liga com
+`FCM_SERVICE_ACCOUNT_JSON` no `.env`: a chave JSON da conta de serviço do
+projeto Firebase, numa linha só (como o console baixa, sem quebrar as
+linhas) ou o caminho de um arquivo montado no container. Sem ela, o log diz
+"notificações push desligadas" e as rotas de push respondem normalmente,
+só sem enviar. Para trocar a chave: gerar outra no console do Google Cloud,
+trocar no `.env`, `docker compose up -d app` e revogar a antiga.
+
+Os `server-channel` chamam `POST /api/push/notify` com os tokens que os
+membros lhes deram; a rota não exige login e não entra no rate limit geral
+(tem limites próprios). O texto das mensagens passa só em memória até o
+Firebase: nada é gravado. Rotas e formato em
+[`../docs/protocol.md`](../docs/protocol.md), "Notificações push"; decisão
+em [`../docs/architecture.md`](../docs/architecture.md), "Decisão:
+notificações push (fase 6)".
+
 ## Backup / restore
 
 Nenhum backup automático embutido — ver [`../docs/backup-restore.md`](../docs/backup-restore.md) para o procedimento de `pg_dump`/`pg_restore` do banco e dos avatares (`avatars_data`).

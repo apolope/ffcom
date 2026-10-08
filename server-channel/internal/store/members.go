@@ -105,8 +105,8 @@ func (s *MemberStore) SetNickname(ctx context.Context, id string, nickname *stri
 	return s.scanOne(ctx, query, id, nickname)
 }
 
-// Kick marca o membro como removido (removed_at) e limpa as roles que ele
-// tinha atribuídas — ver docs/architecture.md, "Decisão: kick/ban de
+// Kick marca o membro como removido (removed_at) e limpa as roles e o grant
+// de push que ele tinha; ver docs/architecture.md, "Decisão: kick/ban de
 // membro". Não apaga a linha: mensagens/threads/convites já criados
 // continuam com o mesmo author/created_by, preservando o histórico.
 // Devolve ErrNotFound se o membro não existir ou já estiver expulso.
@@ -124,6 +124,12 @@ func (s *MemberStore) Kick(ctx context.Context, id string) (Member, error) {
 	const clearRoles = `DELETE FROM member_roles WHERE member_id = $1`
 	if _, err := s.pool.Exec(ctx, clearRoles, id); err != nil {
 		return Member{}, fmt.Errorf("members: kick: limpar roles: %w", err)
+	}
+	// O grant de push sai junto: quem foi expulso (ou banido, que passa por
+	// aqui) não recebe mais notificação, nem volta a receber se entrar de
+	// novo com convite antes de o app entregar um grant novo.
+	if err := s.DeletePushGrant(ctx, id, nil); err != nil {
+		return Member{}, fmt.Errorf("members: kick: %w", err)
 	}
 	return member, nil
 }

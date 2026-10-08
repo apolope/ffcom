@@ -25,6 +25,11 @@ const (
 // travado ou Hub.Close no shutdown) enquanto o ReadPump ainda pode chamar
 // SendError, e mandar num canal fechado derrubaria o processo.
 type Client struct {
+	// MemberID é o membro dono da conexão, preenchido pelo handler antes
+	// do Register; o Hub usa para saber quem está com o canal aberto (ver
+	// Hub.MemberIDs).
+	MemberID string
+
 	conn       *websocket.Conn
 	send       chan []byte
 	sendMu     sync.Mutex

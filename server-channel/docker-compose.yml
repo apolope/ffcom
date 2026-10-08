@@ -122,6 +122,9 @@ services:
       # cada recriação do container.
       ATTACHMENTS_DIR: /data/attachments
       ATTACHMENT_MAX_MB: ${ATTACHMENT_MAX_MB:-}
+      # Notificações push do app Android pelo server-central. Vazio = a
+      # instância oficial; "off" desliga. Ver README.md, "Notificações push".
+      FFCOM_CENTRAL_URL: ${FFCOM_CENTRAL_URL:-}
       # Política de atualização do lançador ffcom-runtime (todas opcionais):
       # - FFCOM_CHANNEL_VERSION: trilha. Vazio (padrão) = o minor do binário
       #   semente da imagem, ou seja, só patches automáticos (ex. 0.7.x);
