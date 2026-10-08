@@ -1088,8 +1088,14 @@
     "openList": "Abrir lista de membros"
   },
   "update": {
+    "availableAndroid": "Nova versão do app disponível. Toque para instalar (o FFCom fecha durante a instalação, saindo da chamada de voz).",
     "availableDesktop": "Nova versão disponível. Clique para instalar (o FFCom fecha, atualiza e abre de novo, saindo da chamada de voz).",
     "availableWeb": "Nova versão disponível. Clique para atualizar (recarrega a página e sai da chamada de voz).",
+    "installPermission": {
+      "title": "Permitir a atualização",
+      "body": "Para instalar a versão nova, o Android pede que você libere o FFCom em \"Instalar apps desconhecidos\". Isso é feito uma vez só: ative \"Permitir desta fonte\" e volte ao app.",
+      "openSettings": "Abrir configurações"
+    },
     "label": "Atualizar o FFCom para a nova versão"
   }
 }

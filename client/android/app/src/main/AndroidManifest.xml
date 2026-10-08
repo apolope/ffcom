@@ -40,6 +40,10 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Abrir o instalador com o APK novo baixado pelo UpdatePlugin. Na
+         primeira vez o Android pede "Permitir desta fonte"
+         (canRequestPackageInstalls). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- A câmera é opcional: sem ela o app instala e funciona só com voz. -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 </manifest>

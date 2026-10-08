@@ -9,6 +9,7 @@ import { ServerMenu, type ServerMenuActions } from './ServerMenu'
 import { StatusMenu, type AccountIdentity } from './StatusMenu'
 import { UpdateButton } from './UpdateButton'
 import { useScrollEdges } from '../hooks/useScrollEdges'
+import type { UpdateKind } from '../hooks/useAppUpdate'
 import './ServerRail.css'
 
 interface ServerRailProps {
@@ -20,8 +21,9 @@ interface ServerRailProps {
   // lida. App.tsx só acende o que a pessoa não está vendo agora.
   unreadServerIds: Set<string>
   friendsUnread: boolean
-  // Versão nova do client esperando (hooks/useAppUpdate.ts).
+  // Versão nova do client esperando (hooks/useAppUpdate.ts) e de quem é.
   updateReady: boolean
+  updateKind: UpdateKind | undefined
   onUpdate: () => void
   myProfile: MyProfile | undefined
   // Dados do Authentik e do servidor aberto para o cabeçalho do menu do
@@ -54,6 +56,7 @@ export function ServerRail({
   unreadServerIds,
   friendsUnread,
   updateReady,
+  updateKind,
   onUpdate,
   myProfile,
   account,
@@ -224,7 +227,7 @@ export function ServerRail({
         >
           +
         </button>
-        {updateReady && <UpdateButton onUpdate={onUpdate} />}
+        {updateReady && <UpdateButton kind={updateKind ?? 'web'} onUpdate={onUpdate} />}
         <button
           type="button"
           className="account-button"

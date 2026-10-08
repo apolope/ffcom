@@ -1084,8 +1084,14 @@
     "openList": "Open member list"
   },
   "update": {
+    "availableAndroid": "New app version available. Tap to install (FFCom closes during the install, leaving the voice call).",
     "availableDesktop": "New version available. Click to install (FFCom closes, updates and reopens, leaving the voice call).",
     "availableWeb": "New version available. Click to update (reloads the page and leaves the voice call).",
+    "installPermission": {
+      "title": "Allow the update",
+      "body": "To install the new version, Android asks you to allow FFCom under \"Install unknown apps\". You only do this once: turn on \"Allow from this source\" and come back to the app.",
+      "openSettings": "Open settings"
+    },
     "label": "Update FFCom to the new version"
   }
 }

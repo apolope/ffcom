@@ -1952,9 +1952,44 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** a fase 2 (atualização do próprio APK) e a fase 3 (login no navegador do sistema) entrarem, ou se o Capacitor 9 mudar o template.
 
+## Decisão: atualização do APK (fase 2)
+
+**Contexto:** a parte web do app Android se atualiza pelo service worker, como no navegador, mas a casca nativa só muda com um APK novo, e o Android não instala em silêncio fora da loja. A fase 2 do [`android-runbook.md`](android-runbook.md) leva para o app o que o electron-updater faz no desktop ("Decisão: distribuição e atualização do app desktop"): achar a versão nova, baixar em segundo plano e acender o mesmo botão verde.
+
+**Alternativas consideradas:**
+- **Quem baixa:** (1) a parte web, com `fetch` e o arquivo passado ao nativo; (2) um plugin pronto de terceiros; (3) **um plugin próprio em Java** no app. A WebView não grava na pasta privada do app nem abre o instalador, e um plugin de terceiros traria código nativo que não controlamos para algo deste tamanho. Escolhido (3), em Java como o template, sem o plugin do Kotlin no Gradle.
+- **Quando instalar:** baixar e já abrir o instalador, ou **baixar e esperar o toque no botão**. Abrir sozinho cortaria uma chamada no meio. Escolhido o botão, como no desktop.
+- **Onde guardar o APK:** `getCacheDir()`, que o sistema pode limpar entre o download e o toque, ou **`getFilesDir()/updates`**, privada e estável. Escolhida a segunda.
+
+**Decisão:**
+1. **Plugin nativo** `UpdatePlugin` (`@CapacitorPlugin(name = "FfcomUpdate")`, em `client/android/app/src/main/java/br/com/a3sitsolutions/ffcom/`), registrado no `MainActivity.onCreate` antes do `super.onCreate`, como pede o Capacitor 8. Ao carregar, agenda num executor próprio uma checagem imediata e outra a cada 30 min. Cada ciclo:
+   - lê `https://github.com/apolope/ffcom/releases/download/android-stable/latest.json` (`{version, versionCode, url, sha256}`, o formato que o job `android` publica);
+   - com `versionCode` menor ou igual ao instalado, apaga o que houver em `updates/` e para (é assim que o APK já instalado é limpo depois da atualização);
+   - só aceita `url` das releases `client-v*` do próprio repositório, terminando em `.apk`;
+   - baixa para `FFCom-<versionCode>.apk.part` calculando o sha256 no caminho; se bate com o `latest.json`, renomeia para `FFCom-<versionCode>.apk`, apaga o resto da pasta e emite o evento `updateReady` (retido até a página ouvir); se não bate, apaga e guarda o sha256 recusado, para não baixar o mesmo arquivo a cada ciclo. Um `latest.json` novo tenta outra vez;
+   - um APK já baixado numa abertura anterior é conferido de novo antes de ser oferecido;
+   - qualquer falha (sem rede, GitHub fora, JSON estranho) só vai para o logcat (tag `FfcomUpdate`) e espera o próximo ciclo.
+2. **Contrato com a parte web:** `getUpdateReady()` devolve `{ready, version?, versionCode?}`; `canInstall()` devolve `{granted}` (`canRequestPackageInstalls`); `openInstallSettings()` abre "Instalar apps desconhecidos" do FFCom e, ao voltar, resolve `{granted}`; `install()` abre o instalador com o APK pronto (`FileProvider` em `files-path updates/` + `ACTION_VIEW`) ou rejeita com `needs-permission` ou `not-ready`. Permissão nova no manifesto: `REQUEST_INSTALL_PACKAGES`.
+3. **Mesmo botão verde:** `client/src/lib/nativeUpdater.ts` dá uma interface só (`getUpdateReady`, `onUpdateReady`, `applyUpdate`, `requestInstallPermission` opcional) para a ponte do Electron e para o `FfcomUpdate`. O `useAppUpdate` junta isso ao service worker e devolve também `updateKind` (`web`, `desktop` ou `android`), que só troca o texto do `UpdateButton` (`update.availableAndroid`). No app Android as duas atualizações coexistem: com o APK pronto, o toque instala o APK, que ao reabrir já carrega a parte web nova; sem ele, o toque recarrega a página como antes.
+4. **Primeira vez:** se o Android ainda não deixa o app instalar, o toque abre o `InstallPermissionDialog` (`update.installPermission.*`), que explica o "Permitir desta fonte" e leva às configurações. Voltando com a fonte liberada, o instalador abre em seguida.
+5. **Sem sessão**, a versão web e a do desktop continuam se aplicando sozinhas (`applyUpdateSilently`); o APK nunca, porque abriria o instalador por cima da tela de login.
+6. **Build local** (`versionName` `0.0.0`, sem `-PffcomVersionName`): o plugin não procura atualização, como o desktop fora do app empacotado. Assinado com a chave de debug, o APK oficial nem instalaria por cima. Para testar a fase 2 localmente, gerar com `-PffcomVersionName`/`-PffcomVersionCode` de uma versão abaixo da publicada.
+7. **Testes:** as regras puras (comparação de `versionCode`, sha256, `url` aceita, o que é sobra na pasta) ficam em `ApkUpdates.java`, com JUnit em `app/src/test` (`./gradlew testDebugUnitTest`).
+
+**O que foi verificado (2026-10-08, sem aparelho):** `npm run lint`, `npm run build`, `node scripts/check-locales.mjs`, `npx cap sync android`, `./gradlew assembleDebug` e `./gradlew testDebugUnitTest` (5 testes do `ApkUpdatesTest`). No APK de debug (`aapt2`), a permissão `REQUEST_INSTALL_PACKAGES` e o `files-path` `updates/` do `FileProvider`. Download, instalação por cima e o aviso da primeira vez ficam para o "Conferir" da fase 2 do runbook, que precisa de duas versões publicadas e de um aparelho.
+
+**Escopo aceito:**
+- O sha256 vem do mesmo `latest.json` que aponta o APK, então protege contra download corrompido ou trocado no caminho, não contra quem controla a release. Contra isso vale a assinatura: o Android só instala por cima um APK com a nossa chave.
+- Uma parte web nova rodando num APK da fase 1 (sem o plugin) recebe "não implementado" do Capacitor; o `nativeUpdater` trata como "sem atualização" e o botão segue só com o service worker.
+- Em alguns Android, liberar "Instalar apps desconhecidos" reinicia o app. Aí a resposta do `openInstallSettings` se perde; o plugin acha o APK de novo na abertura e o botão volta, e um segundo toque instala.
+- O executor checa enquanto o processo vive, inclusive em segundo plano. Com o Android matando o processo, a checagem volta na próxima abertura.
+- A ponte do Capacitor exposta ao domínio do app (fase 1) passa a incluir o `FfcomUpdate`. O pior que um XSS faz com ele é abrir o instalador de um APK já conferido e assinado por nós.
+
+**Revisitar quando:** a fase 3 publicar a primeira versão e o "Conferir" da fase 2 rodar num aparelho, ou se o Android passar a exigir outro caminho para instalar fora da loja (`PackageInstaller` em vez de `ACTION_VIEW`).
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
-- **Mobile:** fora do escopo da v1 (cliente é web + desktop); o app Android segue em fases pelo [`android-runbook.md`](android-runbook.md) (ver "Decisão: app Android com Capacitor (fase 1)").
+- **Mobile:** fora do escopo da v1 (cliente é web + desktop); o app Android segue em fases pelo [`android-runbook.md`](android-runbook.md) (ver "Decisão: app Android com Capacitor (fase 1)" e "Decisão: atualização do APK (fase 2)").
 
 ## Fontes consultadas (2026-09-19)
 

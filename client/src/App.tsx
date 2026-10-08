@@ -13,6 +13,7 @@ import { DirectMessageView } from './components/DirectMessageView'
 import { NicknameDialog } from './components/NicknameDialog'
 import { DisplayNameDialog } from './components/DisplayNameDialog'
 import { AvatarDialog } from './components/AvatarDialog'
+import { InstallPermissionDialog } from './components/InstallPermissionDialog'
 import { CategoryDialog, ChannelDialog } from './components/StructureDialogs'
 import { ChannelPermissionsDialog } from './components/ChannelPermissionsDialog'
 import { PresenceContext, visibleOwnStatus, type PresenceContextValue } from './components/PresenceContext'
@@ -70,13 +71,14 @@ function App() {
   // `sub` do OIDC: chave de E2E e cursores de não lida em localStorage são
   // por conta, não por navegador (ver crypto/e2e.ts, lib/unread.ts).
   const accountSub = user?.profile.sub ?? ''
-  const { updateReady, applyUpdate } = useAppUpdate()
+  const { updateReady, updateKind, applyUpdate, applyUpdateSilently, installPermission } = useAppUpdate()
   // Sem sessão não há chamada de voz para derrubar: aplica a versão nova
   // sozinha, menos no meio do redirecionamento ao Authentik (recarregar ali
-  // cancelaria a saída ou o login). Logado, só pelo botão do ServerRail.
+  // cancelaria a saída ou o login). Logado, só pelo botão do ServerRail. O
+  // APK do Android fica sempre para o botão (abre o instalador na tela).
   useEffect(() => {
-    if (updateReady && status === 'signed-out' && !redirecting) applyUpdate()
-  }, [updateReady, status, redirecting, applyUpdate])
+    if (applyUpdateSilently && status === 'signed-out' && !redirecting) applyUpdateSilently()
+  }, [applyUpdateSilently, status, redirecting])
   const {
     profile: myProfile,
     uploadAvatar,
@@ -521,6 +523,7 @@ function App() {
                   unreadServerIds={unreadServerIds}
                   friendsUnread={!showFriends && (unreadFriendIds.size > 0 || incomingRequests.length > 0)}
                   updateReady={updateReady}
+                  updateKind={updateKind}
                   onUpdate={applyUpdate}
                   myProfile={myProfile}
                   account={{
@@ -817,6 +820,9 @@ function App() {
                   onRemove={removeAvatar}
                   onClose={() => setShowMyAvatar(false)}
                 />
+              )}
+              {installPermission && (
+                <InstallPermissionDialog onAllow={installPermission.allow} onClose={installPermission.dismiss} />
               )}
             </div>
           </MobileNavContext.Provider>

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
+import { getNativeUpdater, type NativeUpdateKind } from '../lib/nativeUpdater'
 
 // De quanto em quanto tempo perguntar ao servidor se há sw.js novo. Sem
 // isso o navegador só confere numa navegação nova, e um PWA instalado no
@@ -9,11 +10,23 @@ const UPDATE_CHECK_INTERVAL_MS = 5 * 60_000
 // Prazo para recarregar mesmo que o worker novo não avise que ativou.
 const RELOAD_FALLBACK_MS = 3_000
 
+export type UpdateKind = 'web' | NativeUpdateKind
+
 interface UseAppUpdateResult {
   // Uma versão nova já foi baixada e está esperando para ativar.
   updateReady: boolean
-  // Ativa a versão nova e recarrega a página.
+  // De quem é a versão esperando (texto do botão); undefined sem nenhuma.
+  updateKind: UpdateKind | undefined
+  // Ativa a versão nova: recarrega a página, reinstala o desktop ou abre o
+  // instalador do Android.
   applyUpdate: () => void
+  // Presente quando dá para aplicar sem ninguém tocar (sem sessão): o
+  // service worker e o desktop. O APK do Android nunca, porque abre o
+  // instalador na tela.
+  applyUpdateSilently: (() => void) | undefined
+  // Presente quando o Android pediu "Permitir desta fonte" antes de
+  // instalar: o App mostra a explicação (InstallPermissionDialog).
+  installPermission: { allow: () => void; dismiss: () => void } | undefined
 }
 
 // Registra o service worker do PWA e confere periodicamente se há versão
@@ -25,18 +38,23 @@ interface UseAppUpdateResult {
 //
 // No build Electron o plugin está desligado e o módulo virtual é vazio; lá
 // quem baixa a versão nova é o electron-updater no main (electron/main.ts),
-// e este hook só repassa o aviso e o clique pela ponte.
+// e este hook só repassa o aviso e o clique pela ponte. No app Android as
+// duas coisas existem: o service worker atualiza a parte web e o
+// UpdatePlugin baixa o APK novo (lib/nativeUpdater.ts); com os dois
+// esperando, o clique instala o APK, que ao reabrir já carrega a parte web
+// nova. Ver docs/architecture.md, "Decisão: atualização do APK (fase 2)".
 export function useAppUpdate(): UseAppUpdateResult {
-  const electron = window.ffcomElectron
-  const [desktopUpdateReady, setDesktopUpdateReady] = useState(false)
+  const [native] = useState(getNativeUpdater)
+  const [nativeUpdateReady, setNativeUpdateReady] = useState(false)
   useEffect(() => {
-    if (!electron) return
-    const unsubscribe = electron.onUpdateReady(() => setDesktopUpdateReady(true))
-    void electron.getUpdateReady().then((ready) => {
-      if (ready) setDesktopUpdateReady(true)
+    if (!native) return
+    const unsubscribe = native.onUpdateReady(() => setNativeUpdateReady(true))
+    void native.getUpdateReady().then((ready) => {
+      if (ready) setNativeUpdateReady(true)
     })
     return unsubscribe
-  }, [electron])
+  }, [native])
+  const [installPermissionNeeded, setInstallPermissionNeeded] = useState(false)
 
   const registrationRef = useRef<ServiceWorkerRegistration | undefined>(undefined)
   // O needRefresh do vite-plugin-pwa vem do workbox-window, que para de
@@ -90,11 +108,7 @@ export function useAppUpdate(): UseAppUpdateResult {
   // clique "não fazia nada". Por isso o reload é feito aqui: quando o
   // worker que estava esperando chega a "activated", com um prazo de
   // segurança; sem nada esperando (já ativou antes), recarrega direto.
-  const applyUpdate = useCallback(() => {
-    if (electron) {
-      void electron.applyUpdate()
-      return
-    }
+  const applyWebUpdate = useCallback(() => {
     const waiting = registrationRef.current?.waiting
     if (!waiting) {
       window.location.reload()
@@ -111,7 +125,56 @@ export function useAppUpdate(): UseAppUpdateResult {
     })
     setTimeout(reload, RELOAD_FALLBACK_MS)
     void updateServiceWorker(true)
-  }, [updateServiceWorker, electron])
+  }, [updateServiceWorker])
 
-  return { updateReady: updateReady || desktopUpdateReady, applyUpdate }
+  const applyNativeUpdate = useCallback(() => {
+    if (!native) return
+    native
+      .applyUpdate()
+      .then((result) => {
+        if (result === 'needs-permission') setInstallPermissionNeeded(true)
+      })
+      .catch((err: unknown) => console.warn('[ffcom] atualização', err))
+  }, [native])
+
+  // No desktop o service worker está desligado: o clique é sempre do
+  // electron-updater, como antes.
+  const nativeFirst = native?.kind === 'desktop' || (native !== undefined && nativeUpdateReady)
+  const applyUpdate = nativeFirst ? applyNativeUpdate : applyWebUpdate
+  const updateKind: UpdateKind | undefined =
+    native && nativeUpdateReady ? native.kind : updateReady ? 'web' : undefined
+
+  let applyUpdateSilently: (() => void) | undefined
+  if (native?.kind === 'desktop') {
+    if (nativeUpdateReady) applyUpdateSilently = applyNativeUpdate
+  } else if (updateReady) {
+    applyUpdateSilently = applyWebUpdate
+  }
+
+  const installPermission = useMemo(() => {
+    if (!installPermissionNeeded || !native?.requestInstallPermission) return undefined
+    const request = native.requestInstallPermission
+    return {
+      // Vai às configurações; voltando com a fonte liberada, já abre o
+      // instalador. Se o Android reiniciar o app nesse meio-tempo, o
+      // UpdatePlugin acha o APK de novo e o botão volta a aparecer.
+      allow: () => {
+        setInstallPermissionNeeded(false)
+        request()
+          .then((granted) => {
+            if (granted) applyNativeUpdate()
+          })
+          .catch((err: unknown) => console.warn('[ffcom] atualização', err))
+      },
+      dismiss: () => setInstallPermissionNeeded(false),
+    }
+  }, [installPermissionNeeded, native, applyNativeUpdate])
+
+  return {
+    updateReady: updateKind !== undefined,
+    updateKind,
+    applyUpdate,
+    applyUpdateSilently,
+    installPermission,
+  }
 }

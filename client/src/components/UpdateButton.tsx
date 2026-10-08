@@ -1,18 +1,28 @@
 import { useTranslation } from 'react-i18next'
+import type { UpdateKind } from '../hooks/useAppUpdate'
 
 interface UpdateButtonProps {
+  // De quem é a versão esperando: muda só o texto (o que acontece ao clicar).
+  kind: UpdateKind
   onUpdate: () => void
 }
 
+const TITLE_KEYS = {
+  web: 'update.availableWeb',
+  desktop: 'update.availableDesktop',
+  android: 'update.availableAndroid',
+} as const satisfies Record<UpdateKind, string>
+
 // Botão de atualizar o client no ServerRail, como o do Discord: só aparece
-// quando hooks/useAppUpdate.ts avisa que há versão nova esperando.
-export function UpdateButton({ onUpdate }: UpdateButtonProps) {
+// quando hooks/useAppUpdate.ts avisa que há versão nova esperando, seja do
+// service worker, do electron-updater ou do APK do Android.
+export function UpdateButton({ kind, onUpdate }: UpdateButtonProps) {
   const { t } = useTranslation()
   return (
     <button
       type="button"
       className="update-button"
-      title={window.ffcomElectron ? t('update.availableDesktop') : t('update.availableWeb')}
+      title={t(TITLE_KEYS[kind])}
       aria-label={t('update.label')}
       onClick={onUpdate}
     >
