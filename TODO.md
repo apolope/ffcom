@@ -290,5 +290,5 @@ O usuário escolhe o idioma e tudo muda junto: telas, mensagens de erro, notific
 
 ## Fora de escopo da v1 (registrado para não esquecer)
 
-- [ ] Cliente mobile
+- [ ] Cliente mobile: app Android em andamento, ver o passo a passo e as decisões em [`docs/android-runbook.md`](docs/android-runbook.md) (fases 1 a 6)
 - [ ] Federação entre instâncias de `server-central`
