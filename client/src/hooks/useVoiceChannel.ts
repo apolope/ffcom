@@ -35,6 +35,8 @@ export interface VoiceParticipant {
   cameraEnabled: boolean
   screenSharing: boolean
   screenShareAudio: boolean
+  // Falando agora (detecção de voz do LiveKit; microfone fechado nunca fala).
+  speaking: boolean
 }
 
 // O canal de voz da chamada, com o que a barra "Conectado em" precisa para
@@ -90,6 +92,7 @@ function toParticipant(p: LocalParticipant | RemoteParticipant): VoiceParticipan
     // O áudio da tela é uma track separada (fonte ScreenShareAudio), que só
     // existe se a pessoa marcou "Compartilhar áudio" no seletor.
     screenShareAudio: !!p.getTrackPublication(Track.Source.ScreenShareAudio),
+    speaking: p.isSpeaking,
   }
 }
 
@@ -550,6 +553,7 @@ export function useVoiceChannel(
         videoTilesRef.current.get(publication.trackSid)?.classList.remove('muted')
         refreshParticipants(room)
       })
+      room.on(RoomEvent.ActiveSpeakersChanged, () => refreshParticipants(room))
       room.on(RoomEvent.Disconnected, () => disconnect(room))
       // Os <audio> das vozes remotas são criados depois do clique em
       // "Entrar" (quando cada track chega), e o navegador pode bloquear o

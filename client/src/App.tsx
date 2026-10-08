@@ -648,7 +648,12 @@ function App() {
                 )
               ) : server ? (
                 <>
-                  <MainPanel channel={channel} server={server} canModerateMessages={canModerateMessages} />
+                  <MainPanel
+                    channel={channel}
+                    server={server}
+                    members={members}
+                    canModerateMessages={canModerateMessages}
+                  />
                   <MemberList members={members} roles={roles} friendActions={memberFriendActions} />
                 </>
               ) : (

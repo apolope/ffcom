@@ -11,9 +11,10 @@ import './ForumChannelView.css'
 interface ForumChannelViewProps {
   serverBaseUrl: string
   channel: Channel
+  authorName: (memberId: string) => string
 }
 
-export function ForumChannelView({ serverBaseUrl, channel }: ForumChannelViewProps) {
+export function ForumChannelView({ serverBaseUrl, channel, authorName }: ForumChannelViewProps) {
   const { t } = useTranslation()
   const { accessToken } = useAuth()
   const [selfMemberId, setSelfMemberId] = useState<string>()
@@ -86,7 +87,7 @@ export function ForumChannelView({ serverBaseUrl, channel }: ForumChannelViewPro
                 className={m.authorMemberId === selfMemberId ? 'message message-self' : 'message'}
               >
                 <span className="message-author">
-                  {m.authorMemberId === selfMemberId ? t('common.you') : m.authorMemberId.slice(0, 8)}
+                  {m.authorMemberId === selfMemberId ? t('common.you') : authorName(m.authorMemberId)}
                 </span>
                 <MessageTime createdAt={m.createdAt} />
                 <span className="message-content">{m.content}</span>
@@ -122,7 +123,7 @@ export function ForumChannelView({ serverBaseUrl, channel }: ForumChannelViewPro
           <button key={thread.id} className="forum-thread-item" onClick={() => openThread(thread.id)}>
             <span className="forum-thread-item-title">{thread.title}</span>
             <span className="forum-thread-item-meta">
-              {thread.authorMemberId === selfMemberId ? t('common.you') : thread.authorMemberId.slice(0, 8)}
+              {thread.authorMemberId === selfMemberId ? t('common.you') : authorName(thread.authorMemberId)}
               {' · '}
               <time dateTime={thread.createdAt} title={formatDateTime(thread.createdAt)}>
                 {formatMessageTime(thread.createdAt)}

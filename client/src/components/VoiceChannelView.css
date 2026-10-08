@@ -368,3 +368,18 @@
   gap: 6px 14px;
   cursor: default;
 }
+
+/* Anel verde enquanto a pessoa fala (ActiveSpeakersChanged do LiveKit). */
+.voice-mic-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  transition: box-shadow 0.1s;
+}
+
+.voice-mic-icon.speaking {
+  box-shadow: 0 0 0 2px var(--status-online);
+}

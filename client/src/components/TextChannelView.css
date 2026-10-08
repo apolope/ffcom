@@ -16,6 +16,7 @@
 }
 
 .message {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -64,11 +65,18 @@
   font-size: 0.8em;
 }
 
+/* Fora do fluxo: no fluxo flex, com um anexo ocupando a linha inteira, os
+   botões quebravam para uma linha nova no hover e abriam um vão abaixo da
+   mensagem. */
 .message-actions {
   display: none;
   gap: 6px;
-  margin-left: auto;
-  flex: 0 0 auto;
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--bg);
 }
 
 .message:hover .message-actions,

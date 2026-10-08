@@ -5,6 +5,7 @@ import { UNCATEGORIZED_ID, type ChannelOrderGroup, type VoiceParticipant } from 
 import type { StructurePermissions } from '../lib/permissions'
 import './ChannelSidebar.css'
 import { AvatarWithStatus, MemberAvatar } from './AvatarWithStatus'
+import { useVoiceSession } from './VoiceSessionContext'
 
 const CHANNEL_ICON: Record<ChannelType, string> = {
   text: '#',
@@ -81,6 +82,15 @@ export function ChannelSidebar({
 }: ChannelSidebarProps) {
   const { t } = useTranslation()
   const memberById = new Map(members.map((m) => [m.id, m]))
+  const participantName = (p: VoiceParticipant) =>
+    memberById.get(p.memberId)?.nickname ?? (p.name || p.memberId.slice(0, 8))
+  // Quem está falando só se sabe da sala em que você está (pelo LiveKit);
+  // nas outras a lista vem do poll e não tem esse dado.
+  const voice = useVoiceSession()
+  const speakingIn = (channelId: string) =>
+    voice.status === 'connected' && voice.target?.baseUrl === server.baseUrl && voice.target.channelId === channelId
+      ? new Set(voice.participants.filter((p) => p.speaking).map((p) => p.identity))
+      : undefined
   const canEditChannel = structure.rename || structure.reorderChannels || structure.deleteChannels
   const canEditCategory = structure.rename || structure.deleteCategories
 
@@ -276,13 +286,20 @@ export function ChannelSidebar({
                       {channel.type === 'voice' && voiceParticipants[channel.id] && (
                         <li>
                           <ul className="voice-participants" aria-label={t('channels.voiceRoom', { name: channel.name })}>
-                            {voiceParticipants[channel.id].map((p) => (
-                              <li key={p.memberId} className="sidebar-voice-participant">
+                            {sortedByName(voiceParticipants[channel.id], participantName).map((p) => (
+                              <li
+                                key={p.memberId}
+                                className={
+                                  speakingIn(channel.id)?.has(p.memberId)
+                                    ? 'sidebar-voice-participant speaking'
+                                    : 'sidebar-voice-participant'
+                                }
+                              >
                                 <VoiceParticipantAvatar
                                   member={memberById.get(p.memberId)}
                                   fallbackName={p.name || p.memberId.slice(0, 8)}
                                 />
-                                {memberById.get(p.memberId)?.nickname ?? (p.name || p.memberId.slice(0, 8))}
+                                {participantName(p)}
                                 {p.memberId === selfMemberId && <span className="voice-participant-self">{t('channels.youSuffix')}</span>}
                               </li>
                             ))}
@@ -343,6 +360,12 @@ function channelDropGroups(
 
 // Quem está na sala de voz: avatar e status do membro, ou só a inicial para
 // alguém que ainda não aparece na lista de membros (entrou há pouco).
+// O LiveKit devolve os participantes da sala sem ordem fixa, e a lista
+// trocava de ordem a cada poll: ordena pelo nome exibido.
+function sortedByName(participants: VoiceParticipant[], nameOf: (p: VoiceParticipant) => string) {
+  return [...participants].sort((a, b) => nameOf(a).localeCompare(nameOf(b)) || a.memberId.localeCompare(b.memberId))
+}
+
 function VoiceParticipantAvatar({ member, fallbackName }: { member: Member | undefined; fallbackName: string }) {
   if (member) return <MemberAvatar member={member} size={20} />
   return <AvatarWithStatus displayName={fallbackName} status="offline" size={20} />

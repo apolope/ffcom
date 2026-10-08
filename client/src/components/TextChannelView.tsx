@@ -11,11 +11,12 @@ import './TextChannelView.css'
 interface TextChannelViewProps {
   serverBaseUrl: string
   channel: Channel
+  authorName: (memberId: string) => string
   // Administrator ou dono: pode apagar mensagem de qualquer membro.
   canModerateMessages: boolean
 }
 
-export function TextChannelView({ serverBaseUrl, channel, canModerateMessages }: TextChannelViewProps) {
+export function TextChannelView({ serverBaseUrl, channel, authorName, canModerateMessages }: TextChannelViewProps) {
   const { t } = useTranslation()
   const { accessToken } = useAuth()
   const [selfMemberId, setSelfMemberId] = useState<string>()
@@ -93,7 +94,7 @@ export function TextChannelView({ serverBaseUrl, channel, canModerateMessages }:
           const isSelf = m.authorMemberId === selfMemberId
           return (
             <div key={m.id} className={isSelf ? 'message message-self' : 'message'}>
-              <span className="message-author">{isSelf ? t('common.you') : m.authorMemberId.slice(0, 8)}</span>
+              <span className="message-author">{isSelf ? t('common.you') : authorName(m.authorMemberId)}</span>
               <MessageTime createdAt={m.createdAt} />
               {editingId === m.id ? (
                 <form className="message-edit-form" onSubmit={handleEditSubmit}>

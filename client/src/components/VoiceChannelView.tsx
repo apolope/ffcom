@@ -134,7 +134,11 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
               return (
                 <li key={p.identity} className="voice-participant">
                   <div className="voice-participant-row">
-                    <span className={p.micEnabled ? 'voice-mic-icon' : 'voice-mic-icon muted'}>
+                    <span
+                      className={
+                        'voice-mic-icon' + (p.micEnabled ? '' : ' muted') + (p.speaking ? ' speaking' : '')
+                      }
+                    >
                       {p.micEnabled ? '🎤' : '🔇'}
                     </span>
                     <span>

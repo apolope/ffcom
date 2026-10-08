@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
-import type { Channel, ChannelType, KnownServer } from '../types'
+import { useMemo } from 'react'
+import type { Channel, ChannelType, KnownServer, Member } from '../types'
 import { ForumChannelView } from './ForumChannelView'
 import { TextChannelView } from './TextChannelView'
 import { VoiceChannelView } from './VoiceChannelView'
@@ -15,12 +16,19 @@ const CHANNEL_ICON: Record<ChannelType, string> = {
 interface MainPanelProps {
   channel: Channel | undefined
   server: KnownServer
+  members: Member[]
   canModerateMessages: boolean
 }
 
-export function MainPanel({ channel, server, canModerateMessages }: MainPanelProps) {
+export function MainPanel({ channel, server, members, canModerateMessages }: MainPanelProps) {
   const { t } = useTranslation()
   const serverBaseUrl = server.baseUrl
+  // Nome do autor nas mensagens: mesmo nome da lista de membros. Quem já
+  // saiu do servidor não está mais nela e cai no começo do id.
+  const authorName = useMemo(() => {
+    const names = new Map(members.map((m) => [m.id, m.nickname]))
+    return (memberId: string) => names.get(memberId) ?? memberId.slice(0, 8)
+  }, [members])
   return (
     <section className="main-panel">
       <header className="channel-header">
@@ -42,6 +50,7 @@ export function MainPanel({ channel, server, canModerateMessages }: MainPanelPro
             key={channel.id}
             serverBaseUrl={serverBaseUrl}
             channel={channel}
+            authorName={authorName}
             canModerateMessages={canModerateMessages}
           />
         )}
@@ -49,7 +58,12 @@ export function MainPanel({ channel, server, canModerateMessages }: MainPanelPro
           <VoiceChannelView key={channel.id} server={server} channel={channel} />
         )}
         {channel?.type === 'forum' && (
-          <ForumChannelView key={channel.id} serverBaseUrl={serverBaseUrl} channel={channel} />
+          <ForumChannelView
+            key={channel.id}
+            serverBaseUrl={serverBaseUrl}
+            channel={channel}
+            authorName={authorName}
+          />
         )}
       </div>
     </section>
