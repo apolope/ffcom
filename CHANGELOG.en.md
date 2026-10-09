@@ -15,6 +15,11 @@ One section per published tag, in the exact format below (the site and the CI ch
 
 `<component>` is one of: `client` (the app), `central` (server-central), `channel` (server-channel), `channel-image` (the server-channel container image), `site` (this home page). Items accept `code` in backticks and **bold**. Text outside the sections (like this) is ignored by the site.
 
+## client v0.24.6 · 2026-10-09
+- People using FFCom in the Android or Windows browser get a button in the rail, below the update one, that installs the app for their system: on Android it explains things before downloading the APK (allowing the source, the Play Protect warning and removing the browser shortcut afterwards); on Windows it downloads the installer and explains the SmartScreen warning.
+- The "x" in the corner of the button hides the offer for 30 days in that browser, and the "Install the app for ..." item stays in the avatar menu. The button never shows inside the apps.
+- In Chrome on Android, the button disappears when the app is already installed (from this app version on).
+
 ## client v0.24.4 · 2026-10-09
 - In the Android app, muted channels show a 🔕 after their name, and a muted server shows the 🔕 on its icon and at the top of the channel list.
 

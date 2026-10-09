@@ -142,6 +142,11 @@
   color: var(--text);
 }
 
+/* Diálogo de instalar o app (InstallAppButton.tsx): abre também no celular. */
+.install-app-dialog {
+  max-width: calc(100vw - 32px);
+}
+
 .channel-permissions-dialog {
   width: 520px;
   max-width: calc(100vw - 32px);

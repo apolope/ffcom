@@ -7,6 +7,11 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
+        <!-- Liga o app ao site para o navigator.getInstalledRelatedApps do
+             Chrome: o botão "Instalar o app" do client no navegador some
+             quando este APK já está instalado. Ver docs/architecture.md,
+             "Decisão: botão de instalar o app nativo pelo navegador". -->
+        <meta-data android:name="asset_statements" android:resource="@string/asset_statements" />
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:name=".MainActivity"

@@ -15,6 +15,11 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## client v0.24.6 · 2026-10-09
+- Quem usa o FFCom no navegador do Android ou do Windows ganha um botão no rail, abaixo do de atualizar, que instala o app do sistema: no Android explica antes de baixar o APK (permitir a fonte, o aviso do Play Protect e remover o atalho do navegador depois); no Windows baixa o instalador e explica o aviso do SmartScreen.
+- O "x" no canto do botão esconde a oferta por 30 dias neste navegador, e o item "Instalar o app para ..." continua no menu do avatar. O botão não aparece dentro dos apps.
+- No Chrome do Android, o botão some quando o app já está instalado (a partir desta versão do app).
+
 ## client v0.24.4 · 2026-10-09
 - No app Android, canais silenciados mostram um 🔕 depois do nome, e um servidor silenciado mostra o 🔕 no ícone e no topo da lista de canais.
 

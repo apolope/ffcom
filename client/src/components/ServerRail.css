@@ -237,6 +237,56 @@
   border-radius: 30%;
 }
 
+/* Botão de instalar o app nativo (InstallAppButton.tsx): mesma forma do de
+   atualizar, no acento para não ser confundido com ele. O "x" de "Agora não"
+   fica no canto de cima à direita, num círculo da cor do rail. */
+.install-app-slot {
+  position: relative;
+}
+
+.install-app-button {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-tertiary);
+  color: var(--accent);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    border-radius 0.15s,
+    background 0.15s;
+}
+
+.install-app-button:hover {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-radius: 30%;
+}
+
+.install-app-dismiss {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 2px solid var(--bg-deep);
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.install-app-dismiss:hover {
+  color: var(--text-h);
+}
+
 .account-button {
   --presence-ring: var(--bg-deep);
   width: 44px;

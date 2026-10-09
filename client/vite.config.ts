@@ -105,6 +105,21 @@ export default defineConfig(({ mode }) => ({
           display: 'standalone',
           start_url: '/',
           scope: '/',
+          // O app Android, para o botão de instalar o app sumir quando o APK
+          // já está no aparelho (navigator.getInstalledRelatedApps no Chrome
+          // do Android; lib/nativeApps.ts). "play" é o único tipo aceito
+          // para Android e vale também para APK instalado fora da Play
+          // Store: o Chrome confere o pacote e o asset_statements do
+          // AndroidManifest.xml. Sem prefer_related_applications, a
+          // instalação do PWA segue igual.
+          related_applications: [
+            {
+              platform: 'play',
+              id: 'br.com.a3sitsolutions.ffcom',
+              // Obrigatório no tipo; aponta para o APK, que não está na Play.
+              url: 'https://github.com/apolope/ffcom/releases/download/android-stable/FFCom.apk',
+            },
+          ],
           icons: [
             { src: 'pwa-64x64.png', sizes: '64x64', type: 'image/png' },
             { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
