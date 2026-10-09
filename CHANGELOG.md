@@ -18,6 +18,7 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 ## client v0.24.3 · 2026-10-09
 - As notificações do celular chegam mesmo com o FFCom aberto e escondido numa aba ou minimizado no computador. Só deixa de notificar quem está com o canal na tela, com a janela em foco e sem estar ausente.
 - No app Android, um sino no topo do canal silencia as notificações dele.
+- No app Android, o botão de atualização volta a aparecer quando sai uma versão nova do app.
 
 ## channel v0.11.2 · 2026-10-09
 - As notificações do celular chegam mesmo com o FFCom aberto e escondido numa aba ou minimizado no computador: o servidor só deixa de notificar quem está de fato vendo o canal, com a tela visível, a janela em foco e sem estar ausente. Antes, qualquer canal aberto em qualquer aparelho segurava a notificação.

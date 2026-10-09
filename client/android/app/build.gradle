@@ -68,6 +68,9 @@ dependencies {
     // o fim deste arquivo e PushPlugin).
     implementation "com.google.firebase:firebase-messaging:$firebaseMessagingVersion"
     testImplementation "junit:junit:$junitVersion"
+    // org.json de verdade nos testes JVM (o do android.jar é só stub), para o
+    // ApkUpdatesTest ler um latest.json.
+    testImplementation "org.json:json:20250517"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
