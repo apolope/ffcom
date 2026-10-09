@@ -15,6 +15,9 @@ One section per published tag, in the exact format below (the site and the CI ch
 
 `<component>` is one of: `client` (the app), `central` (server-central), `channel` (server-channel), `channel-image` (the server-channel container image), `site` (this home page). Items accept `code` in backticks and **bold**. Text outside the sections (like this) is ignored by the site.
 
+## site v0.9.1 · 2026-10-09
+- The Privacy section explains that Android app notifications also carry a temporary link to the sender's photo, valid for up to 48 hours.
+
 ## client v0.24.1 · 2026-10-09
 - In the Android app, notifications show the sender's photo, for channel messages, direct messages and friend alerts. People without a photo still get the letter.
 
