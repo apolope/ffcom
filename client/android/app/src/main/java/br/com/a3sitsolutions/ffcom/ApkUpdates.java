@@ -5,6 +5,8 @@ import java.io.InputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Locale;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 // Regras puras da atualização do APK (sem Android), separadas do
 // UpdatePlugin para serem testadas por JUnit (app/src/test). Ver
@@ -24,6 +26,42 @@ final class ApkUpdates {
     private static final String APK_SUFFIX = ".apk";
 
     private ApkUpdates() {}
+
+    // Conteúdo do latest.json.
+    static final class Index {
+        final String version;
+        final long versionCode;
+        final String url;
+        final String sha256;
+
+        Index(String version, long versionCode, String url, String sha256) {
+            this.version = version;
+            this.versionCode = versionCode;
+            this.url = url;
+            this.sha256 = sha256;
+        }
+    }
+
+    // Lê o latest.json; JSONException (campo faltando ou de outro tipo)
+    // vira "sem atualização agora" no UpdatePlugin.
+    static Index parseIndex(String json) throws JSONException {
+        JSONObject index = new JSONObject(json);
+        return new Index(
+            index.getString("version"),
+            index.getLong("versionCode"),
+            index.getString("url"),
+            index.getString("sha256")
+        );
+    }
+
+    // Se já é hora de consultar o latest.json de novo. Os tempos são do
+    // SystemClock.elapsedRealtime(), que conta também o celular dormindo
+    // (o System.nanoTime do ScheduledExecutorService não conta, e um
+    // processo congelado em segundo plano não roda timer nenhum).
+    // lastCheckMs < 0: ainda não consultou neste processo.
+    static boolean isCheckDue(long nowMs, long lastCheckMs, long minIntervalMs) {
+        return lastCheckMs < 0 || nowMs - lastCheckMs >= minIntervalMs;
+    }
 
     // O Android só instala por cima um versionCode maior que o instalado.
     static boolean isNewer(long remoteVersionCode, long installedVersionCode) {

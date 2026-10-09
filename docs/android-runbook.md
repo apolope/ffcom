@@ -67,7 +67,7 @@ Cada fase termina num estado publicável. A **primeira versão pública do APK s
 ### Fase 2 — atualização do próprio APK
 
 1. Plugin nativo pequeno (`client/android/app/src/main/java/.../UpdatePlugin.java`):
-   - consulta `https://github.com/apolope/ffcom/releases/download/android-stable/latest.json` ao abrir o app e a cada 30 min, como o desktop;
+   - consulta `https://github.com/apolope/ffcom/releases/download/android-stable/latest.json` ao abrir o app, ao voltar a ele (no mínimo 5 min depois da última consulta) e a cada 30 min, como o desktop;
    - compara com o `versionCode` instalado e baixa o APK em segundo plano (para a pasta do app);
    - confere o `sha256` e só então avisa a parte web.
 2. O client mostra o **mesmo botão verde**. Tocar abre o instalador do Android (`FileProvider` + `ACTION_VIEW`), com a permissão `REQUEST_INSTALL_PACKAGES`. Na primeira vez o Android leva para "Permitir desta fonte"; o app explica isso antes, num aviso curto.

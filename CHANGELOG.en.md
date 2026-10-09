@@ -15,6 +15,9 @@ One section per published tag, in the exact format below (the site and the CI ch
 
 `<component>` is one of: `client` (the app), `central` (server-central), `channel` (server-channel), `channel-image` (the server-channel container image), `site` (this home page). Items accept `code` in backticks and **bold**. Text outside the sections (like this) is ignored by the site.
 
+## client v0.24.3 · 2026-10-09
+- In the Android app, the update button shows up again when a new version of the app is released.
+
 ## client v0.24.2 · 2026-10-09
 - In the Android app, notifications show the sender's photo, for channel messages, direct messages and friend alerts. People without a photo still get the letter. (v0.24.1, with the same change, was never published.)
 

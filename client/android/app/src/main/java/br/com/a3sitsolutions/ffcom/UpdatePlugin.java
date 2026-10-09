@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.util.Log;
 import androidx.activity.result.ActivityResult;
@@ -29,12 +30,12 @@ import java.security.MessageDigest;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import org.json.JSONObject;
 
 // Atualização do próprio APK (fase 2 do docs/android-runbook.md; ver
 // docs/architecture.md, "Decisão: atualização do APK (fase 2)"). Faz para o
 // app Android o que o electron-updater faz para o desktop: consulta o
-// latest.json do índice android-stable ao abrir o app e a cada 30 min, baixa
+// latest.json do índice android-stable ao abrir o app, ao voltar a ele e a
+// cada 30 min de relógio (contando o celular dormindo), baixa
 // o APK novo em segundo plano para a pasta privada do app, confere o sha256
 // e só então avisa a parte web (evento "updateReady"), que acende o mesmo
 // botão verde (client/src/lib/nativeUpdater.ts). Tocar no botão chama
@@ -42,12 +43,20 @@ import org.json.JSONObject;
 //
 // Falha de rede, GitHub fora ou índice estranho: só registra no logcat e
 // tenta de novo no próximo ciclo. APK com sha256 diferente é apagado e nunca
-// oferecido.
+// oferecido. Cada passo deixa uma linha Log.i com a tag FfcomUpdate, para o
+// build de release ser diagnosticado pelo logcat.
 @CapacitorPlugin(name = "FfcomUpdate")
 public class UpdatePlugin extends Plugin {
 
     private static final String TAG = "FfcomUpdate";
-    private static final long CHECK_INTERVAL_MINUTES = 30;
+    // Intervalo entre consultas com o app aberto, e o mínimo ao voltar a ele.
+    // O executor só acorda a cada TICK_MINUTES e confere pelo relógio
+    // (ApkUpdates.isCheckDue): um timer de 30 min do ScheduledExecutorService
+    // conta pelo System.nanoTime, que para com o celular dormindo, e não roda
+    // com o processo congelado em segundo plano.
+    private static final long CHECK_INTERVAL_MS = TimeUnit.MINUTES.toMillis(30);
+    private static final long RESUME_CHECK_INTERVAL_MS = TimeUnit.MINUTES.toMillis(5);
+    private static final long TICK_MINUTES = 5;
     private static final int CONNECT_TIMEOUT_MS = 15_000;
     private static final int READ_TIMEOUT_MS = 60_000;
     private static final int MAX_INDEX_BYTES = 64 * 1024;
@@ -58,6 +67,8 @@ public class UpdatePlugin extends Plugin {
 
     private ScheduledExecutorService executor;
     private long installedVersionCode;
+    // elapsedRealtime da última consulta; -1 antes da primeira.
+    private volatile long lastCheckMs = -1;
 
     // APK pronto (baixado e conferido) e a versão dele; null sem atualização.
     private volatile File readyApk;
@@ -85,8 +96,37 @@ public class UpdatePlugin extends Plugin {
             Log.i(TAG, "build local (0.0.0): atualização do APK desligada");
             return;
         }
+        Log.i(TAG, "atualização do APK ligada; instalado " + info.versionName + " (" + installedVersionCode + ")");
         executor = Executors.newSingleThreadScheduledExecutor();
-        executor.scheduleWithFixedDelay(this::check, 0, CHECK_INTERVAL_MINUTES, TimeUnit.MINUTES);
+        executor.scheduleWithFixedDelay(() -> checkIfDue(CHECK_INTERVAL_MS), 0, TICK_MINUTES, TimeUnit.MINUTES);
+    }
+
+    // Voltar ao app também consulta. Sem isso, com o processo vivo em segundo
+    // plano (o caso comum: o Android não recria a Activity ao reabrir pelos
+    // recentes ou por uma notificação), a única consulta era a da criação da
+    // Activity e o timer não andava: uma versão nova não aparecia por horas.
+    @Override
+    protected void handleOnResume() {
+        ScheduledExecutorService ex = executor;
+        if (ex == null || ex.isShutdown()) return;
+        try {
+            ex.execute(() -> checkIfDue(RESUME_CHECK_INTERVAL_MS));
+        } catch (RuntimeException e) {
+            Log.w(TAG, "consulta ao voltar não agendada", e);
+        }
+    }
+
+    // Roda no executor (uma consulta por vez). Pega Throwable: uma exceção
+    // que escapasse cancelaria em silêncio o scheduleWithFixedDelay.
+    private void checkIfDue(long minIntervalMs) {
+        try {
+            long now = SystemClock.elapsedRealtime();
+            if (!ApkUpdates.isCheckDue(now, lastCheckMs, minIntervalMs)) return;
+            lastCheckMs = now;
+            check();
+        } catch (Throwable t) {
+            Log.w(TAG, "consulta falhou", t);
+        }
     }
 
     @Override
@@ -176,14 +216,17 @@ public class UpdatePlugin extends Plugin {
     // executor, fora da thread principal. Qualquer falha só espera o próximo.
     private void check() {
         try {
+            Log.i(TAG, "consultando latest.json (instalado " + installedVersionCode + ")");
             File dir = new File(getContext().getFilesDir(), UPDATES_DIR);
-            JSONObject index = new JSONObject(fetchIndex());
-            long versionCode = index.getLong("versionCode");
-            String version = index.getString("version");
-            String url = index.getString("url");
-            String sha256 = index.getString("sha256");
+            ApkUpdates.Index index = ApkUpdates.parseIndex(fetchIndex());
+            long versionCode = index.versionCode;
+            String version = index.version;
+            String url = index.url;
+            String sha256 = index.sha256;
+            Log.i(TAG, "latest.json: " + version + " (" + versionCode + ")");
 
             if (!ApkUpdates.isNewer(versionCode, installedVersionCode)) {
+                Log.i(TAG, "sem versão nova");
                 cleanup(dir, 0);
                 return;
             }
@@ -191,20 +234,32 @@ public class UpdatePlugin extends Plugin {
                 Log.w(TAG, "url fora das releases do FFCom: " + url);
                 return;
             }
-            if (readyApk != null && readyVersionCode == versionCode && readyApk.isFile()) return;
-            if (sha256.equalsIgnoreCase(rejectedSha256)) return;
+            if (readyApk != null && readyVersionCode == versionCode && readyApk.isFile()) {
+                Log.i(TAG, "APK " + version + " já pronto");
+                return;
+            }
+            if (sha256.equalsIgnoreCase(rejectedSha256)) {
+                Log.i(TAG, "APK " + version + " já recusado pelo sha256");
+                return;
+            }
+            Log.i(TAG, "versão nova " + version + "; preparando o APK");
 
             if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("sem pasta " + dir);
             cleanup(dir, versionCode);
             File apk = new File(dir, ApkUpdates.apkFileName(versionCode));
             // Já baixado num ciclo ou abertura anterior: confere de novo antes de oferecer.
-            if (apk.isFile() && !ApkUpdates.sha256Matches(sha256Of(apk), sha256) && !apk.delete()) {
-                throw new IOException("não apagou " + apk);
+            if (apk.isFile()) {
+                boolean ok = ApkUpdates.sha256Matches(sha256Of(apk), sha256);
+                Log.i(TAG, "APK já baixado; sha256 " + (ok ? "confere" : "não confere, baixando de novo"));
+                if (!ok && !apk.delete()) throw new IOException("não apagou " + apk);
             }
             if (!apk.isFile()) {
                 File part = new File(dir, ApkUpdates.partialFileName(versionCode));
                 String actual = download(url, part);
-                if (!ApkUpdates.sha256Matches(actual, sha256)) {
+                Log.i(TAG, "download de " + version + " terminou (" + part.length() + " bytes)");
+                boolean ok = ApkUpdates.sha256Matches(actual, sha256);
+                Log.i(TAG, "sha256 " + (ok ? "confere" : "não confere"));
+                if (!ok) {
                     Log.w(TAG, "sha256 diferente do latest.json; APK " + version + " descartado");
                     rejectedSha256 = sha256;
                     //noinspection ResultOfMethodCallIgnored
@@ -217,9 +272,9 @@ public class UpdatePlugin extends Plugin {
             readyVersion = version;
             readyVersionCode = versionCode;
             readyApk = apk;
-            Log.i(TAG, "APK " + version + " pronto para instalar");
             // retainUntilConsumed: se a página ainda não pôs o listener, recebe ao pôr.
             notifyListeners("updateReady", readyInfo(), true);
+            Log.i(TAG, "APK " + version + " pronto; evento updateReady enviado");
         } catch (Exception e) {
             Log.i(TAG, "sem atualização agora (" + e + "); tenta de novo no próximo ciclo");
         }
