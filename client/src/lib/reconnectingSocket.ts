@@ -18,6 +18,9 @@ import { ApiError, LocalizedError } from './apiError'
 //   navegador não expõe o status HTTP de um upgrade recusado (só um close
 //   1006), mas a REST do mesmo canal responde o mesmo 401/403/404. Nesses
 //   casos retry não resolve: o job para e reporta 'error'.
+// - onOpen(socket), opcional, roda assim que cada conexão abre, antes do
+//   sync(): para mandar o estado que o servidor precisa saber desde o
+//   início (ex. "channel.viewing").
 // - cancel() fecha o socket e mata o job sem reconectar (unmount, troca de
 //   canal).
 export type ChannelConnectionStatus = 'loading' | 'open' | 'reconnecting' | 'error'
@@ -58,6 +61,7 @@ export function createReconnectingSocket(options: {
   sync: () => Promise<void>
   onMessage: (data: string) => void
   onStatus: (status: ChannelConnectionStatus, error?: Error) => void
+  onOpen?: (socket: WebSocket) => void
 }): ReconnectingSocket {
   let socket: WebSocket | null = null
   let done = false
@@ -95,6 +99,7 @@ export function createReconnectingSocket(options: {
     ws.onopen = () => {
       if (done || socket !== ws) return
       opened = true
+      options.onOpen?.(ws)
       options.sync().then(
         () => {
           if (done || socket !== ws || ws.readyState !== WebSocket.OPEN) return

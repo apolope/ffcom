@@ -18,9 +18,14 @@ interface MainPanelProps {
   server: KnownServer
   members: Member[]
   canModerateMessages: boolean
+  // Silenciar as notificações do canal aberto: só onde há push (app
+  // Android), como o menu do canal na barra lateral. Lá o tocar e segurar
+  // começa o arrastar para reordenar quando a pessoa pode reordenar, então
+  // o sino no cabeçalho é o caminho que sempre funciona.
+  notifications?: { muted: boolean; onToggle: () => void }
 }
 
-export function MainPanel({ channel, server, members, canModerateMessages }: MainPanelProps) {
+export function MainPanel({ channel, server, members, canModerateMessages, notifications }: MainPanelProps) {
   const { t } = useTranslation()
   const serverBaseUrl = server.baseUrl
   // Nome do autor nas mensagens: mesmo nome da lista de membros. Quem já
@@ -40,6 +45,18 @@ export function MainPanel({ channel, server, members, canModerateMessages }: Mai
           </>
         ) : (
           <span className="channel-title">{t('channels.noneSelected')}</span>
+        )}
+        {notifications && channel && channel.type !== 'voice' && (
+          <button
+            type="button"
+            className="channel-mute-button"
+            aria-pressed={notifications.muted}
+            aria-label={notifications.muted ? t('push.mute.channelUnmute') : t('push.mute.channelMute')}
+            title={notifications.muted ? t('push.mute.channelUnmute') : t('push.mute.channelMute')}
+            onClick={notifications.onToggle}
+          >
+            {notifications.muted ? '🔕' : '🔔'}
+          </button>
         )}
         <MobileMembersButton />
       </header>

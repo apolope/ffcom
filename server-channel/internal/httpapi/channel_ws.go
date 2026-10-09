@@ -131,6 +131,9 @@ func handleChannelWS(hub *realtime.Hub, channels *store.ChannelStore, roles *sto
 		go client.WritePump()
 		if channel.Type == store.ChannelForum {
 			client.ReadPump(func(raw []byte) {
+				if handleViewingFrame(hub, channelID, client, raw) {
+					return
+				}
 				if !wsLimiter.allow(frameKey) {
 					client.SendError(apierr.New("realtime.rate_limited", "muitas mensagens, aguarde um instante"))
 					return
@@ -144,6 +147,9 @@ func handleChannelWS(hub *realtime.Hub, channels *store.ChannelStore, roles *sto
 			return
 		}
 		client.ReadPump(func(raw []byte) {
+			if handleViewingFrame(hub, channelID, client, raw) {
+				return
+			}
 			if !wsLimiter.allow(frameKey) {
 				client.SendError(apierr.New("realtime.rate_limited", "muitas mensagens, aguarde um instante"))
 				return
@@ -151,6 +157,26 @@ func handleChannelWS(hub *realtime.Hub, channels *store.ChannelStore, roles *sto
 			handleIncomingTextFrame(r.Context(), hub, messages, attachments, files, channelID, member.ID, effective, canSend, client, raw, pushMessage)
 		})
 	})
+}
+
+// handleViewingFrame trata o frame "channel.viewing" (a pessoa está ou
+// não vendo o canal nesta conexão, ver realtime.Hub.SetViewing) e devolve
+// true se o frame era desse tipo. Vem antes do rate limit e de
+// SendMessages: o client só manda quando o estado muda (com debounce) e na
+// conexão, quem só lê o canal também manda, e um frame descartado pelo
+// limite deixaria o estado errado até a próxima mudança. Não tem resposta.
+func handleViewingFrame(hub *realtime.Hub, channelID string, client *realtime.Client, raw []byte) bool {
+	frameType, prob := realtime.FrameType(raw)
+	if prob != nil || frameType != realtime.TypeChannelViewing {
+		return false
+	}
+	active, prob := realtime.DecodeChannelViewing(raw)
+	if prob != nil {
+		client.SendError(prob)
+		return true
+	}
+	hub.SetViewing(channelID, client, active)
+	return true
 }
 
 // handleIncomingTextFrame despacha um frame recebido num canal de texto:

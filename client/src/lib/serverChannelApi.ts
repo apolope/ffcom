@@ -665,6 +665,12 @@ export function openChannelSocket(
   return new WebSocket(toWebSocketUrl(baseUrl, channelId), ['access_token', accessToken])
 }
 
+// Frame "channel.viewing" (docs/protocol.md): se a pessoa está vendo este
+// canal agora, para o servidor decidir o push (ver lib/channelViewing.ts).
+export function sendChannelViewing(socket: WebSocket, active: boolean): void {
+  if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'channel.viewing', active }))
+}
+
 export function sendCreateMessage(socket: WebSocket, content: string): void {
   socket.send(JSON.stringify({ type: 'message.create', content }))
 }
@@ -783,11 +789,19 @@ const CHANNEL_SOCKET_FRAME_TYPES = new Set([
   'error',
 ])
 
+// Servidor anterior ao channel-v0.11.2 não conhece "channel.viewing" e
+// responde com um `error` de tipo desconhecido, que não é da pessoa e não
+// vai para a tela.
+function isViewingUnsupportedError(frame: ChannelSocketFrame): boolean {
+  return frame.type === 'error' && frame.code === 'realtime.frame_type_unknown' && frame.params?.type === 'channel.viewing'
+}
+
 export function decodeChannelSocketFrame(raw: string): ChannelSocketFrame | null {
   try {
     const parsed = JSON.parse(raw) as { type?: string }
     if (parsed.type && CHANNEL_SOCKET_FRAME_TYPES.has(parsed.type)) {
-      return parsed as ChannelSocketFrame
+      const frame = parsed as ChannelSocketFrame
+      return isViewingUnsupportedError(frame) ? null : frame
     }
     return null
   } catch {

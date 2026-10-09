@@ -279,6 +279,16 @@ func notifyChannelMessage(ctx context.Context, pushStore *store.PushStore, dispa
 		return
 	}
 
+	// Uma linha por chamada, só contagens (sem endereço, conta nem grant),
+	// para saber onde um push parou: grant desconhecido ou de outro
+	// servidor, silenciado, repetido da mesma conta, limite, ou entregue à
+	// fila do FCM.
+	muted, duplicate, limited, delivered := 0, 0, 0, 0
+	defer func() {
+		log.Printf("server-central: push notify: grants=%d desconhecidos=%d silenciados=%d repetidos=%d limitados=%d entregues=%d",
+			len(body.Grants), len(body.Grants)-len(targets), muted, duplicate, limited, delivered)
+	}()
+
 	// Avatar do autor: resolvido uma vez, só quando há alguém para
 	// notificar (chamada com grants inválidos não emite link).
 	var authorFields map[string]string
@@ -287,13 +297,20 @@ func notifyChannelMessage(ctx context.Context, pushStore *store.PushStore, dispa
 		// Dois grants da mesma conta (dois aparelhos que entregaram o seu)
 		// viram uma notificação só: o Dispatcher já manda a todos os
 		// aparelhos da conta.
-		if t.Muted || notified[t.AccountID] {
+		if t.Muted {
+			muted++
+			continue
+		}
+		if notified[t.AccountID] {
+			duplicate++
 			continue
 		}
 		if !limits.perGrant.allow("grant:" + string(t.TokenHash)) {
+			limited++
 			continue
 		}
 		if !limits.perServer.allow("server:" + address) {
+			limited++
 			log.Printf("server-central: push notify: limite do servidor %s atingido", address)
 			return
 		}
@@ -329,6 +346,7 @@ func notifyChannelMessage(ctx context.Context, pushStore *store.PushStore, dispa
 			data[k] = v
 		}
 		dispatcher.Notify(t.AccountID, data)
+		delivered++
 	}
 }
 

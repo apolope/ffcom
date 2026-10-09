@@ -15,6 +15,17 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## client v0.24.3 · 2026-10-09
+- As notificações do celular chegam mesmo com o FFCom aberto e escondido numa aba ou minimizado no computador. Só deixa de notificar quem está com o canal na tela, com a janela em foco e sem estar ausente.
+- No app Android, um sino no topo do canal silencia as notificações dele.
+
+## channel v0.11.2 · 2026-10-09
+- As notificações do celular chegam mesmo com o FFCom aberto e escondido numa aba ou minimizado no computador: o servidor só deixa de notificar quem está de fato vendo o canal, com a tela visível, a janela em foco e sem estar ausente. Antes, qualquer canal aberto em qualquer aparelho segurava a notificação.
+- O log do servidor ganhou uma linha por mensagem com quantas pessoas o push considerou, quantas estavam vendo o canal e quantas foram notificadas, só com contagens.
+
+## central v0.15.2 · 2026-10-09
+- O log do servidor ganhou uma linha por aviso de mensagem com quantos tokens de push chegaram, quantos eram desconhecidos, silenciados ou acima do limite e quantos viraram notificação, só com contagens.
+
 ## client v0.24.2 · 2026-10-09
 - No app Android, as notificações mostram a foto de quem mandou, nas mensagens dos canais, nas mensagens diretas e nos avisos de amizade. Quem não tem foto continua com a letra. (A v0.24.1, com a mesma mudança, não chegou a ser publicada.)
 

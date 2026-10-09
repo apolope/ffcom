@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import i18n from '../i18n'
 import { LocalizedError, problemFromFrame, useErrorText, type DisplayError } from '../lib/apiError'
+import { isViewing, subscribeViewing } from '../lib/channelViewing'
 import { createReconnectingSocket, type ChannelConnectionStatus, type ReconnectingSocket } from '../lib/reconnectingSocket'
 import {
   decodeChannelSocketFrame,
@@ -9,6 +10,7 @@ import {
   mergeChannelHistory,
   mergeForumThreads,
   openChannelSocket,
+  sendChannelViewing,
   sendCreatePost,
   sendCreateThread,
   type ChannelMessage,
@@ -60,6 +62,9 @@ export function useForumChannel(
 
   // Mesmo tratamento de useChannelChat: renovar o token não derruba o
   // socket aberto, e cada reconexão usa o token mais recente.
+  // Se a pessoa já tentou postar neste fórum (ver o tratamento de
+  // forum.post_denied abaixo).
+  const triedPostRef = useRef(false)
   const accessTokenRef = useRef(accessToken)
   useEffect(() => {
     accessTokenRef.current = accessToken
@@ -86,6 +91,8 @@ export function useForumChannel(
       label: 'canal forum',
       failureMessage: () => i18n.t('forum.connectFailed'),
       connect: () => openChannelSocket(serverBaseUrl, channelId, accessTokenRef.current),
+      // Push: o servidor só poupa quem está vendo o canal (lib/channelViewing.ts).
+      onOpen: (ws) => sendChannelViewing(ws, isViewing()),
       sync: async () => {
         const remoteThreads = await fetchForumThreads(serverBaseUrl, channelId, accessTokenRef.current)
         if (cancelled) return
@@ -113,14 +120,23 @@ export function useForumChannel(
             setPosts((prev) => (prev.some((m) => m.id === frame.message.id) ? prev : [...prev, frame.message]))
           }
         } else if (frame.type === 'error') {
+          // Servidor anterior ao channel-v0.11.2 checa SendMessages antes do
+          // tipo do frame e recusa o "channel.viewing" de quem só lê o fórum
+          // com forum.post_denied; sem nenhum post tentado, não é da pessoa.
+          if (frame.code === 'forum.post_denied' && !triedPostRef.current) return
           setError(problemFromFrame(frame))
         }
       },
     })
     connectionRef.current = connection
+    const stopViewing = subscribeViewing((active) => {
+      const socket = connection.current()
+      if (socket) sendChannelViewing(socket, active)
+    })
 
     return () => {
       cancelled = true
+      stopViewing()
       connection.cancel()
       connectionRef.current = null
     }
@@ -146,6 +162,7 @@ export function useForumChannel(
   function createThread(title: string, content: string) {
     const socket = connectionRef.current?.current()
     if (!socket) return
+    triedPostRef.current = true
     sendCreateThread(socket, title, content)
   }
 
@@ -153,6 +170,7 @@ export function useForumChannel(
     const socket = connectionRef.current?.current()
     const threadId = activeThreadIdRef.current
     if (!socket || !threadId) return
+    triedPostRef.current = true
     sendCreatePost(socket, threadId, content)
   }
 

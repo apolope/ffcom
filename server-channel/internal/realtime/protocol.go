@@ -20,7 +20,9 @@ import (
 // servidor responde com o "*.created"/"*.updated"/"*.deleted" correspondente
 // (broadcast para todo o canal, inclusive para o autor, para confirmar
 // id/timestamp atribuídos pelo servidor) ou "error" (só para o client que
-// causou o erro).
+// causou o erro). Nos dois tipos de canal, o client também emite
+// "channel.viewing" (se a pessoa está vendo o canal nesta conexão, para o
+// push; ver Hub.SetViewing), que não tem resposta.
 const (
 	// TypeMessageCreate, TypeMessageUpdate e TypeMessageDelete são
 	// exportados porque internal/httpapi precisa comparar com FrameType
@@ -40,8 +42,19 @@ const (
 	TypePostCreate    = "post.create"
 	typePostCreated   = "post.created"
 
+	// TypeChannelViewing é aceito em canal de texto e forum, antes do rate
+	// limit e da checagem de SendMessages (ver internal/httpapi/channel_ws.go).
+	TypeChannelViewing = "channel.viewing"
+
 	typeError = "error"
 )
+
+// IncomingChannelViewing é o payload de um frame "channel.viewing": active
+// é true quando a página está visível, a janela em foco e a pessoa não
+// está ausente. Obrigatório (ponteiro para distinguir de ausente).
+type IncomingChannelViewing struct {
+	Active *bool `json:"active"`
+}
 
 // IncomingMessageCreate é o payload decodificado de um frame
 // "message.create" enviado pelo client.
@@ -189,6 +202,19 @@ func DecodeIncoming(raw []byte) (IncomingMessageCreate, *apierr.Problem) {
 		return IncomingMessageCreate{}, invalidPayload("message.create", err)
 	}
 	return m, nil
+}
+
+// DecodeChannelViewing decodifica o payload de um frame "channel.viewing"
+// já identificado via FrameType.
+func DecodeChannelViewing(raw []byte) (bool, *apierr.Problem) {
+	var v IncomingChannelViewing
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return false, invalidPayload(TypeChannelViewing, err)
+	}
+	if v.Active == nil {
+		return false, invalidPayload(TypeChannelViewing, fmt.Errorf("campo active ausente"))
+	}
+	return *v.Active, nil
 }
 
 // DecodeMessageUpdate decodifica o payload de um frame "message.update" já

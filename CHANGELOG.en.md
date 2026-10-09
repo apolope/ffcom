@@ -15,6 +15,17 @@ One section per published tag, in the exact format below (the site and the CI ch
 
 `<component>` is one of: `client` (the app), `central` (server-central), `channel` (server-channel), `channel-image` (the server-channel container image), `site` (this home page). Items accept `code` in backticks and **bold**. Text outside the sections (like this) is ignored by the site.
 
+## client v0.24.3 · 2026-10-09
+- Phone notifications now arrive even when FFCom is open on your computer in a hidden tab or a minimized window. Only someone with the channel on screen, the window in focus and not away stops getting them.
+- In the Android app, a bell at the top of the channel mutes its notifications.
+
+## channel v0.11.2 · 2026-10-09
+- Phone notifications now arrive even when FFCom is open on your computer in a hidden tab or a minimized window: the server only skips people who are actually looking at the channel, with the screen visible, the window in focus and not away. Before, any open channel on any device held the notification back.
+- The server log now has one line per message saying how many people push considered, how many were looking at the channel and how many were notified, counts only.
+
+## central v0.15.2 · 2026-10-09
+- The server log now has one line per message notice saying how many push tokens arrived, how many were unknown, muted or over the limit and how many became notifications, counts only.
+
 ## client v0.24.2 · 2026-10-09
 - In the Android app, notifications show the sender's photo, for channel messages, direct messages and friend alerts. People without a photo still get the letter. (v0.24.1, with the same change, was never published.)
 

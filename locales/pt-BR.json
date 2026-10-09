@@ -1167,6 +1167,8 @@
     "mute": {
       "mute": "Silenciar notificações",
       "unmute": "Reativar notificações",
+      "channelMute": "Silenciar notificações deste canal",
+      "channelUnmute": "Reativar notificações",
       "saveFailed": "Não deu para mudar as notificações. Tente de novo."
     }
   }

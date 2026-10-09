@@ -26,9 +26,13 @@ const (
 // SendError, e mandar num canal fechado derrubaria o processo.
 type Client struct {
 	// MemberID é o membro dono da conexão, preenchido pelo handler antes
-	// do Register; o Hub usa para saber quem está com o canal aberto (ver
-	// Hub.MemberIDs).
+	// do Register; o Hub usa para saber quem está vendo o canal (ver
+	// Hub.ViewingMemberIDs).
 	MemberID string
+
+	// viewing: o client disse que a pessoa está vendo o canal nesta
+	// conexão (frame "channel.viewing"). Protegido por Hub.mu.
+	viewing bool
 
 	conn       *websocket.Conn
 	send       chan []byte

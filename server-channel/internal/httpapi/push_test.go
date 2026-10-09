@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sort"
 	"sync"
 	"testing"
@@ -60,7 +61,9 @@ func (f *fakeCentral) grantsIn(mine map[string]bool) []string {
 }
 
 // Destinatários de uma mensagem: só quem deu grant, tem ViewChannels no
-// canal, não é o autor, não está com o canal aberto e não foi expulso.
+// canal, não é o autor, não está vendo o canal e não foi expulso. Ter o
+// WebSocket do canal aberto numa aba escondida ou num app minimizado (sem
+// "channel.viewing" ativo) não tira ninguém do push.
 func TestPushRecipients(t *testing.T) {
 	f := newRoleFixture(t)
 	central := &fakeCentral{}
@@ -73,6 +76,7 @@ func TestPushRecipients(t *testing.T) {
 	author := f.member("autor")
 	reader := f.member("leitor")
 	viewer := f.member("vendo")
+	background := f.member("aba-escondida")
 	hidden := f.member("sem-view")
 	kicked := f.member("expulso")
 	noGrant := f.member("sem-grant")
@@ -90,7 +94,7 @@ func TestPushRecipients(t *testing.T) {
 	address := "https://canal.example/" + t.Name()
 	grants := map[string]string{}
 	mine := map[string]bool{}
-	for _, m := range []store.Member{author, reader, viewer, hidden, kicked} {
+	for _, m := range []store.Member{author, reader, viewer, background, hidden, kicked} {
 		g := fmt.Sprintf("grant-%s-%d", m.ID, time.Now().UnixNano())
 		expectStatus(t, "PUT push-grant", f.do(setGrant, m, "PUT", map[string]any{"token": g, "serverAddress": address}), http.StatusNoContent)
 		grants[m.ID] = g
@@ -104,10 +108,20 @@ func TestPushRecipients(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// viewer está com o WebSocket do canal aberto.
+	// viewer está vendo o canal num aparelho e tem outra sessão escondida;
+	// background só tem o canal aberto numa aba escondida (ou é um client
+	// antigo, que nunca manda "channel.viewing").
 	viewerClient := realtime.NewClient(nil)
 	viewerClient.MemberID = viewer.ID
 	hub.Register(channel.ID, viewerClient)
+	hub.SetViewing(channel.ID, viewerClient, true)
+	viewerHidden := realtime.NewClient(nil)
+	viewerHidden.MemberID = viewer.ID
+	hub.Register(channel.ID, viewerHidden)
+	hub.SetViewing(channel.ID, viewerHidden, false)
+	backgroundClient := realtime.NewClient(nil)
+	backgroundClient.MemberID = background.ID
+	hub.Register(channel.ID, backgroundClient)
 
 	msg, err := f.db.Messages.Create(f.ctx, channel.ID, nil, author.ID, "Ficaram lindas!")
 	if err != nil {
@@ -117,8 +131,10 @@ func TestPushRecipients(t *testing.T) {
 	notifier.Wait()
 
 	got := central.grantsIn(mine)
-	if len(got) != 1 || got[0] != grants[reader.ID] {
-		t.Fatalf("grants enviados = %v, esperado só o do leitor (%s)", got, grants[reader.ID])
+	wantGrants := []string{grants[reader.ID], grants[background.ID]}
+	sort.Strings(wantGrants)
+	if !slices.Equal(got, wantGrants) {
+		t.Fatalf("grants enviados = %v, esperado o do leitor e o da aba escondida (%v)", got, wantGrants)
 	}
 	central.mu.Lock()
 	var req map[string]any
@@ -135,9 +151,11 @@ func TestPushRecipients(t *testing.T) {
 		}
 	}
 
-	// Quem fecha o canal volta a receber; DELETE com o token de outro
+	// Quem esconde o canal volta a receber; DELETE com o token de outro
 	// aparelho não apaga, sem token apaga.
-	hub.Unregister(channel.ID, viewerClient)
+	hub.SetViewing(channel.ID, viewerClient, false)
+	hub.Unregister(channel.ID, backgroundClient)
+	expectStatus(t, "DELETE sem corpo (aba escondida)", f.do(handleDeletePushGrant(f.db.Members), background, "DELETE", nil), http.StatusNoContent)
 	deleteGrant := handleDeletePushGrant(f.db.Members)
 	expectStatus(t, "DELETE com outro token", f.do(deleteGrant, reader, "DELETE", map[string]any{"token": "outro"}), http.StatusNoContent)
 	expectStatus(t, "DELETE sem corpo", f.do(deleteGrant, viewer, "DELETE", nil), http.StatusNoContent)

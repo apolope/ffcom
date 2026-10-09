@@ -22,6 +22,37 @@
   font-weight: 600;
 }
 
+/* Sino de silenciar o canal (só no app Android, ver MainPanel.tsx), no fim
+   do cabeçalho, antes do botão de membros. */
+.channel-mute-button {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-h);
+  font: inherit;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.channel-mute-button:active {
+  background: var(--bg-tertiary);
+}
+
+.channel-mute-button[aria-pressed='true'] {
+  opacity: 0.7;
+}
+
+.channel-mute-button + .mobile-members-button {
+  margin-left: 0;
+}
+
 .channel-title {
   min-width: 0;
   overflow: hidden;

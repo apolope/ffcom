@@ -50,8 +50,10 @@ type Message struct {
 	AuthorSubject string
 	Text           string
 	Attachment     string
-	// Viewers são os membros com o WebSocket do canal aberto no momento
-	// em que a mensagem foi criada: já estão vendo, não recebem push.
+	// Viewers são os membros que estavam vendo o canal no momento em que
+	// a mensagem foi criada (pelo menos uma conexão do canal com a página
+	// visível, em foco e sem ausência, ver realtime.Hub.ViewingMemberIDs):
+	// não recebem push.
 	Viewers map[string]bool
 }
 
@@ -62,9 +64,20 @@ type Recipient struct {
 	ServerAddress string
 }
 
+// Resolution é o resultado de um Resolver: o nome do canal, os
+// destinatários e as contagens que vão para o log de cada mensagem.
+type Resolution struct {
+	ChannelName string
+	Recipients  []Recipient
+	// Considered: membros ativos com grant, menos o autor.
+	Considered int
+	// Viewing: dos considerados, quantos estavam vendo o canal (Viewers).
+	Viewing int
+}
+
 // Resolver calcula o nome do canal e os destinatários de uma mensagem
 // (internal/httpapi monta a partir do banco e das permissões).
-type Resolver func(ctx context.Context, m Message) (channelName string, recipients []Recipient, err error)
+type Resolver func(ctx context.Context, m Message) (Resolution, error)
 
 // Notifier é a fila até o server-central. Um *Notifier nil é o push
 // desligado (FFCOM_CENTRAL_URL=off): Enqueue vira no-op.
@@ -128,28 +141,26 @@ func (n *Notifier) run() {
 func (n *Notifier) process(m Message) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	channelName, recipients, err := n.resolve(ctx, m)
+	res, err := n.resolve(ctx, m)
 	if err != nil {
 		log.Printf("server-channel: push: calcular destinatários: %v", err)
-		return
-	}
-	if len(recipients) == 0 {
 		return
 	}
 
 	// Um lote por endereço: o grant só vale no endereço em que foi emitido,
 	// e quase sempre todos usam o mesmo.
 	byAddress := make(map[string][]string)
-	for _, r := range recipients {
+	for _, r := range res.Recipients {
 		byAddress[r.ServerAddress] = append(byAddress[r.ServerAddress], r.Grant)
 	}
+	sent, failed := 0, 0
 	for address, grants := range byAddress {
 		for start := 0; start < len(grants); start += maxGrantsPerRequest {
 			end := min(start+maxGrantsPerRequest, len(grants))
 			body := notifyRequest{
 				ServerAddress: address,
 				ChannelID:     m.ChannelID,
-				ChannelName:   channelName,
+				ChannelName:   res.ChannelName,
 				Author:        m.Author,
 				AuthorSubject: m.AuthorSubject,
 				Text:          truncate(m.Text, maxTextRunes),
@@ -160,10 +171,18 @@ func (n *Notifier) process(m Message) {
 				Grants:        grants[start:end],
 			}
 			if err := n.post(ctx, body); err != nil {
+				failed += end - start
 				log.Printf("server-channel: push: %v", err)
+				continue
 			}
+			sent += end - start
 		}
 	}
+	// Uma linha por mensagem, só contagens (sem nome, texto nem grant),
+	// para saber por que um push não chegou: ninguém com grant, todos
+	// vendo o canal, sem permissão ou o central recusando.
+	log.Printf("server-channel: push: mensagem %s: considerados=%d vendo=%d sem_permissao=%d grants_enviados=%d falhas=%d",
+		m.MessageID, res.Considered, res.Viewing, res.Considered-res.Viewing-len(res.Recipients), sent, failed)
 }
 
 func (n *Notifier) post(ctx context.Context, body notifyRequest) error {
