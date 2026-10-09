@@ -36,6 +36,10 @@ interface StatusMenuProps {
   onEditDisplayName?: () => void
   // Apelido é por server-channel: só vem com um servidor aberto.
   onEditNickname?: () => void
+  // Instalar o app nativo (só no navegador/PWA de sistema com app, ver
+  // hooks/useNativeAppOffer.ts). Fica aqui mesmo com o botão do rail
+  // dispensado, para a oferta nunca se perder.
+  installApp?: { platform: string; start: () => void }
   onClose: () => void
 }
 
@@ -55,6 +59,7 @@ export function StatusMenu({
   onEditAvatar,
   onEditDisplayName,
   onEditNickname,
+  installApp,
   onClose,
 }: StatusMenuProps) {
   const ref = useRef<HTMLDivElement>(null)
@@ -157,6 +162,19 @@ export function StatusMenu({
       >
         {t('profile.statusMenu.editAvatar')}
       </button>
+      {installApp && (
+        <button
+          type="button"
+          role="menuitem"
+          className="rail-menu-item"
+          onClick={() => {
+            installApp.start()
+            onClose()
+          }}
+        >
+          {t('installApp.button', { platform: installApp.platform })}
+        </button>
+      )}
       <hr />
       <div role="group" aria-labelledby="status-menu-language">
         <span id="status-menu-language" className="status-menu-section">

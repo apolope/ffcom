@@ -55,7 +55,7 @@ principal de cada tela.
 
 | Token | Claro | Escuro | Uso |
 |---|---|---|---|
-| `--accent` | `#aa3bff` | `#c084fc` | botão principal, servidor aberto, links, indicador de arrasto |
+| `--accent` | `#aa3bff` | `#c084fc` | botão principal, servidor aberto, links, indicador de arrasto, botão de instalar o app no rail |
 | `--accent-hover` | acento 70% + `#3b0a73` | idem | hover sobre um elemento que já está no acento |
 | `--accent-bg` | acento a 10% | acento a 15% | fundo suave de item selecionado (definido, ainda sem uso) |
 | `--accent-border` | acento a 50% | acento a 50% | contorno tracejado de alvo ao arrastar canal para uma categoria |

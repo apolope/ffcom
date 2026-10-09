@@ -2222,6 +2222,35 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** o "Conferir" da fase 6 rodar num aparelho (principalmente no Samsung), se o server-channel ganhar uma rota para conferir o grant, ou se houver cliente iOS.
 
+## Decisão: botão de instalar o app nativo pelo navegador
+
+**Contexto:** quem abre o FFCom no navegador (ou no PWA instalado) não fica sabendo que existe app para o sistema dele, a não ser que passe pela home page. No Android o PWA é a pior opção: não tem push, a chamada cai com a tela apagada, não se atualiza sozinho como o APK e disputa os App Links (`/convite`, `/auth/android`) com o app quando os dois estão no aparelho. O dono pediu um botão no rail, no estilo do de atualizar, que baixe o app do sistema de quem visita.
+
+**Alternativas consideradas:**
+- **Só o link na home page:** já existe e não alcança quem entra direto em `app.ffcom.a3sitsolutions.com.br`. Descartada como única via.
+- **Banner no topo da tela:** chama mais atenção, mas ocupa a área do chat no celular e não tem lugar natural para voltar depois de fechado. Descartada.
+- **Botão no `ServerRail`, ao lado do de atualizar, com entrada fixa no menu do avatar:** escolhida.
+- **Esconder com o APK instalado:** (1) não esconder; (2) **`navigator.getInstalledRelatedApps()`** (Chrome 80+ no Android). A documentação do Chrome ([Is your app installed?](https://developer.chrome.com/docs/capabilities/get-installed-related-apps)) pede `related_applications` com `platform: "play"` e o pacote no `id`, e no app um `asset_statements` no `AndroidManifest.xml` apontando para o site; ela não exige a Play Store (fala em instalar o app atualizado direto no aparelho ou por "qualquer outra plataforma de distribuição"), então vale para o APK baixado do GitHub. Escolhida (2), com detecção de recurso: sem a API ou com erro, o botão aparece.
+
+**Decisão:**
+1. **Tabela única** em `client/src/lib/nativeApps.ts`: `NATIVE_APPS` mapeia o sistema (`android`, `windows`, e no tipo também `macos`, `linux`, `ios`) para `{ label, url, flow, titleKey, noteKey, relatedAppId? }`. Os links são os nomes estáveis das releases fixas: `android-stable/FFCom.apk` e `desktop-stable/FFCom-Setup.exe`. Oferecer um sistema novo é uma entrada nessa tabela mais os textos em `locales/`; sistema sem entrada não mostra nada.
+2. **Sistema de quem visita:** `navigator.userAgentData.platform` quando existe (Chromium), senão o user agent. iPadOS se apresenta como Mac e é separado pelo toque; Chrome OS fica sem sistema. O instalador do Windows é só x64 (o `electron-builder` não declara `arch`), e o botão aparece também no Windows em ARM, que roda x64 por emulação.
+3. **Onde não aparece:** dentro dos apps nativos, o desktop (`window.ffcomElectron`) e o app Android (`isAndroidApp()`). O PWA instalado continua recebendo a oferta, pelos motivos do contexto.
+4. **Visual:** botão redondo do mesmo tamanho e comportamento do de atualizar, logo abaixo dele no rodapé do rail, com ícone de celular com seta e a cor `--accent` (o verde `--success` fica só para atualização; os dois podem aparecer juntos). O `title` é "Instalar o app para Android/Windows". Um "x" pequeno no canto é o "Agora não": esconde o botão por 30 dias neste navegador (`ffcom.installApp.dismissedUntil` no `localStorage`, com `try/catch`; sem armazenamento, vale só na sessão). O menu do avatar mantém o item "Instalar o app para <sistema>" sempre, para a oferta nunca se perder.
+5. **Clique:**
+   - Android (`flow: 'confirm'`): antes de baixar, um diálogo explica o APK fora da Play Store, o "permitir instalar apps desta fonte", o aviso do Play Protect ("Mais detalhes" e "Instalar mesmo assim") e que, depois de instalar, dá para remover o atalho do navegador ou o PWA para não ficar com dois ícones do FFCom. "Baixar o app" navega para o APK; "Agora não" esconde o botão por 30 dias.
+   - Windows (`flow: 'direct'`): baixa na hora e abre a nota do SmartScreen ("Mais informações" e "Executar assim mesmo"), com um link para baixar de novo.
+   - O diálogo vai para o `body` por portal, porque no celular o rail fica numa gaveta que some ao fechar.
+6. **Detecção do APK:** `related_applications` no manifest do PWA (`vite.config.ts`, com `url` apontando para o APK, campo obrigatório no tipo do plugin) e `asset_statements` no `AndroidManifest.xml` (`delegate_permission/common.handle_all_urls` para `https://app.ffcom.a3sitsolutions.com.br`). Sem `prefer_related_applications`, a instalação do PWA não muda.
+7. **Textos:** chaves `installApp.*` nos dois idiomas, próprias do client (não dependem das `site.*` da home page).
+
+**Escopo aceito:**
+- A detecção só passa a funcionar com o APK que já traz o `asset_statements` (a partir do client v0.24.6); quem tem um APK anterior continua vendo o botão no Chrome até atualizar o app, e pode dispensá-lo pelo "x".
+- Fora do Chrome do Android (Firefox, Samsung Internet sem a API, outros sistemas) não há detecção: o botão aparece até ser dispensado.
+- Não testado num aparelho nesta sessão; o que foi conferido está no commit (lint, build, check-locales e o manifest gerado).
+
+**Revisitar quando:** houver app para Linux, macOS ou iOS (uma entrada em `NATIVE_APPS`), se o app entrar na Play Store (o link do Android pode virar a página da loja) ou se o Windows em ARM ganhar build próprio.
+
 ## Questões em aberto (não resolvidas pela pesquisa, viram TODO)
 
 - **Mobile:** fora do escopo da v1 (cliente é web + desktop); o app Android segue em fases pelo [`android-runbook.md`](android-runbook.md) (ver "Decisão: app Android com Capacitor (fase 1)" e "Decisão: atualização do APK (fase 2)").

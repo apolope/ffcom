@@ -1142,6 +1142,22 @@
     },
     "label": "Update FFCom to the new version"
   },
+  "installApp": {
+    "button": "Install the app for {{platform}}",
+    "dismissHint": "Not now (hides this button for 30 days; it stays in your avatar menu)",
+    "notNow": "Not now",
+    "download": "Download the app",
+    "gotIt": "Got it",
+    "retryDownload": "Download didn't start? Download again",
+    "android": {
+      "title": "Install the app for Android",
+      "note": "The app comes as an APK, outside the Play Store, and brings what the browser lacks: phone notifications, calls with the screen off, and updates from the app itself.\n\nWhen you open the downloaded file, Android asks you to allow installing apps from this source (the browser or the files app). Play Protect may warn that the app is unknown: tap \"More details\" and then \"Install anyway\".\n\nIf you added FFCom to your home screen from the browser, you can remove that shortcut after installing the app, so you don't end up with two FFCom icons."
+    },
+    "windows": {
+      "title": "Downloading the app for Windows",
+      "note": "The installer download has started. When it finishes, open the FFCom-Setup.exe file.\n\nWindows may show \"Windows protected your PC\": click \"More info\" and then \"Run anyway\". Once installed, the app itself tells you when there is a new version."
+    }
+  },
   "push": {
     "android": {
       "channelMessages": "Channel messages",

@@ -1146,6 +1146,22 @@
     },
     "label": "Atualizar o FFCom para a nova versão"
   },
+  "installApp": {
+    "button": "Instalar o app para {{platform}}",
+    "dismissHint": "Agora não (esconde este botão por 30 dias; ele continua no menu do seu avatar)",
+    "notNow": "Agora não",
+    "download": "Baixar o app",
+    "gotIt": "Entendi",
+    "retryDownload": "O download não começou? Baixar de novo",
+    "android": {
+      "title": "Instalar o app para Android",
+      "note": "O app vem como APK, fora da Play Store, e traz o que o navegador não tem: notificações no celular, chamada com a tela apagada e atualização pelo próprio app.\n\nAo abrir o arquivo baixado, o Android pede para permitir instalar apps desta fonte (o navegador ou o app de arquivos). O Play Protect pode avisar que o app é desconhecido: toque em \"Mais detalhes\" e em \"Instalar mesmo assim\".\n\nSe você adicionou o FFCom à tela inicial pelo navegador, depois de instalar o app pode remover esse atalho, para não ficar com dois ícones do FFCom."
+    },
+    "windows": {
+      "title": "Baixando o app para Windows",
+      "note": "O download do instalador começou. Quando terminar, abra o arquivo FFCom-Setup.exe.\n\nO Windows pode mostrar \"O Windows protegeu o computador\": clique em \"Mais informações\" e em \"Executar assim mesmo\". Depois de instalado, o próprio app avisa quando há versão nova."
+    }
+  },
   "push": {
     "android": {
       "channelMessages": "Mensagens dos canais",

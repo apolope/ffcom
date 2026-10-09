@@ -9,6 +9,8 @@ import { MutedIcon } from './MutedIcon'
 import { ServerMenu, type ServerMenuActions } from './ServerMenu'
 import { StatusMenu, type AccountIdentity } from './StatusMenu'
 import { UpdateButton } from './UpdateButton'
+import { InstallAppButton, InstallAppDialog } from './InstallAppButton'
+import { useNativeAppOffer } from '../hooks/useNativeAppOffer'
 import { useScrollEdges } from '../hooks/useScrollEdges'
 import type { UpdateKind } from '../hooks/useAppUpdate'
 import './ServerRail.css'
@@ -86,6 +88,9 @@ export function ServerRail({
   const { profileName, ...accountRest } = account
   const displayName = myProfile?.displayName ?? profileName ?? myProfile?.oidcSubject ?? '?'
   const [serverMenu, setServerMenu] = useState<{ anchor: HTMLElement; server: KnownServer }>()
+  // App nativo para quem está no navegador ou no PWA (undefined nos apps
+  // nativos e em sistema sem app).
+  const installOffer = useNativeAppOffer()
 
   // Arrastar ícone de servidor (HTML5): qual está sendo arrastado e se cai
   // antes ou depois de qual.
@@ -234,6 +239,8 @@ export function ServerRail({
           +
         </button>
         {updateReady && <UpdateButton kind={updateKind ?? 'web'} onUpdate={onUpdate} />}
+        {installOffer?.showButton && <InstallAppButton offer={installOffer} />}
+        {installOffer?.dialogOpen && <InstallAppDialog offer={installOffer} />}
         <button
           type="button"
           className="account-button"
@@ -267,6 +274,7 @@ export function ServerRail({
             onEditAvatar={onOpenMyAvatar}
             onEditDisplayName={onEditDisplayName}
             onEditNickname={onEditNickname}
+            installApp={installOffer && { platform: installOffer.app.label, start: installOffer.start }}
             onClose={closeMenu}
           />
         )}
