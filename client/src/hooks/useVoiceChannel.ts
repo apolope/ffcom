@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   ConnectionState,
   Room,
@@ -20,6 +21,7 @@ import { playPresenceSound } from '../lib/presenceSound'
 import { participantAudioOf, type ParticipantAudioMap } from '../lib/participantAudio'
 import { fetchVoiceToken } from '../lib/serverChannelApi'
 import { setVoiceConnected } from '../lib/voiceActivity'
+import { onCallNotificationAction, syncCallNotification } from '../lib/androidCallService'
 
 // Atualiza os textos de uma tile de vídeo (montada fora do React) no idioma
 // ativo; chamado ao criar a tile e de novo a cada troca de idioma.
@@ -405,6 +407,36 @@ export function useVoiceChannel(
     return () => setVoiceConnected(false)
   }, [status])
 
+  // App Android: serviço em primeiro plano com a notificação "Em chamada"
+  // (lib/androidCallService.ts) do clique em entrar até sair. Começa já em
+  // 'connecting', ainda com o app visível, como o Android 14 exige para o
+  // microfone; isso também mantém o serviço ao ser movido de sala com o app
+  // em segundo plano, quando ele não poderia ser ligado de novo. Erro,
+  // desconexão e logout (o provider desmonta) levam a undefined e param o
+  // serviço. No navegador e no desktop não faz nada.
+  const { t } = useTranslation()
+  useEffect(() => {
+    const active = target && (status === 'connecting' || status === 'connected')
+    syncCallNotification(
+      active
+        ? {
+            channelName: t('voice.androidCall.channelName'),
+            title: t('voice.androidCall.title', { channel: target.channelName, server: target.serverName }),
+            text:
+              status === 'connecting'
+                ? t('voice.androidCall.connecting')
+                : micEnabled
+                  ? t('voice.androidCall.micOn')
+                  : t('voice.androidCall.micOff'),
+            toggleMicLabel:
+              status === 'connected' ? (micEnabled ? t('voice.androidCall.mute') : t('voice.androidCall.unmute')) : undefined,
+            leaveLabel: t('voice.androidCall.leave'),
+          }
+        : undefined,
+    )
+  }, [target, status, micEnabled, t])
+  useEffect(() => () => syncCallNotification(undefined), [])
+
   // Sair da chamada quando a sessão acaba (logout desmonta o provider).
   useEffect(() => {
     const joinSeq = joinSeqRef
@@ -706,6 +738,22 @@ export function useVoiceChannel(
         refreshParticipants(room)
       })
   }, [refreshParticipants, syncNoiseSuppression])
+
+  // "Mutar"/"Desmutar" e "Sair" da notificação "Em chamada" do app Android
+  // (lib/androidCallService.ts). Por ref, para assinar uma vez só: trocar o
+  // listener a cada render abriria uma janela com dois e uma ação dobrada.
+  const notificationActionsRef = useRef({ toggleMic, leave })
+  useEffect(() => {
+    notificationActionsRef.current = { toggleMic, leave }
+  }, [toggleMic, leave])
+  useEffect(
+    () =>
+      onCallNotificationAction((action) => {
+        if (action === 'toggleMic') notificationActionsRef.current.toggleMic()
+        else if (action === 'leave') notificationActionsRef.current.leave()
+      }),
+    [],
+  )
 
   // Push-to-talk aperta e solta mais rápido do que setMicrophoneEnabled
   // resolve; chamadas sobrepostas poderiam terminar fora de ordem e deixar o
