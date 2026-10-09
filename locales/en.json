@@ -204,6 +204,16 @@
   "voice": {
     "join": "Join voice",
     "leave": "Leave voice",
+    "androidCall": {
+      "channelName": "Ongoing call",
+      "title": "In a call in {{channel}} · {{server}}",
+      "connecting": "Connecting…",
+      "micOn": "Microphone on",
+      "micOff": "Microphone off",
+      "mute": "Mute",
+      "unmute": "Unmute",
+      "leave": "Leave"
+    },
     "shortcut": {
       "muteLabel": "Mute shortcut",
       "unsupportedKey": "Unsupported key. Use a letter, a number, F1-F24, or space.",

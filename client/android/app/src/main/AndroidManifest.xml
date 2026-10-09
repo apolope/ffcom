@@ -43,6 +43,19 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Chamada em segundo plano (fase 5): serviço em primeiro plano
+             enquanto há chamada, com a notificação "Em chamada". microphone
+             mantém o microfone com a tela apagada; mediaPlayback segura quem
+             entrou só ouvindo (ver CallNotice.foregroundTypes). stopWithTask:
+             tirar o app dos recentes leva a WebView e a chamada, então o
+             serviço vai junto. Ver docs/architecture.md, "Decisão: chamada em
+             segundo plano no Android (fase 5)". -->
+        <service
+            android:name=".CallService"
+            android:exported="false"
+            android:foregroundServiceType="microphone|mediaPlayback"
+            android:stopWithTask="true" />
     </application>
 
     <!-- Permissions -->
@@ -60,6 +73,16 @@
          primeira vez o Android pede "Permitir desta fonte"
          (canRequestPackageInstalls). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Serviço da chamada (CallService, fase 5): o serviço em primeiro plano
+         e os dois tipos dele (Android 14+), a notificação "Em chamada"
+         (Android 13+ pede à pessoa; negada, o serviço roda igual, sem a
+         notificação visível) e o wake lock que segura a CPU com a tela
+         apagada. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- A câmera é opcional: sem ela o app instala e funciona só com voz. -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 </manifest>

@@ -205,6 +205,16 @@
   "voice": {
     "join": "Entrar na voz",
     "leave": "Sair da voz",
+    "androidCall": {
+      "channelName": "Chamada em andamento",
+      "title": "Em chamada em {{channel}} · {{server}}",
+      "connecting": "Conectando…",
+      "micOn": "Microfone aberto",
+      "micOff": "Microfone fechado",
+      "mute": "Mutar",
+      "unmute": "Desmutar",
+      "leave": "Sair"
+    },
     "shortcut": {
       "muteLabel": "Atalho para mutar",
       "unsupportedKey": "Tecla não suportada. Use uma letra, um número, F1-F24 ou espaço.",
