@@ -14,6 +14,7 @@ import { NicknameDialog } from './components/NicknameDialog'
 import { DisplayNameDialog } from './components/DisplayNameDialog'
 import { AvatarDialog } from './components/AvatarDialog'
 import { InstallPermissionDialog } from './components/InstallPermissionDialog'
+import { PushPermissionDialog } from './components/PushPermissionDialog'
 import { CategoryDialog, ChannelDialog } from './components/StructureDialogs'
 import { ChannelPermissionsDialog } from './components/ChannelPermissionsDialog'
 import { PresenceContext, visibleOwnStatus, type PresenceContextValue } from './components/PresenceContext'
@@ -26,6 +27,7 @@ import { useAppUpdate } from './hooks/useAppUpdate'
 import { useAccountsBySubject } from './hooks/useAccountsBySubject'
 import { useIdle } from './hooks/useIdle'
 import { useKnownServers } from './hooks/useKnownServers'
+import { useAndroidPush } from './hooks/useAndroidPush'
 import { useFriends, type FriendEvent } from './hooks/useFriends'
 import { useE2EKeys } from './hooks/useE2EKeys'
 import { E2EKeyPanel } from './components/E2EKeyPanel'
@@ -63,6 +65,7 @@ import { friendRequestName, sendPresenceIdleFrame } from './lib/serverCentralApi
 import { markRead } from './lib/unread'
 import type { ParsedInvite } from './lib/inviteLink'
 import { onPendingInvite, takePendingInvite } from './lib/pendingInvite'
+import { onPushOpen, setPushActive, unregisterPush, type PushOpen } from './lib/androidPush'
 import { NO_STRUCTURE_PERMISSIONS, PERMISSIONS, hasPermission, structurePermissionsOf } from './lib/permissions'
 import type { Category } from './types'
 import './App.css'
@@ -96,7 +99,17 @@ function App() {
     () => notify(i18n.t('notifications.serverOrderSaveFailed'), 'error'),
     [notify],
   )
-  const { servers, addServer, removeServer, saveOrder: saveServerOrder } = useKnownServers(accessToken ?? '', onServerOrderSaveError)
+  const {
+    servers,
+    status: serversStatus,
+    addServer,
+    removeServer,
+    saveOrder: saveServerOrder,
+  } = useKnownServers(accessToken ?? '', onServerOrderSaveError)
+  // Notificações push, só no app Android (ver hooks/useAndroidPush.ts e
+  // docs/architecture.md, "Decisão: notificações push no app Android (fase
+  // 6, client)"). Fora dele push.available é false e nada aparece.
+  const push = useAndroidPush(accessToken ?? '', accountSub, servers)
   const serverIds = useMemo(() => servers.map((s) => s.id), [servers])
   const [selectedFriendId, setSelectedFriendId] = useState<string>()
   // Pedido de amizade recebido ou aceito chega pelo WebSocket de presença,
@@ -465,6 +478,57 @@ function App() {
     return new Set([...backgroundUnreadServerIds, selectedServerId])
   }, [backgroundUnreadServerIds, openServerUnread, selectedServerId])
 
+  // O que está na tela, para o push não avisar dele com o app na frente e
+  // tirar a notificação de quem acabou de abrir.
+  const activeServerAddress = server?.baseUrl
+  useEffect(() => {
+    if (status !== 'signed-in') setPushActive(undefined)
+    else if (showFriends) setPushActive(selectedFriendId ? { dmAccountId: selectedFriendId } : undefined)
+    else if (activeServerAddress && selectedChannelId)
+      setPushActive({ serverAddress: activeServerAddress, channelId: selectedChannelId })
+    else setPushActive(undefined)
+  }, [status, showFriends, selectedFriendId, activeServerAddress, selectedChannelId])
+
+  // Toque numa notificação: abre o canal, a DM ou a tela de amigos. Na
+  // abertura a frio a lista de servidores ainda está chegando, então o
+  // pedido espera por ela.
+  const [pushOpen, setPushOpen] = useState<PushOpen>()
+  useEffect(() => {
+    if (status !== 'signed-in') return
+    return onPushOpen(setPushOpen)
+  }, [status])
+  useEffect(() => {
+    if (!pushOpen) return
+    if (pushOpen.type === 'channel_message') {
+      const target = servers.find((s) => s.baseUrl === pushOpen.serverAddress)
+      if (!target) {
+        // Lista carregada e o servidor não está nela (saiu em outro
+        // aparelho): ignora.
+        if (serversStatus !== 'loading') setPushOpen(undefined)
+        return
+      }
+      setShowFriends(false)
+      if (target.id === selectedServerId) {
+        setSelectedChannelId(pushOpen.channelId)
+      } else {
+        pendingChannelIdRef.current = pushOpen.channelId
+        setSelectedServerId(target.id)
+      }
+    } else {
+      setShowFriends(true)
+      setSelectedFriendId(pushOpen.type === 'dm' ? pushOpen.accountId : undefined)
+    }
+    setMobileDrawer(undefined)
+    setPushOpen(undefined)
+  }, [pushOpen, servers, serversStatus, selectedServerId])
+
+  const togglePushMute = (serverAddress: string, channelId?: string) => {
+    const muted = push.mutes.isMuted(serverAddress, channelId)
+    push.mutes
+      .setMuted(serverAddress, channelId, !muted)
+      .catch((err: unknown) => notify(errorMessage(err, i18n.t('push.mute.saveFailed')), 'error'))
+  }
+
   if (status === 'loading') {
     return null
   }
@@ -572,6 +636,10 @@ function App() {
                     // Sem o bit o POST de convite daria 403 (CreateInvites/ManageInvites ou dono).
                     onInvite: canCreateInvites ? () => setShowInviteServer(true) : undefined,
                     onManageMembers: canOpenMemberAdmin ? () => setShowManageRoles(true) : undefined,
+                    notifications:
+                      push.available && server
+                        ? { muted: push.mutes.isMuted(server.baseUrl), onToggle: () => togglePushMute(server.baseUrl) }
+                        : undefined,
                   }}
                   onReorderServers={saveServerOrder}
                   onSelectFriends={() => setShowFriends(true)}
@@ -579,7 +647,11 @@ function App() {
                   onOpenMyAvatar={() => setShowMyAvatar(true)}
                   onEditDisplayName={myProfile ? () => setShowEditDisplayName(true) : undefined}
                   onEditNickname={!showFriends && server && me ? () => setShowEditNickname(true) : undefined}
-                  onSignOut={signOut}
+                  onSignOut={() => {
+                    // No app Android, tira antes o aparelho e os grants da
+                    // conta (melhor esforço, com prazo); no resto é só sair.
+                    void unregisterPush(accessToken ?? '', accountSub).finally(signOut)
+                  }}
                 />
                 {/* A barra da chamada fica no pé da coluna, com amigos ou
                     canais na frente. */}
@@ -637,6 +709,14 @@ function App() {
                       onEditChannel={(id) => setChannelDialog({ id })}
                       onReorderCategories={saveCategoryOrder}
                       onReorderChannels={saveChannelOrder}
+                      channelNotifications={
+                        push.available
+                          ? {
+                              isMuted: (channelId) => push.mutes.isMuted(server.baseUrl, channelId),
+                              onToggle: (channelId) => togglePushMute(server.baseUrl, channelId),
+                            }
+                          : undefined
+                      }
                     />
                   ) : null}
                   <VoiceConnectionBar onOpen={openVoiceChannel} />
@@ -849,6 +929,9 @@ function App() {
                   onRemove={removeAvatar}
                   onClose={() => setShowMyAvatar(false)}
                 />
+              )}
+              {push.askPermission && (
+                <PushPermissionDialog onAllow={push.acceptPermission} onDecline={push.declinePermission} />
               )}
               {installPermission && (
                 <InstallPermissionDialog onAllow={installPermission.allow} onClose={installPermission.dismiss} />

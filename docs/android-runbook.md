@@ -131,7 +131,7 @@ Cada fase termina num estado publicável. A **primeira versão pública do APK s
 3. Endereço do server-central: variável nova `FFCOM_CENTRAL_URL` (padrão: a instância oficial). Sem ela, ou com o central fora, o servidor funciona normalmente, só sem push.
 
 **client**
-1. `@capacitor/push-notifications`: pedir permissão de notificação (Android 13+) depois do login, com uma explicação antes, e registrar o token FCM em `/api/push/devices`.
+1. Pedir permissão de notificação (Android 13+) depois do login, com uma explicação antes, e registrar o token FCM em `/api/push/devices`. Feito com um plugin próprio (`FfcomPush`) em vez do `@capacitor/push-notifications`, cujo serviço disputaria o `MESSAGING_EVENT` com o do item 3; ver "Decisão: notificações push no app Android (fase 6, client)".
 2. Para cada servidor da lista: pedir o grant ao central e entregá-lo ao server-channel. Repetir quando um servidor é adicionado. Um servidor antigo, sem a rota, fica sem push, sem erro na tela.
 3. Agrupamento: mensagens de dados (sem `notification` no FCM) tratadas por um `FirebaseMessagingService` próprio, com uma notificação por canal (`MessagingStyle`, as últimas linhas e a contagem).
 4. Tocar na notificação abre o servidor e o canal.

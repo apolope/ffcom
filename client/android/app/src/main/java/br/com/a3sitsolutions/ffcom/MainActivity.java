@@ -11,8 +11,10 @@ public class MainActivity extends BridgeActivity {
         // Plugins próprios do app (no Capacitor 8, registrados antes do
         // super.onCreate, que monta a ponte). UpdatePlugin: atualização do
         // APK. CallPlugin: serviço e notificação da chamada (fase 5).
+        // PushPlugin: notificações push (fase 6).
         registerPlugin(UpdatePlugin.class);
         registerPlugin(CallPlugin.class);
+        registerPlugin(PushPlugin.class);
         super.onCreate(savedInstanceState);
 
         // Chamada com o app em segundo plano (fase 5): o BridgeActivity não

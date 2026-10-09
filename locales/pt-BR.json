@@ -200,7 +200,8 @@
       "sendMessages": "Enviar mensagens",
       "createPosts": "Criar posts",
       "joinVoice": "Entrar na voz"
-    }
+    },
+    "menuLabel": "Opções do canal {{name}}"
   },
   "voice": {
     "join": "Entrar na voz",
@@ -966,10 +967,19 @@
         "site": "Site"
       }
     },
+    "privacy": {
+      "title": "Privacidade",
+      "subtitle": "O que a instância oficial do FFCom guarda e por onde passa cada coisa.",
+      "account": "<strong>Conta.</strong> O pedido de cadastro (nome, nome de usuário, apelido, e-mail, o motivo e o endereço IP de onde veio) fica no servidor central para a análise. Aprovada a conta, o login e a senha ficam no Authentik da instância. O servidor central guarda o perfil (nome de exibição, avatar e idioma), a lista de servidores, as amizades e as mensagens diretas, que são cifradas de ponta a ponta: ele guarda só o texto cifrado e não consegue ler.",
+      "communities": "<strong>Comunidades.</strong> Mensagens, anexos e membros de cada comunidade ficam no servidor de comunidade (<code>server-channel</code>) dela, sob o controle de quem o hospeda, e não no servidor central. Voz, vídeo e tela compartilhada passam pelo servidor de mídia dessa comunidade e não são gravados pelo FFCom.",
+      "push": "<strong>Notificações no app Android.</strong> Para avisar de mensagens com o app fechado, o app usa o Firebase Cloud Messaging, do Google. O aparelho registra no servidor central o identificador de notificação dele. A cada mensagem nova num canal, o servidor central manda pelo Firebase o nome do servidor e do canal, o nome de quem escreveu e até 300 caracteres do texto; nas mensagens diretas, que são cifradas, vai só o nome de quem mandou. Esse conteúdo não fica guardado no servidor central e passa pelo Google só em trânsito (o Firebase segura a mensagem por até 24 horas enquanto o celular está sem conexão).",
+      "pushControl": "Dá para silenciar um servidor ou um canal pelo menu dele, desligar as notificações do FFCom nas configurações do Android ou sair da conta, que tira o aparelho da lista. No navegador e no app para computador nada passa pelo Firebase."
+    },
     "footer": {
       "egg": "Em jogo online, <b>ff</b> é o voto para desistir da partida. Também conhecido como o dia em que a turma deu FF e foi montar a própria casa.",
       "license": "Licença",
-      "architecture": "Arquitetura"
+      "architecture": "Arquitetura",
+      "privacy": "Privacidade"
     },
     "language": "Idioma"
   },
@@ -1130,5 +1140,32 @@
       "openSettings": "Abrir configurações"
     },
     "label": "Atualizar o FFCom para a nova versão"
+  },
+  "push": {
+    "android": {
+      "channelMessages": "Mensagens dos canais",
+      "channelDms": "Mensagens diretas",
+      "channelFriends": "Amizades",
+      "channelTitle": "#{{channel}} · {{server}}",
+      "newMessagesOne": "1 mensagem nova",
+      "newMessagesMany": "{{n}} mensagens novas",
+      "dmTitle": "Nova mensagem de {{author}}",
+      "friendRequest": "{{author}} mandou um pedido de amizade",
+      "friendAccepted": "{{author}} aceitou seu pedido de amizade",
+      "attachment": "Anexo: {{name}}",
+      "someone": "Alguém",
+      "you": "Você"
+    },
+    "permission": {
+      "title": "Receber notificações?",
+      "body": "O FFCom avisa de mensagens novas nos canais, de mensagens diretas e de pedidos de amizade mesmo com o app fechado. O texto das mensagens de canal passa pelo Firebase, do Google, só para chegar ao celular; nas mensagens diretas, que são cifradas, vai só o nome de quem mandou. Dá para silenciar um servidor ou um canal pelo menu dele.",
+      "allow": "Ativar notificações",
+      "notNow": "Agora não"
+    },
+    "mute": {
+      "mute": "Silenciar notificações",
+      "unmute": "Reativar notificações",
+      "saveFailed": "Não deu para mudar as notificações. Tente de novo."
+    }
   }
 }

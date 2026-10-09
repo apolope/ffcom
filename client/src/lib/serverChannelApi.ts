@@ -151,6 +151,19 @@ export async function joinServer(
   return parseJsonOrThrow<JoinResult>(res)
 }
 
+// PUT /api/me/push-grant: entrega a este servidor o grant de push que o
+// server-central emitiu para ele (POST /api/push/grants), com o mesmo
+// endereço usado lá. Servidor anterior às notificações push responde 404.
+export function setPushGrant(baseUrl: string, accessToken: string, token: string, serverAddress: string): Promise<void> {
+  return postJsonOrThrow(baseUrl, '/api/me/push-grant', accessToken, 'PUT', { token, serverAddress })
+}
+
+// DELETE /api/me/push-grant: com o token, só apaga se ainda for o guardado
+// (outro aparelho da conta pode ter entregue um mais novo).
+export function deletePushGrant(baseUrl: string, accessToken: string, token: string): Promise<void> {
+  return postJsonOrThrow(baseUrl, '/api/me/push-grant', accessToken, 'DELETE', { token })
+}
+
 export interface RemoteInvite {
   id: string
   code: string

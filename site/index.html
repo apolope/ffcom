@@ -344,6 +344,17 @@
       </div>
     </section>
 
+    <section id="privacidade" class="secao secao-alt">
+      <div class="wrap">
+        <h2 data-i18n="site.privacy.title">Privacidade</h2>
+        <p class="sub" data-i18n="site.privacy.subtitle">O que a instância oficial do FFCom guarda e por onde passa cada coisa.</p>
+        <p data-i18n-html="site.privacy.account"><strong>Conta.</strong> O pedido de cadastro (nome, nome de usuário, apelido, e-mail, o motivo e o endereço IP de onde veio) fica no servidor central para a análise. Aprovada a conta, o login e a senha ficam no Authentik da instância. O servidor central guarda o perfil (nome de exibição, avatar e idioma), a lista de servidores, as amizades e as mensagens diretas, que são cifradas de ponta a ponta: ele guarda só o texto cifrado e não consegue ler.</p>
+        <p data-i18n-html="site.privacy.communities"><strong>Comunidades.</strong> Mensagens, anexos e membros de cada comunidade ficam no servidor de comunidade (<code>server-channel</code>) dela, sob o controle de quem o hospeda, e não no servidor central. Voz, vídeo e tela compartilhada passam pelo servidor de mídia dessa comunidade e não são gravados pelo FFCom.</p>
+        <p data-i18n-html="site.privacy.push"><strong>Notificações no app Android.</strong> Para avisar de mensagens com o app fechado, o app usa o Firebase Cloud Messaging, do Google. O aparelho registra no servidor central o identificador de notificação dele. A cada mensagem nova num canal, o servidor central manda pelo Firebase o nome do servidor e do canal, o nome de quem escreveu e até 300 caracteres do texto; nas mensagens diretas, que são cifradas, vai só o nome de quem mandou. Esse conteúdo não fica guardado no servidor central e passa pelo Google só em trânsito (o Firebase segura a mensagem por até 24 horas enquanto o celular está sem conexão).</p>
+        <p data-i18n="site.privacy.pushControl">Dá para silenciar um servidor ou um canal pelo menu dele, desligar as notificações do FFCom nas configurações do Android ou sair da conta, que tira o aparelho da lista. No navegador e no app para computador nada passa pelo Firebase.</p>
+      </div>
+    </section>
+
   </main>
 
   <footer class="rodape">
@@ -361,6 +372,7 @@
         <a href="https://github.com/apolope/ffcom/blob/main/docs/architecture.md" data-i18n="site.footer.architecture">Arquitetura</a>
         <a href="#ideias" data-i18n="site.nav.ideas">Ideias</a>
         <a href="#versoes" data-i18n="site.nav.versions">Versões</a>
+        <a href="#privacidade" data-i18n="site.footer.privacy">Privacidade</a>
       </p>
       <p class="rodape-idioma" role="group" aria-label="Idioma" data-i18n-attr="aria-label:site.language" data-i18n-idiomas hidden>
         <button type="button" class="link-botao" lang="pt-BR" data-i18n-lang="pt-BR" aria-pressed="false">Português (Brasil)</button>

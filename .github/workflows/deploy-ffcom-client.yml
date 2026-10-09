@@ -305,6 +305,29 @@ jobs:
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/ffcom-android.jks"
           echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/ffcom-android.jks" >> "$GITHUB_ENV"
 
+      # Configuração do Firebase para o push (fase 6; docs/android-runbook.md,
+      # "Pré-requisitos manuais", item 3). Fica fora do git; o
+      # android/app/build.gradle só aplica o plugin google-services com o
+      # arquivo presente. Sem o secret o job falha, porque o APK publicado
+      # sairia sem notificações.
+      - name: google-services.json
+        env:
+          ANDROID_GOOGLE_SERVICES_JSON: ${{ secrets.ANDROID_GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -z "$ANDROID_GOOGLE_SERVICES_JSON" ]; then
+            echo "::error::Falta o secret ANDROID_GOOGLE_SERVICES_JSON (o google-services.json do projeto Firebase). Ver docs/android-runbook.md, Pré-requisitos manuais, item 3."
+            exit 1
+          fi
+          printf '%s' "$ANDROID_GOOGLE_SERVICES_JSON" > client/android/app/google-services.json
+          if ! node -e '
+            const c = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+            const ok = c.project_info?.project_id && (c.client ?? []).some((x) => x.client_info?.android_client_info?.package_name === "br.com.a3sitsolutions.ffcom");
+            process.exit(ok ? 0 : 1);
+          ' client/android/app/google-services.json 2>/dev/null; then
+            echo "::error::ANDROID_GOOGLE_SERVICES_JSON não é um google-services.json com o app br.com.a3sitsolutions.ffcom."
+            exit 1
+          fi
+
       # As senhas e o alias vão por variável de ambiente para o signingConfigs
       # do android/app/build.gradle, que só assina com ANDROID_KEYSTORE_FILE
       # definido (passo anterior).

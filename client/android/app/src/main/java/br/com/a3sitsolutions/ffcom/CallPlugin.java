@@ -1,12 +1,8 @@
 package br.com.a3sitsolutions.ffcom;
 
 import android.Manifest;
-import android.content.Context;
-import android.content.SharedPreferences;
-import android.os.Build;
 import android.util.Log;
 import android.webkit.WebView;
-import androidx.core.app.NotificationManagerCompat;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
@@ -36,8 +32,6 @@ public class CallPlugin extends Plugin {
 
     private static final String TAG = "FfcomCall";
     static final String NOTIFICATIONS = "notifications";
-    private static final String PREFS = "ffcom_call";
-    private static final String PREF_ASKED_NOTIFICATIONS = "askedNotifications";
 
     // O plugin da ponte viva, para o CallService entregar as ações da
     // notificação. Só existe uma Activity (singleTask).
@@ -139,20 +133,15 @@ public class CallPlugin extends Plugin {
     // Sem ela, o serviço em primeiro plano roda igual (o microfone e o
     // processo seguem protegidos), mas a notificação só aparece no
     // "Gerenciador de tarefas" da gaveta, sem as ações. Pede uma vez só, na
-    // primeira chamada; depois disso o caminho é a tela de configurações do
-    // app (e a fase 6, das notificações push, pede de novo no contexto dela).
+    // primeira chamada, e só se o push (fase 6) também não pediu; depois
+    // disso o caminho é a tela de configurações do app. A regra é dividida
+    // com o PushPlugin em NotificationAccess.
     private boolean shouldAskNotifications() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return false;
-        if (NotificationManagerCompat.from(getContext()).areNotificationsEnabled()) return false;
-        return !prefs().getBoolean(PREF_ASKED_NOTIFICATIONS, false);
+        return NotificationAccess.callShouldAsk(getContext());
     }
 
     private void markAskedNotifications() {
-        prefs().edit().putBoolean(PREF_ASKED_NOTIFICATIONS, true).apply();
-    }
-
-    private SharedPreferences prefs() {
-        return getContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        NotificationAccess.markAskedByCall(getContext());
     }
 
     private void stopService() {

@@ -27,6 +27,10 @@ vendor/
 .env
 .env.*
 !.env.example
+# Configuração do Firebase do app Android (push, fase 6): específica da
+# instância, vem do secret ANDROID_GOOGLE_SERVICES_JSON no CI e é copiada à
+# mão no build local (ver client/README.md).
+/client/android/app/google-services.json
 
 # OS / editor
 .DS_Store

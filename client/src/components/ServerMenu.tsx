@@ -10,6 +10,9 @@ export interface ServerMenuActions {
   loading: boolean
   onManageMembers?: () => void
   onInvite?: () => void
+  // "Silenciar notificações" do servidor inteiro, só onde há push (app
+  // Android); muted diz qual dos dois textos mostrar.
+  notifications?: { muted: boolean; onToggle: () => void }
 }
 
 interface ServerMenuProps {
@@ -34,6 +37,12 @@ export function ServerMenu({ anchor, serverName, actions, onClose }: ServerMenuP
   const items: { label: string; run: () => void }[] = []
   if (actions.onManageMembers) items.push({ label: t('server.menu.members'), run: actions.onManageMembers })
   if (actions.onInvite) items.push({ label: t('server.menu.invite'), run: actions.onInvite })
+  if (actions.notifications) {
+    items.push({
+      label: actions.notifications.muted ? t('push.mute.unmute') : t('push.mute.mute'),
+      run: actions.notifications.onToggle,
+    })
+  }
 
   return (
     <div

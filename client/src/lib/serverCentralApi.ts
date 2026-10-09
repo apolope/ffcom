@@ -451,3 +451,65 @@ export async function lookupAccounts(accessToken: string, subjects: string[]): P
   const body = await parseJsonOrThrow<{ accounts: AccountSummary[] }>(res)
   return body.accounts
 }
+
+// Notificações push do app Android (docs/protocol.md, "Notificações push";
+// fluxo em lib/androidPush.ts).
+
+// PUT /api/push/devices: registra o token FCM do aparelho na conta.
+export async function registerPushDevice(accessToken: string, token: string): Promise<void> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/push/devices`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, platform: 'android' }),
+  })
+  if (!res.ok) throw await apiErrorFromResponse(res, 'server-central')
+}
+
+// DELETE /api/push/devices: tira o aparelho da conta (logout).
+export async function deletePushDevice(accessToken: string, token: string): Promise<void> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/push/devices`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  })
+  if (!res.ok) throw await apiErrorFromResponse(res, 'server-central')
+}
+
+// POST /api/push/grants: grant da conta para um servidor da lista, entregue
+// em seguida ao próprio server-channel (PUT /api/me/push-grant). O token só
+// aparece nesta resposta. 404 push.server_unknown: o endereço não está na
+// lista da conta.
+export async function createPushGrant(accessToken: string, serverAddress: string): Promise<string> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/push/grants`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ serverAddress }),
+  })
+  const body = await parseJsonOrThrow<{ token: string; serverAddress: string }>(res)
+  return body.token
+}
+
+// Servidor inteiro silenciado (sem channelId) ou um canal dele.
+export interface PushMute {
+  serverAddress: string
+  channelId?: string
+}
+
+export async function fetchPushMutes(accessToken: string): Promise<PushMute[]> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/push/mutes`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  const body = await parseJsonOrThrow<{ mutes: PushMute[] }>(res)
+  return body.mutes ?? []
+}
+
+// PUT /api/push/mutes: um item por vez, para dois aparelhos não
+// sobrescreverem a lista um do outro.
+export async function setPushMute(accessToken: string, mute: PushMute, muted: boolean): Promise<void> {
+  const res = await fetch(`${SERVER_CENTRAL_URL}/api/push/mutes`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ serverAddress: mute.serverAddress, channelId: mute.channelId, muted }),
+  })
+  if (!res.ok) throw await apiErrorFromResponse(res, 'server-central')
+}

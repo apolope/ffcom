@@ -1,4 +1,4 @@
-import { Fragment, useState, type DragEvent } from 'react'
+import { Fragment, useCallback, useState, type DragEvent } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import type { Category, Channel, ChannelType, KnownServer, Member } from '../types'
 import { UNCATEGORIZED_ID, type ChannelOrderGroup, type VoiceParticipant } from '../lib/serverChannelApi'
@@ -6,6 +6,7 @@ import type { StructurePermissions } from '../lib/permissions'
 import './ChannelSidebar.css'
 import { AvatarWithStatus, MemberAvatar } from './AvatarWithStatus'
 import { useVoiceSession } from './VoiceSessionContext'
+import { ChannelMenu } from './ChannelMenu'
 
 const CHANNEL_ICON: Record<ChannelType, string> = {
   text: '#',
@@ -45,6 +46,9 @@ interface ChannelSidebarProps {
   // Nova ordem dos canais das categorias afetadas por um arraste (a de
   // destino e, se mudou de categoria, a de origem).
   onReorderChannels: (groups: ChannelOrderGroup[]) => void
+  // "Silenciar notificações" por canal, no menu de contexto dos canais de
+  // texto e fórum. Ausente onde não há push (navegador, desktop).
+  channelNotifications?: { isMuted: (channelId: string) => boolean; onToggle: (channelId: string) => void }
 }
 
 // O que está sendo arrastado e onde cairia. Canal solto no cabeçalho ou no
@@ -88,6 +92,7 @@ export function ChannelSidebar({
   onEditChannel,
   onReorderCategories,
   onReorderChannels,
+  channelNotifications,
 }: ChannelSidebarProps) {
   const { t } = useTranslation()
   const memberById = new Map(members.map((m) => [m.id, m]))
@@ -109,6 +114,8 @@ export function ChannelSidebar({
   // canal, de qualquer categoria, ou no fim de uma categoria.
   const [dragging, setDragging] = useState<DragItem>()
   const [dropTarget, setDropTarget] = useState<DropTarget>()
+  const [channelMenu, setChannelMenu] = useState<{ anchor: HTMLElement; channel: Channel }>()
+  const closeChannelMenu = useCallback(() => setChannelMenu(undefined), [])
 
   function updateDrop(event: DragEvent<HTMLElement>, target: DropTarget) {
     event.preventDefault()
@@ -273,6 +280,14 @@ export function ChannelSidebar({
                               : 'channel-item'
                           }
                           onClick={() => onSelectChannel(channel.id)}
+                          onContextMenu={
+                            channelNotifications && channel.type !== 'voice'
+                              ? (event) => {
+                                  event.preventDefault()
+                                  setChannelMenu({ anchor: event.currentTarget, channel })
+                                }
+                              : undefined
+                          }
                         >
                           <span className="channel-icon">
                             {CHANNEL_ICON[channel.type]}
@@ -364,6 +379,15 @@ export function ChannelSidebar({
           </button>
         )}
       </div>
+      {channelMenu && channelNotifications && (
+        <ChannelMenu
+          anchor={channelMenu.anchor}
+          channelName={channelMenu.channel.name}
+          muted={channelNotifications.isMuted(channelMenu.channel.id)}
+          onToggleMute={() => channelNotifications.onToggle(channelMenu.channel.id)}
+          onClose={closeChannelMenu}
+        />
+      )}
     </nav>
   )
 }

@@ -199,7 +199,8 @@
       "sendMessages": "Send messages",
       "createPosts": "Create posts",
       "joinVoice": "Join voice"
-    }
+    },
+    "menuLabel": "{{name}} channel options"
   },
   "voice": {
     "join": "Join voice",
@@ -962,10 +963,19 @@
         "site": "Site"
       }
     },
+    "privacy": {
+      "title": "Privacy",
+      "subtitle": "What the official FFCom instance stores and where each thing goes.",
+      "account": "<strong>Account.</strong> Your sign-up request (name, username, nickname, email, reason and the IP address it came from) is kept on the central server for review. Once approved, sign-in and password live in the instance's Authentik. The central server stores your profile (display name, avatar and language), your server list, your friends and your direct messages, which are end-to-end encrypted: it only keeps the ciphertext and cannot read them.",
+      "communities": "<strong>Communities.</strong> Each community's messages, attachments and members live on its community server (<code>server-channel</code>), under the control of whoever hosts it, not on the central server. Voice, video and screen sharing go through that community's media server and are not recorded by FFCom.",
+      "push": "<strong>Notifications in the Android app.</strong> To tell you about messages while the app is closed, the app uses Google's Firebase Cloud Messaging. Your device registers its notification identifier with the central server. For each new channel message, the central server sends through Firebase the server and channel names, the author's name and up to 300 characters of the text; for direct messages, which are encrypted, only the sender's name is sent. This content is not stored on the central server and only passes through Google in transit (Firebase holds the message for up to 24 hours while the phone is offline).",
+      "pushControl": "You can mute a server or a channel from its menu, turn off FFCom notifications in Android settings, or sign out, which removes the device from your account. In the browser and in the desktop app nothing goes through Firebase."
+    },
     "footer": {
       "egg": "In online games, <b>ff</b> is the vote to forfeit the match. Also known as the day the crew hit FF and went off to build their own place.",
       "license": "License",
-      "architecture": "Architecture"
+      "architecture": "Architecture",
+      "privacy": "Privacy"
     },
     "language": "Language"
   },
@@ -1126,5 +1136,32 @@
       "openSettings": "Open settings"
     },
     "label": "Update FFCom to the new version"
+  },
+  "push": {
+    "android": {
+      "channelMessages": "Channel messages",
+      "channelDms": "Direct messages",
+      "channelFriends": "Friends",
+      "channelTitle": "#{{channel}} · {{server}}",
+      "newMessagesOne": "1 new message",
+      "newMessagesMany": "{{n}} new messages",
+      "dmTitle": "New message from {{author}}",
+      "friendRequest": "{{author}} sent you a friend request",
+      "friendAccepted": "{{author}} accepted your friend request",
+      "attachment": "Attachment: {{name}}",
+      "someone": "Someone",
+      "you": "You"
+    },
+    "permission": {
+      "title": "Get notifications?",
+      "body": "FFCom lets you know about new channel messages, direct messages and friend requests even when the app is closed. Channel message text goes through Google's Firebase only to reach your phone; for direct messages, which are encrypted, only the sender's name is sent. You can mute a server or a channel from its menu.",
+      "allow": "Turn on notifications",
+      "notNow": "Not now"
+    },
+    "mute": {
+      "mute": "Mute notifications",
+      "unmute": "Unmute notifications",
+      "saveFailed": "Couldn't change notifications. Try again."
+    }
   }
 }
