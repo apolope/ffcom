@@ -69,16 +69,33 @@ func (h *Hub) Broadcast(channelID string, payload []byte) {
 	}
 }
 
-// MemberIDs devolve os membros com pelo menos uma conexão aberta no canal
-// channelID agora. Usado para não mandar notificação push a quem já está
-// vendo o canal (ver internal/httpapi/push.go).
-func (h *Hub) MemberIDs(channelID string) map[string]bool {
+// SetViewing guarda se a conexão client está "vendo" o canal agora: a
+// página visível, a janela em foco e a pessoa sem ficar ausente, como o
+// client informa no frame "channel.viewing" (ver docs/protocol.md). Só
+// isso tira a pessoa do push da mensagem (ViewingMemberIDs); uma conexão
+// aberta numa aba escondida ou num app minimizado não conta. Client que
+// não está registrado no canal é ignorado.
+func (h *Hub) SetViewing(channelID string, client *Client, viewing bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	out := make(map[string]bool, len(h.channels[channelID]))
+	if _, ok := h.channels[channelID][client]; ok {
+		client.viewing = viewing
+	}
+}
+
+// ViewingMemberIDs devolve os membros com pelo menos uma conexão no canal
+// channelID marcada como vendo (SetViewing). Usado para não mandar
+// notificação push a quem já está com o canal na frente dos olhos (ver
+// internal/httpapi/push.go). Conexão nova começa sem ver: client antigo,
+// que nunca manda "channel.viewing", não bloqueia o push de ninguém.
+func (h *Hub) ViewingMemberIDs(channelID string) map[string]bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	out := make(map[string]bool)
 	for client := range h.channels[channelID] {
-		if client.MemberID != "" {
+		if client.viewing && client.MemberID != "" {
 			out[client.MemberID] = true
 		}
 	}

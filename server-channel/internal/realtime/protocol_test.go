@@ -30,3 +30,20 @@ func TestEncodeError(t *testing.T) {
 		t.Fatalf("DecodeIncoming com tipo desconhecido: %+v", prob)
 	}
 }
+
+func TestDecodeChannelViewing(t *testing.T) {
+	for raw, want := range map[string]bool{
+		`{"type":"channel.viewing","active":true}`:  true,
+		`{"type":"channel.viewing","active":false}`: false,
+	} {
+		got, prob := DecodeChannelViewing([]byte(raw))
+		if prob != nil || got != want {
+			t.Fatalf("DecodeChannelViewing(%s) = %v, %+v", raw, got, prob)
+		}
+	}
+	for _, raw := range []string{`{"type":"channel.viewing"}`, `{"type":"channel.viewing","active":"sim"}`} {
+		if _, prob := DecodeChannelViewing([]byte(raw)); prob == nil || prob.Code != "realtime.payload_invalid" {
+			t.Fatalf("DecodeChannelViewing(%s): %+v", raw, prob)
+		}
+	}
+}

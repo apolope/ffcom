@@ -19,8 +19,8 @@ import (
 // Notificações push (ver docs/architecture.md, "Decisão: notificações push
 // (fase 6)"). O app pede ao server-central um grant para este servidor e o
 // entrega aqui; a cada mensagem nova, este servidor manda ao central os
-// grants de quem pode ver o canal, menos o autor e quem está com o canal
-// aberto. O central confere o grant, o silêncio e manda ao Firebase.
+// grants de quem pode ver o canal, menos o autor e quem está vendo o canal
+// (com a página visível, em foco e sem ausência). O central confere o grant, o silêncio e manda ao Firebase.
 
 const (
 	maxPushGrantLength     = 128
@@ -95,35 +95,36 @@ type pushGrantRequest struct {
 }
 
 // NewPushResolver calcula os destinatários de uma mensagem: membros ativos
-// com grant, menos o autor, menos quem está com o WebSocket do canal aberto,
-// e só quem tem ViewChannels no canal (roles, @everyone e overwrites, a
+// com grant, menos o autor, menos quem está vendo o canal (m.Viewers), e só quem tem ViewChannels no canal (roles, @everyone e overwrites, a
 // mesma conta de channelPermission, feita de uma vez para todos).
 func NewPushResolver(db *store.Store) push.Resolver {
-	return func(ctx context.Context, m push.Message) (string, []push.Recipient, error) {
+	return func(ctx context.Context, m push.Message) (push.Resolution, error) {
 		channel, err := db.Channels.GetByID(ctx, m.ChannelID)
 		if err != nil {
-			return "", nil, err
+			return push.Resolution{}, err
 		}
 		candidates, err := db.Members.PushCandidates(ctx, m.AuthorMemberID)
 		if err != nil {
-			return "", nil, err
+			return push.Resolution{}, err
 		}
+		res := push.Resolution{ChannelName: channel.Name, Considered: len(candidates)}
 		pending := candidates[:0]
 		ids := make([]string, 0, len(candidates))
 		for _, c := range candidates {
 			if m.Viewers[c.Member.ID] {
+				res.Viewing++
 				continue
 			}
 			pending = append(pending, c)
 			ids = append(ids, c.Member.ID)
 		}
 		if len(pending) == 0 {
-			return channel.Name, nil, nil
+			return res, nil
 		}
 
 		allRoles, err := db.Roles.List(ctx)
 		if err != nil {
-			return "", nil, err
+			return push.Resolution{}, err
 		}
 		rolePerms := make(map[string]int64, len(allRoles))
 		everyoneRoleID := ""
@@ -135,15 +136,14 @@ func NewPushResolver(db *store.Store) push.Resolver {
 		}
 		assignments, err := db.Roles.AssignmentsForMembers(ctx, ids)
 		if err != nil {
-			return "", nil, err
+			return push.Resolution{}, err
 		}
 		overwriteRows, err := db.ChannelOverwrites.ListForChannel(ctx, m.ChannelID)
 		if err != nil {
-			return "", nil, err
+			return push.Resolution{}, err
 		}
 		overwrites := toOverwriteList(overwriteRows)
 
-		var out []push.Recipient
 		for _, c := range pending {
 			if !c.Member.IsOwner {
 				roleIDs := append(append([]string{}, assignments[c.Member.ID]...), everyoneRoleID)
@@ -156,15 +156,15 @@ func NewPushResolver(db *store.Store) push.Resolver {
 					continue
 				}
 			}
-			out = append(out, push.Recipient{Grant: c.Token, ServerAddress: c.ServerAddress})
+			res.Recipients = append(res.Recipients, push.Recipient{Grant: c.Token, ServerAddress: c.ServerAddress})
 		}
-		return channel.Name, out, nil
+		return res, nil
 	}
 }
 
 // messagePusher devolve o que os handlers de criação de mensagem chamam
-// depois do broadcast: enfileira a mensagem no Notifier com quem está com o
-// canal aberto agora. Com o push desligado (notifier nil), não faz nada.
+// depois do broadcast: enfileira a mensagem no Notifier com quem está vendo
+// o canal agora. Com o push desligado (notifier nil), não faz nada.
 func messagePusher(notifier *push.Notifier, hub *realtime.Hub, author store.Member) func(m store.Message, threadTitle, attachment string) {
 	return func(m store.Message, threadTitle, attachment string) {
 		if notifier == nil {
@@ -179,7 +179,7 @@ func messagePusher(notifier *push.Notifier, hub *realtime.Hub, author store.Memb
 			AuthorSubject:  author.OIDCSubject,
 			Text:           m.Content,
 			Attachment:     attachment,
-			Viewers:        hub.MemberIDs(m.ChannelID),
+			Viewers:        hub.ViewingMemberIDs(m.ChannelID),
 		}
 		if m.ThreadID != nil {
 			msg.ThreadID = *m.ThreadID

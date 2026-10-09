@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import i18n from '../i18n'
 import { LocalizedError, problemFromFrame, useErrorText, type DisplayError } from '../lib/apiError'
+import { isViewing, subscribeViewing } from '../lib/channelViewing'
 import { createReconnectingSocket, type ChannelConnectionStatus, type ReconnectingSocket } from '../lib/reconnectingSocket'
 import {
   decodeChannelSocketFrame,
   fetchChannelHistory,
   mergeChannelHistory,
   openChannelSocket,
+  sendChannelViewing,
   sendCreateMessage,
   sendDeleteMessage,
   sendMessageWithAttachment,
@@ -61,6 +63,8 @@ export function useChannelChat(
       label: 'canal de texto',
       failureMessage: () => i18n.t('chat.connectFailed'),
       connect: () => openChannelSocket(serverBaseUrl, channelId, accessTokenRef.current),
+      // Push: o servidor só poupa quem está vendo o canal (lib/channelViewing.ts).
+      onOpen: (ws) => sendChannelViewing(ws, isViewing()),
       sync: async () => {
         const history = await fetchChannelHistory(serverBaseUrl, channelId, accessTokenRef.current, HISTORY_LIMIT)
         if (!cancelled) setMessages((prev) => mergeChannelHistory(prev, history, HISTORY_LIMIT))
@@ -88,9 +92,14 @@ export function useChannelChat(
       },
     })
     connectionRef.current = connection
+    const stopViewing = subscribeViewing((active) => {
+      const socket = connection.current()
+      if (socket) sendChannelViewing(socket, active)
+    })
 
     return () => {
       cancelled = true
+      stopViewing()
       connection.cancel()
       connectionRef.current = null
     }

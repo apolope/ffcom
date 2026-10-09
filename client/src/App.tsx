@@ -26,6 +26,7 @@ import { useServersUnread } from './hooks/useServersUnread'
 import { useAppUpdate } from './hooks/useAppUpdate'
 import { useAccountsBySubject } from './hooks/useAccountsBySubject'
 import { useIdle } from './hooks/useIdle'
+import { setViewingIdle } from './lib/channelViewing'
 import { useKnownServers } from './hooks/useKnownServers'
 import { useAndroidPush } from './hooks/useAndroidPush'
 import { useFriends, type FriendEvent } from './hooks/useFriends'
@@ -320,6 +321,11 @@ function App() {
   // o "ausente" que os amigos veem; numa conexão nova, o estado atual é
   // reenviado assim que ela abre.
   const idle = useIdle()
+  // A mesma ociosidade tira a pessoa de "vendo o canal" para o push (ver
+  // lib/channelViewing.ts).
+  useEffect(() => {
+    setViewingIdle(idle)
+  }, [idle])
   useEffect(() => {
     if (!presenceSocket) return
     const send = () => sendPresenceIdleFrame(presenceSocket, idle)
