@@ -15,6 +15,7 @@
     "build:electron": "tsc -b && vite build --mode electron",
     "electron": "electron .",
     "lint": "oxlint",
+    "test": "node --test \"src/**/*.test.ts\"",
     "preview": "vite preview",
     "generate:pwa-assets": "pwa-assets-generator",
     "generate:electron-icon": "node generate-electron-icon.mjs",

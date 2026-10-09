@@ -25,6 +25,7 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
   const {
     target,
     status: sessionStatus,
+    reconnecting: sessionReconnecting,
     error,
     participants,
     micEnabled,
@@ -56,6 +57,7 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
   // Em outro canal, esta tela mostra só o convite para entrar (que troca de
   // canal).
   const status = here ? sessionStatus : 'idle'
+  const reconnecting = here && sessionReconnecting
   const inOtherChannel = !here && !!target && (sessionStatus === 'connected' || sessionStatus === 'connecting')
   const join = useCallback(
     () =>
@@ -107,7 +109,9 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
         </div>
       )}
 
-      {status === 'connecting' && <p className="placeholder">{t('voice.connecting')}</p>}
+      {status === 'connecting' && (
+        <p className="placeholder">{reconnecting ? t('voice.reconnecting') : t('voice.connecting')}</p>
+      )}
 
       {status === 'error' && (
         <div className="voice-channel-prompt">
@@ -120,6 +124,11 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
 
       {status === 'connected' && (
         <>
+          {reconnecting && (
+            <div className="message-status" role="status">
+              {t('voice.reconnecting')}
+            </div>
+          )}
           {audioPlaybackBlocked && (
             <div className="voice-audio-blocked" role="alert">
               <span>{t('voice.audioBlocked')}</span>

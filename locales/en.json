@@ -209,6 +209,7 @@
       "channelName": "Ongoing call",
       "title": "In a call in {{channel}} · {{server}}",
       "connecting": "Connecting…",
+      "reconnecting": "Reconnecting…",
       "micOn": "Microphone on",
       "micOff": "Microphone off",
       "mute": "Mute",
@@ -237,6 +238,7 @@
     "joinChannel": "Join voice channel",
     "leaveChannel": "Leave voice channel",
     "connecting": "Connecting…",
+    "reconnecting": "Reconnecting…",
     "connected": "Voice connected",
     "openChannel": "Open the voice channel",
     "retry": "Try again",
@@ -268,6 +270,7 @@
     "soundOnMute": "Sound on mute",
     "soundOnJoinLeave": "Sound on join and leave",
     "connectFailed": "failed to connect to voice",
+    "reconnectFailed": "The call connection dropped and didn't come back.",
     "pushToTalkHint": {
       "withKey": "Hold {{key}} or the \"Hold to talk\" button.",
       "noKey": "No key set, hold the \"Hold to talk\" button.",

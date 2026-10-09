@@ -15,13 +15,14 @@ import {
   type TrackPublication,
 } from 'livekit-client'
 import i18n from '../i18n'
-import { LocalizedError, useErrorText, type DisplayError } from '../lib/apiError'
+import { ApiError, LocalizedError, useErrorText, type DisplayError } from '../lib/apiError'
 import { playMicToggleSound, playPushToTalkSound, primeMicToggleSound } from '../lib/micToggleSound'
 import { playPresenceSound } from '../lib/presenceSound'
 import { participantAudioOf, type ParticipantAudioMap } from '../lib/participantAudio'
 import { fetchVoiceToken } from '../lib/serverChannelApi'
 import { setVoiceConnected } from '../lib/voiceActivity'
-import { onCallNotificationAction, syncCallNotification } from '../lib/androidCallService'
+import { onCallNetworkChange, onCallNotificationAction, syncCallNotification } from '../lib/androidCallService'
+import { RECONNECTING_WATCHDOG_MS, isFinalRejoinError, rejoinDelay, shouldRejoin } from '../lib/voiceReconnect'
 
 // Atualiza os textos de uma tile de vídeo (montada fora do React) no idioma
 // ativo; chamado ao criar a tile e de novo a cada troca de idioma.
@@ -55,6 +56,10 @@ export interface UseVoiceChannelResult {
   // Canal da última tentativa de entrar (o status abaixo é dele), até sair.
   target: VoiceTarget | undefined
   status: VoiceChannelStatus
+  // A conexão caiu e a chamada está voltando sozinha: o LiveKit retomando a
+  // sala (status continua 'connected') ou o hook entrando de novo no mesmo
+  // canal (status 'connecting'). Ver lib/voiceReconnect.ts.
+  reconnecting: boolean
   error: string | undefined
   participants: VoiceParticipant[]
   micEnabled: boolean
@@ -186,10 +191,26 @@ export function useVoiceChannel(
   // depois de outro join (troca de canal) ou de sair desiste sozinho.
   const joinSeqRef = useRef(0)
   const [target, setTarget] = useState<VoiceTarget>()
-  // join chamado de dentro dos handlers da sala (ser movido de sala).
-  const joinRef = useRef<(target: VoiceTarget, issued?: { token: string; url: string }) => Promise<void>>(
-    async () => {},
-  )
+  // join chamado de dentro dos handlers da sala (ser movido de sala) e da
+  // reconexão automática.
+  const joinRef = useRef<
+    (target: VoiceTarget, issued?: { token: string; url: string }, rejoin?: boolean) => Promise<void>
+  >(async () => {})
+  // Reconexão automática em andamento (lib/voiceReconnect.ts): o canal, quando
+  // a conexão caiu, quantas tentativas já foram, a próxima agendada, se o
+  // microfone estava aberto e quem estava na sala (para o som de presença
+  // não tocar como se a sala inteira tivesse entrado de novo).
+  const rejoinRef = useRef<
+    | {
+        target: VoiceTarget
+        since: number
+        attempt: number
+        timer: ReturnType<typeof setTimeout> | undefined
+        micOn: boolean
+        known: Set<string>
+      }
+    | undefined
+  >(undefined)
   const targetRef = useRef<VoiceTarget | undefined>(undefined)
   const micToggleSoundRef = useRef(micToggleSound)
   useEffect(() => {
@@ -220,6 +241,10 @@ export function useVoiceChannel(
   const videoContainerElRef = useRef<HTMLDivElement | null>(null)
   const videoTilesRef = useRef<Map<string, HTMLDivElement>>(new Map())
   const [status, setStatus] = useState<VoiceChannelStatus>('idle')
+  // Entrando de novo depois de uma queda, e a sala atual em Reconnecting.
+  const [rejoining, setRejoining] = useState(false)
+  const [roomReconnecting, setRoomReconnecting] = useState(false)
+  const reconnecting = rejoining || roomReconnecting
   const [error, setError] = useState<DisplayError>()
   const [participants, setParticipants] = useState<VoiceParticipant[]>([])
   const [micEnabled, setMicEnabled] = useState(false)
@@ -395,17 +420,121 @@ export function useVoiceChannel(
       setMicError(undefined)
       setAudioPlaybackBlocked(false)
       setNoiseSuppressionError(undefined)
+      setRoomReconnecting(false)
     },
     [cleanupAudioEls, cleanupVideoTiles],
   )
 
+  // Reconexão automática da chamada (lib/voiceReconnect.ts). Uma queda de
+  // rede que o LiveKit não conseguiu retomar (Disconnected sem ninguém ter
+  // pedido) ou uma sala parada em Reconnecting por tempo demais não tiram a
+  // pessoa da chamada: o hook entra de novo no mesmo canal, com espera
+  // crescente, até REJOIN_WINDOW_MS. Durante isso o status fica em
+  // 'connecting' (com reconnecting), o que também mantém o serviço da
+  // chamada do Android ligado; ele não poderia ser religado com o app em
+  // segundo plano. Sair, trocar de canal ou ser movido cancelam a reconexão.
+  const clearRejoin = useCallback(() => {
+    const rejoin = rejoinRef.current
+    if (rejoin?.timer !== undefined) clearTimeout(rejoin.timer)
+    rejoinRef.current = undefined
+    setRejoining(false)
+  }, [])
+
+  // Dispara a tentativa agendada (pelo timer ou adiantada por rejoinNow).
+  const fireRejoin = useCallback((rejoin: NonNullable<typeof rejoinRef.current>) => {
+    rejoin.timer = undefined
+    if (rejoinRef.current !== rejoin) return
+    rejoin.attempt++
+    void joinRef.current(rejoin.target, undefined, true)
+  }, [])
+
+  // Desfaz uma sala que caiu sem passar pelo estado de "saiu": sem o som de
+  // saída e sem voltar a 'idle'. roomRef sai antes do disconnect, para o
+  // Disconnected dela ser ignorado.
+  const dropRoom = useCallback(
+    (room: Room | undefined) => {
+      if (presenceRef.current?.room === room) presenceRef.current = undefined
+      if (roomRef.current === room) roomRef.current = undefined
+      void room?.disconnect()
+      cleanupAudioEls()
+      cleanupVideoTiles()
+      noiseModeRef.current = undefined
+      setParticipants([])
+      setMicEnabled(false)
+      setCameraError(undefined)
+      setAudioPlaybackBlocked(false)
+      setRoomReconnecting(false)
+      setStatus('connecting')
+    },
+    [cleanupAudioEls, cleanupVideoTiles],
+  )
+
+  // Agenda a próxima tentativa ou, passada a janela (ou com um erro que não
+  // adianta repetir, como perder a permissão do canal), desiste e mostra o
+  // erro com "Tentar novamente".
+  const scheduleRejoin = useCallback(
+    (err?: unknown) => {
+      const rejoin = rejoinRef.current
+      if (!rejoin) return
+      const final = err instanceof ApiError && isFinalRejoinError(err.status)
+      const delay = final ? undefined : rejoinDelay(rejoin.attempt, Date.now() - rejoin.since)
+      if (delay === undefined) {
+        clearRejoin()
+        setStatus('error')
+        setError(final ? err : new LocalizedError(() => i18n.t('voice.reconnectFailed')))
+        return
+      }
+      rejoin.timer = setTimeout(() => fireRejoin(rejoin), delay)
+    },
+    [clearRejoin, fireRejoin],
+  )
+
+  // Sala que estava conectada caiu sem ser pedido: começa a reconexão (ou
+  // continua a que já estava em andamento, se foi uma tentativa dela que
+  // caiu logo depois de conectar).
+  const startRejoin = useCallback(
+    (room: Room) => {
+      const target = targetRef.current
+      if (!target) return
+      const previous = rejoinRef.current
+      if (previous?.timer !== undefined) clearTimeout(previous.timer)
+      rejoinRef.current = {
+        target,
+        since: previous?.since ?? Date.now(),
+        attempt: previous?.attempt ?? 0,
+        timer: undefined,
+        micOn: previous?.micOn ?? micDesiredRef.current,
+        known: previous?.known ?? (presenceRef.current?.room === room ? presenceRef.current.known : new Set()),
+      }
+      // Um join desta sala ainda em andamento (publicando o microfone)
+      // desiste sozinho.
+      joinSeqRef.current++
+      dropRoom(room)
+      setRejoining(true)
+      scheduleRejoin()
+    },
+    [dropRoom, scheduleRejoin],
+  )
+
+  // A rede voltou ou trocou (evento do Android, "online" do navegador):
+  // adianta a tentativa agendada em vez de esperar o resto da espera. Uma
+  // tentativa já em andamento segue; se falhar, agenda a próxima.
+  const rejoinNow = useCallback((): boolean => {
+    const rejoin = rejoinRef.current
+    if (rejoin?.timer === undefined) return false
+    clearTimeout(rejoin.timer)
+    fireRejoin(rejoin)
+    return true
+  }, [fireRejoin])
+
   // Estar na chamada conta como atividade para o "ausente" automático
-  // (hooks/useIdle.ts).
+  // (hooks/useIdle.ts), inclusive enquanto ela reconecta.
+  const voiceActive = status === 'connected' || reconnecting
   useEffect(() => {
-    if (status !== 'connected') return
+    if (!voiceActive) return
     setVoiceConnected(true)
     return () => setVoiceConnected(false)
-  }, [status])
+  }, [voiceActive])
 
   // App Android: serviço em primeiro plano com a notificação "Em chamada"
   // (lib/androidCallService.ts) do clique em entrar até sair. Começa já em
@@ -422,19 +551,24 @@ export function useVoiceChannel(
         ? {
             channelName: t('voice.androidCall.channelName'),
             title: t('voice.androidCall.title', { channel: target.channelName, server: target.serverName }),
-            text:
-              status === 'connecting'
+            text: reconnecting
+              ? t('voice.androidCall.reconnecting')
+              : status === 'connecting'
                 ? t('voice.androidCall.connecting')
                 : micEnabled
                   ? t('voice.androidCall.micOn')
                   : t('voice.androidCall.micOff'),
             toggleMicLabel:
-              status === 'connected' ? (micEnabled ? t('voice.androidCall.mute') : t('voice.androidCall.unmute')) : undefined,
+              status === 'connected' && !reconnecting
+                ? micEnabled
+                  ? t('voice.androidCall.mute')
+                  : t('voice.androidCall.unmute')
+                : undefined,
             leaveLabel: t('voice.androidCall.leave'),
           }
         : undefined,
     )
-  }, [target, status, micEnabled, t])
+  }, [target, status, reconnecting, micEnabled, t])
   useEffect(() => () => syncCallNotification(undefined), [])
 
   // Sair da chamada quando a sessão acaba (logout desmonta o provider).
@@ -442,9 +576,10 @@ export function useVoiceChannel(
     const joinSeq = joinSeqRef
     return () => {
       joinSeq.current++
+      clearRejoin()
       disconnect(roomRef.current)
     }
-  }, [disconnect])
+  }, [disconnect, clearRejoin])
 
   // Leva a track do microfone ao modo pedido (reforçada ou do navegador).
   // As trocas vão numa fila, porque recapturar e plugar o processador levam
@@ -500,7 +635,9 @@ export function useVoiceChannel(
 
   // issued: token já emitido pelo servidor (ao ser movido de sala, ver
   // VOICE_MOVE_TOPIC), em vez de pedir um com POST .../voice/token.
-  const join = useCallback(async (next: VoiceTarget, issued?: { token: string; url: string }) => {
+  // rejoin: tentativa da reconexão automática (ver startRejoin); qualquer
+  // outro join cancela a reconexão em andamento.
+  const join = useCallback(async (next: VoiceTarget, issued?: { token: string; url: string }, rejoin = false) => {
     const current = targetRef.current
     if (
       roomRef.current &&
@@ -509,6 +646,9 @@ export function useVoiceChannel(
     ) {
       return
     }
+    const rejoinState = rejoin ? rejoinRef.current : undefined
+    if (rejoin && !rejoinState) return
+    if (!rejoin) clearRejoin()
     const seq = ++joinSeqRef.current
     disconnect(roomRef.current)
     targetRef.current = next
@@ -536,7 +676,9 @@ export function useVoiceChannel(
         audioCaptureDefaults: captureEnhanced ? ENHANCED_CAPTURE_OPTIONS : undefined,
       })
       roomRef.current = room
-      const presence = { room, ready: false, known: new Set<string>() }
+      // Na reconexão, quem já estava na sala continua conhecido: voltar não
+      // soa como todo mundo entrando.
+      const presence = { room, ready: false, known: rejoinState?.known ?? new Set<string>() }
       presenceRef.current = presence
 
       room.on(RoomEvent.ParticipantConnected, (participant) => {
@@ -610,7 +752,36 @@ export function useVoiceChannel(
           { token: move.token, url: move.url },
         )
       })
-      room.on(RoomEvent.Disconnected, () => disconnect(room))
+      // Queda que ninguém pediu, numa sala que chegou a conectar: entra de
+      // novo no mesmo canal (startRejoin). Sair, trocar de canal, ser movido
+      // (CLIENT_INITIATED), a mesma conta em outro aparelho e o resto da
+      // lista de lib/voiceReconnect.ts encerram a chamada como antes.
+      let connected = false
+      let watchdog: ReturnType<typeof setTimeout> | undefined
+      room.on(RoomEvent.Disconnected, (reason) => {
+        clearTimeout(watchdog)
+        if (connected && roomRef.current === room && shouldRejoin(reason)) startRejoin(room)
+        else disconnect(room)
+      })
+      // O LiveKit tentando retomar a sala sozinho (Reconnecting): mostra
+      // "Reconectando…" e, se passar de RECONNECTING_WATCHDOG_MS, desiste
+      // dele e entra de novo do zero.
+      room.on(RoomEvent.ConnectionStateChanged, (state) => {
+        if (roomRef.current !== room) return
+        const stuck = state === ConnectionState.Reconnecting || state === ConnectionState.SignalReconnecting
+        setRoomReconnecting(stuck)
+        if (!stuck) {
+          clearTimeout(watchdog)
+          watchdog = undefined
+        } else if (watchdog === undefined) {
+          watchdog = setTimeout(() => {
+            watchdog = undefined
+            const still =
+              room.state === ConnectionState.Reconnecting || room.state === ConnectionState.SignalReconnecting
+            if (roomRef.current === room && still) startRejoin(room)
+          }, RECONNECTING_WATCHDOG_MS)
+        }
+      })
       // Os <audio> das vozes remotas são criados depois do clique em
       // "Entrar" (quando cada track chega), e o navegador pode bloquear o
       // play() deles: o LiveKit avisa aqui e só destrava com startAudio()
@@ -630,6 +801,7 @@ export function useVoiceChannel(
       if (forceRelay) console.info('[ffcom] forceRelay: ICE só por TURN')
       await room.connect(url, token, forceRelay ? { rtcConfig: { iceTransportPolicy: 'relay' } } : undefined)
       if (seq !== joinSeqRef.current) return
+      connected = true
       setMicError(undefined)
       try {
         if (pushToTalkRef.current) {
@@ -647,6 +819,10 @@ export function useVoiceChannel(
             micTrack.stop()
             throw err
           }
+          micDesiredRef.current = false
+          setMicEnabled(false)
+        } else if (rejoinState && !rejoinState.micOn) {
+          // Voltando de uma queda com o microfone fechado: continua fechado.
           micDesiredRef.current = false
           setMicEnabled(false)
         } else {
@@ -671,14 +847,25 @@ export function useVoiceChannel(
       syncNoiseSuppression(room)
       setAudioPlaybackBlocked(!room.canPlaybackAudio)
       setStatus('connected')
+      // Voltou. A câmera e a tela compartilhada ficam desligadas: ligar a
+      // câmera sozinho, talvez com o celular no bolso, seria pior que pedir
+      // para religar.
+      if (rejoinState) clearRejoin()
       refreshParticipants(room)
       if (presenceRef.current === presence) {
         presence.ready = true
-        if (presenceSoundRef.current) playPresenceSound(true)
+        if (presenceSoundRef.current && !rejoinState) playPresenceSound(true)
       }
     } catch (err) {
       // Trocou de canal ou saiu no meio: quem fez isso já desfez esta sala.
       if (seq !== joinSeqRef.current) return
+      // Tentativa da reconexão que falhou (sem rede ainda, servidor fora):
+      // agenda a próxima, ou desiste passada a janela.
+      if (rejoinState && rejoinRef.current === rejoinState) {
+        dropRoom(roomRef.current)
+        scheduleRejoin(err)
+        return
+      }
       disconnect(roomRef.current)
       setStatus('error')
       setError(err instanceof Error ? err : new LocalizedError(() => i18n.t('voice.connectFailed')))
@@ -691,6 +878,10 @@ export function useVoiceChannel(
     removeVideoTile,
     applyRemoteAudio,
     syncNoiseSuppression,
+    clearRejoin,
+    startRejoin,
+    dropRoom,
+    scheduleRejoin,
   ])
 
   useEffect(() => {
@@ -699,10 +890,39 @@ export function useVoiceChannel(
 
   const leave = useCallback(() => {
     joinSeqRef.current++
+    clearRejoin()
     disconnect(roomRef.current)
     targetRef.current = undefined
     setTarget(undefined)
-  }, [disconnect])
+  }, [disconnect, clearRejoin])
+
+  // Rede de volta ou trocada. No app Android o CallService avisa na hora
+  // (lib/androidCallService.ts, mesmo com a tela apagada); no navegador e no
+  // desktop vale o "online" da janela. Com reconexão agendada, tenta já. Com
+  // a sala em Reconnecting, um "online" sintético faz o livekit-client tentar
+  // de novo sem esperar o resto da espera dele (ele ouve esse evento e só
+  // age se estiver reconectando); conectada, ele mesmo percebe a troca pelo
+  // WebSocket e pelo ICE.
+  useEffect(() => {
+    const onNetwork = () => {
+      if (rejoinNow()) return
+      const state = roomRef.current?.state
+      if (state === ConnectionState.Reconnecting || state === ConnectionState.SignalReconnecting) {
+        window.dispatchEvent(new Event('online'))
+      }
+    }
+    const offNative = onCallNetworkChange((change) => {
+      if (change.available) onNetwork()
+    })
+    // Só a reconexão agendada: o LiveKit já ouve o "online" de verdade (e
+    // tratar aqui o sintético acima viraria um laço).
+    const onOnline = () => void rejoinNow()
+    window.addEventListener('online', onOnline)
+    return () => {
+      offNative()
+      window.removeEventListener('online', onOnline)
+    }
+  }, [rejoinNow])
 
   // Precisa rodar dentro do handler do clique: é o toque que autoriza o
   // navegador a tocar áudio.
@@ -890,6 +1110,7 @@ export function useVoiceChannel(
   return {
     target,
     status,
+    reconnecting,
     error: errorText,
     participants,
     micEnabled,

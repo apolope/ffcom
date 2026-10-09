@@ -22,8 +22,10 @@ public class MainActivity extends BridgeActivity {
         // MockCordovaWebViewImpl, que chama pauseTimers() apenas com a
         // preferência KeepRunning em false (o padrão é true, e o app não
         // muda); WebView.onPause() não é chamado em lugar nenhum. O que muda
-        // em segundo plano é só o que o Chromium faz numa página escondida.
-        // O processo de renderização fica preso à importância do app, que o
+        // em segundo plano é o que o Chromium faz numa página escondida: sem
+        // áudio tocando, ele a congela depois de um minuto, e isso a
+        // CallWebView evita durante a chamada mantendo a página visível. O
+        // processo de renderização fica preso à importância do app, que o
         // CallService mantém em primeiro plano; deixar explícito que isso
         // vale também com a WebView invisível, para uma mudança de padrão do
         // Chromium não derrubar o renderer (e a chamada) com a tela apagada.

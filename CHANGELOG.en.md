@@ -15,6 +15,9 @@ One section per published tag, in the exact format below (the site and the CI ch
 
 `<component>` is one of: `client` (the app), `central` (server-central), `channel` (server-channel), `channel-image` (the server-channel container image), `site` (this home page). Items accept `code` in backticks and **bold**. Text outside the sections (like this) is ignored by the site.
 
+## client v0.24.5 · 2026-10-09
+- A short network drop during a call no longer kicks you out of the room: the app reconnects on its own, including on Android with the screen off. Meanwhile the call and the notification show "Reconnecting…", and your microphone comes back the way it was.
+
 ## client v0.24.4 · 2026-10-09
 - In the Android app, muted channels show a 🔕 after their name, and a muted server shows the 🔕 on its icon and at the top of the channel list.
 

@@ -18,7 +18,10 @@ import com.getcapacitor.annotation.PermissionCallback;
 // segundo plano no Android (fase 5)"). A parte web
 // (client/src/lib/androidCallService.ts) chama show() ao entrar na sala e a
 // cada mudança do que a notificação mostra, e stop() ao sair; as ações da
-// notificação voltam como o evento "action" ({action: "toggleMic" | "leave"}).
+// notificação voltam como o evento "action" ({action: "toggleMic" | "leave"})
+// e as trocas da rede padrão durante a chamada como o evento "network"
+// ({available, transport}). Entre o show() e o stop() a CallWebView mantém a
+// página visível para o Chromium, que senão a congelaria com a tela apagada.
 //
 // O serviço também para sem pedido da página quando ela não pode mais estar
 // numa chamada: página recarregada ou trocada (onPageStarted) e Activity
@@ -46,6 +49,7 @@ public class CallPlugin extends Plugin {
         public void onPageStarted(WebView webView) {
             // Recarregar (botão verde, F5 do service worker) ou navegar desfaz
             // a sala do LiveKit junto com a página.
+            setInCall(false);
             stopService();
         }
     };
@@ -75,6 +79,24 @@ public class CallPlugin extends Plugin {
         return true;
     }
 
+    // Entrega à página uma troca da rede padrão vista pelo CallService. Sem
+    // página ouvindo, não há chamada a reconectar.
+    static void dispatchNetwork(boolean available, String transport) {
+        CallPlugin plugin = instance;
+        if (plugin == null || !plugin.hasListeners("network")) return;
+        JSObject data = new JSObject();
+        data.put("available", available);
+        data.put("transport", transport);
+        plugin.notifyListeners("network", data);
+    }
+
+    // Visibilidade forçada da página durante a chamada (ver CallWebView).
+    private void setInCall(boolean inCall) {
+        getBridge().executeOnMainThread(() -> {
+            if (getBridge().getWebView() instanceof CallWebView webView) webView.setInCall(inCall);
+        });
+    }
+
     // {channelName, title, text, toggleMicLabel?, leaveLabel}, todos já
     // traduzidos. Liga o serviço na primeira vez e atualiza a notificação nas
     // seguintes. Rejeita com "not-allowed" se o Android recusou ligar (app já
@@ -98,6 +120,7 @@ public class CallPlugin extends Plugin {
             call.reject("O Android não deixou ligar o serviço da chamada", "not-allowed", e);
             return;
         }
+        setInCall(true);
         if (shouldAskNotifications()) {
             markAskedNotifications();
             requestPermissionForAlias(NOTIFICATIONS, call, "notificationsResult");
@@ -109,6 +132,7 @@ public class CallPlugin extends Plugin {
     @PluginMethod
     public void stop(PluginCall call) {
         lastNotice = null;
+        setInCall(false);
         stopService();
         call.resolve();
     }
