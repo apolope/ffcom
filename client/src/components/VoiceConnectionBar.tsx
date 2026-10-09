@@ -13,7 +13,7 @@ interface VoiceConnectionBarProps {
 // mutar e sair sem voltar ao canal, e clicar no nome volta a ele. Ver
 // docs/architecture.md, "Decisão: chamada de voz continua ao navegar".
 export function VoiceConnectionBar({ onOpen }: VoiceConnectionBarProps) {
-  const { target, status, micEnabled, toggleMic, leave, voicePrefs, audioPlaybackBlocked, startAudio } =
+  const { target, status, reconnecting, micEnabled, toggleMic, leave, voicePrefs, audioPlaybackBlocked, startAudio } =
     useVoiceSession()
   const { t } = useTranslation()
   if (!target || (status !== 'connected' && status !== 'connecting')) return null
@@ -22,8 +22,8 @@ export function VoiceConnectionBar({ onOpen }: VoiceConnectionBarProps) {
   return (
     <div className="voice-connection-bar" role="status">
       <div className="voice-connection-info">
-        <span className={connected ? 'voice-connection-state connected' : 'voice-connection-state'}>
-          {connected ? t('voice.connected') : t('voice.connecting')}
+        <span className={connected && !reconnecting ? 'voice-connection-state connected' : 'voice-connection-state'}>
+          {reconnecting ? t('voice.reconnecting') : connected ? t('voice.connected') : t('voice.connecting')}
         </span>
         <button
           type="button"

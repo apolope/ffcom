@@ -28,5 +28,7 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  /* Testes de lógica pura rodam no Node (npm test), não no build. */
+  "exclude": ["src/**/*.test.ts"]
 }

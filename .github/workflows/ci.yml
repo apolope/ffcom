@@ -107,6 +107,10 @@ jobs:
       - name: npm run lint
         working-directory: client
         run: npm run lint
+      # Lógica pura (política de reconexão da chamada etc.) com node --test.
+      - name: npm test
+        working-directory: client
+        run: npm test
       - name: npm run build
         working-directory: client
         run: npm run build

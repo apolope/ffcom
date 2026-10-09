@@ -9,6 +9,9 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
@@ -22,8 +25,9 @@ import androidx.core.content.ContextCompat;
 // segundo plano no Android (fase 5)"). Sem ele, com a tela apagada ou em
 // outro app, o Android corta o microfone (Android 11+) e acaba matando o
 // processo, e a chamada cai. A chamada em si continua inteira na WebView
-// (LiveKit); o serviço só segura o processo, o microfone e a CPU e mostra a
-// notificação "Em chamada" com "Mutar"/"Desmutar" e "Sair".
+// (LiveKit); o serviço só segura o processo, o microfone e a CPU, avisa a
+// página quando a rede padrão troca (watchNetwork) e mostra a notificação
+// "Em chamada" com "Mutar"/"Desmutar" e "Sair".
 //
 // Quem manda é a parte web, pelo CallPlugin: show() a cada mudança (entrar,
 // conectar, mutar, trocar de sala, trocar de idioma) e stop() ao sair. As
@@ -52,6 +56,9 @@ public class CallService extends Service {
     // atualização.
     private long startedAt;
     private PowerManager.WakeLock wakeLock;
+    // Acompanha a rede padrão enquanto o serviço vive (ver watchNetwork).
+    private ConnectivityManager.NetworkCallback networkCallback;
+    private final CallNetwork network = new CallNetwork();
 
     // Liga o serviço (ou atualiza a notificação, se já está ligado). Precisa
     // ser chamado com o app visível na primeira vez: startService de um app
@@ -113,6 +120,7 @@ public class CallService extends Service {
     private void showNotice(CallNotice next) {
         if (startedAt == 0) startedAt = System.currentTimeMillis();
         notice = next;
+        watchNetwork();
         ensureChannel(next.channelName);
         Notification notification = buildNotification();
         int wantTypes = CallNotice.foregroundTypes(Build.VERSION.SDK_INT, micGranted());
@@ -149,6 +157,60 @@ public class CallService extends Service {
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ffcom:call");
         wakeLock.setReferenceCounted(false);
         wakeLock.acquire();
+    }
+
+    // Troca de rede com a chamada em andamento (Wi-Fi caindo para os dados
+    // móveis, o Android Auto sem fio tomando o rádio do Wi-Fi, e a volta): o
+    // processo nativo fica sabendo na hora pelo ConnectivityManager e avisa a
+    // página pelo CallPlugin (evento "network"), que reconecta a chamada sem
+    // esperar o livekit-client notar por conta própria. Os callbacks chegam
+    // numa thread do ConnectivityManager; CallNetwork decide o que é troca.
+    private void watchNetwork() {
+        if (networkCallback != null) return;
+        ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (cm == null) return;
+        ConnectivityManager.NetworkCallback callback = new ConnectivityManager.NetworkCallback() {
+            @Override
+            public void onCapabilitiesChanged(Network net, NetworkCapabilities caps) {
+                String transport = CallNetwork.transportName(
+                    caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN),
+                    caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI),
+                    caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR),
+                    caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+                );
+                emit(network.onDefault(net.getNetworkHandle(), transport));
+            }
+
+            @Override
+            public void onLost(Network net) {
+                emit(network.onLost(net.getNetworkHandle()));
+            }
+        };
+        try {
+            cm.registerDefaultNetworkCallback(callback);
+            networkCallback = callback;
+        } catch (RuntimeException e) {
+            // SecurityException sem ACCESS_NETWORK_STATE ou o limite de
+            // callbacks por app: a chamada segue, só sem o aviso.
+            Log.w(TAG, "não deu para acompanhar a rede", e);
+        }
+    }
+
+    private void emit(CallNetwork.Event event) {
+        if (event == null) return;
+        Log.i(TAG, "rede da chamada: " + (event.available ? event.transport : "sem rede"));
+        CallPlugin.dispatchNetwork(event.available, event.transport);
+    }
+
+    private void unwatchNetwork() {
+        if (networkCallback == null) return;
+        ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        try {
+            if (cm != null) cm.unregisterNetworkCallback(networkCallback);
+        } catch (RuntimeException e) {
+            Log.w(TAG, "callback de rede não saiu", e);
+        }
+        networkCallback = null;
     }
 
     private boolean micGranted() {
@@ -222,6 +284,7 @@ public class CallService extends Service {
         notificationManager().cancel(NOTIFICATION_ID);
         if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
         wakeLock = null;
+        unwatchNetwork();
         super.onDestroy();
     }
 }

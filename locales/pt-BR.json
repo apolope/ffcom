@@ -210,6 +210,7 @@
       "channelName": "Chamada em andamento",
       "title": "Em chamada em {{channel}} · {{server}}",
       "connecting": "Conectando…",
+      "reconnecting": "Reconectando…",
       "micOn": "Microfone aberto",
       "micOff": "Microfone fechado",
       "mute": "Mutar",
@@ -238,6 +239,7 @@
     "joinChannel": "Entrar no canal de voz",
     "leaveChannel": "Sair do canal de voz",
     "connecting": "Conectando…",
+    "reconnecting": "Reconectando…",
     "connected": "Voz conectada",
     "openChannel": "Abrir o canal de voz",
     "retry": "Tentar novamente",
@@ -269,6 +271,7 @@
     "soundOnMute": "Som ao mutar",
     "soundOnJoinLeave": "Som ao entrar e sair",
     "connectFailed": "falha ao conectar à voz",
+    "reconnectFailed": "A conexão com a chamada caiu e não voltou.",
     "pushToTalkHint": {
       "withKey": "Segure {{key}} ou o botão \"Segure para falar\".",
       "noKey": "Sem tecla definida, segure o botão \"Segure para falar\".",

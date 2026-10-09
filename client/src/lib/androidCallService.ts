@@ -23,6 +23,14 @@ export interface CallNotification {
 
 export type CallNotificationAction = 'toggleMic' | 'leave'
 
+// Troca da rede padrão vista pelo CallService durante a chamada
+// (CallNetwork.java): available false é ficar sem rede; true é uma rede nova
+// (Wi-Fi caiu e os dados móveis assumiram, ou o Wi-Fi voltou).
+export interface CallNetworkChange {
+  available: boolean
+  transport: 'wifi' | 'cellular' | 'ethernet' | 'vpn' | 'other' | 'none'
+}
+
 // Contrato com o CallPlugin.java (@CapacitorPlugin(name = "FfcomCall")).
 interface FfcomCallPlugin {
   // Liga o serviço na primeira vez, atualiza a notificação nas seguintes.
@@ -33,6 +41,7 @@ interface FfcomCallPlugin {
     event: 'action',
     callback: (data: { action: CallNotificationAction }) => void,
   ): Promise<PluginListenerHandle>
+  addListener(event: 'network', callback: (data: CallNetworkChange) => void): Promise<PluginListenerHandle>
 }
 
 let plugin: FfcomCallPlugin | undefined
@@ -68,11 +77,22 @@ export function syncCallNotification(notification: CallNotification | undefined)
 
 // Ações da notificação. Devolve a função que remove o listener.
 export function onCallNotificationAction(callback: (action: CallNotificationAction) => void): () => void {
+  return listen(() => callPlugin().addListener('action', (data) => callback(data.action)))
+}
+
+// Trocas de rede durante a chamada (só chegam com o serviço ligado). APK
+// antigo, sem o evento, simplesmente nunca chama. Devolve a função que remove
+// o listener.
+export function onCallNetworkChange(callback: (change: CallNetworkChange) => void): () => void {
+  return listen(() => callPlugin().addListener('network', callback))
+}
+
+function listen(add: () => Promise<PluginListenerHandle>): () => void {
   if (!isAndroidApp()) return () => {}
   let removed = false
   let handle: PluginListenerHandle | undefined
   Promise.resolve()
-    .then(() => callPlugin().addListener('action', (data) => callback(data.action)))
+    .then(add)
     .then((h) => {
       handle = h
       if (removed) void h.remove()

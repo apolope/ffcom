@@ -98,6 +98,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- O CallService acompanha a rede padrão durante a chamada
+         (ConnectivityManager.registerDefaultNetworkCallback) e avisa a página
+         quando ela troca (Wi-Fi para dados móveis e de volta), para a chamada
+         reconectar na hora. Permissão normal, concedida na instalação. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- A câmera é opcional: sem ela o app instala e funciona só com voz. -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 </manifest>
