@@ -1163,6 +1163,8 @@
     "mute": {
       "mute": "Mute notifications",
       "unmute": "Unmute notifications",
+      "channelMute": "Mute this channel's notifications",
+      "channelUnmute": "Unmute notifications",
       "saveFailed": "Couldn't change notifications. Try again."
     }
   }

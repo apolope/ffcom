@@ -2077,6 +2077,12 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Revisitar quando:** houver cliente iOS (APNs pelo mesmo FCM, mudando só `platform`), se for preciso notificar menção em vez de toda mensagem, ou se o volume pedir que o `server-channel` junte várias mensagens numa chamada.
 
+### Sino de silenciar no cabeçalho do canal (2026-10-09)
+
+**Contexto:** no app Android, o menu do canal com "Silenciar notificações" (`ChannelMenu`, aberto pelo `contextmenu` de tocar e segurar) não abria para quem pode reordenar canais: as linhas são `draggable` e o Chromium começa o arrastar nativo no mesmo gesto.
+
+**Decisão:** um sino (🔔, 🔕 quando silenciado) no cabeçalho do canal de texto ou fórum, só onde há push (o mesmo `push.available` do menu), com `aria-pressed` e o rótulo "Silenciar notificações deste canal" ou "Reativar notificações". Usa o mesmo estado e a mesma chamada do menu. O arrastar fica como está: o arrastar é o HTML5 nativo, e separar "segurar parado" de "segurar e mover" exigiria trocá-lo por um arrastar próprio com eventos de toque. O menu continua abrindo para quem não pode reordenar. No web e no desktop nada muda (sem push, o botão direito segue com o menu do navegador).
+
 ### Quem está vendo o canal (2026-10-09)
 
 **Contexto:** incidente em produção em 2026-10-09: as notificações de canal pararam de chegar no celular do dono. O `server-channel` deixava de mandar push para todos os aparelhos de uma conta se qualquer sessão dela tivesse o WebSocket daquele canal aberto. Uma aba do Chrome escondida ou o app desktop minimizado, com o canal selecionado, segurava o push do celular indefinidamente.

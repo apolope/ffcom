@@ -17,6 +17,7 @@ One section per published tag, in the exact format below (the site and the CI ch
 
 ## client v0.24.3 · 2026-10-09
 - Phone notifications now arrive even when FFCom is open on your computer in a hidden tab or a minimized window. Only someone with the channel on screen, the window in focus and not away stops getting them.
+- In the Android app, a bell at the top of the channel mutes its notifications.
 
 ## channel v0.11.2 · 2026-10-09
 - Phone notifications now arrive even when FFCom is open on your computer in a hidden tab or a minimized window: the server only skips people who are actually looking at the channel, with the screen visible, the window in focus and not away. Before, any open channel on any device held the notification back.

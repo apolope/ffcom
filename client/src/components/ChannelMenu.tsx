@@ -13,7 +13,9 @@ interface ChannelMenuProps {
 
 // Menu de contexto de um canal de texto ou fórum (botão direito, ou tocar e
 // segurar no celular). Hoje só tem "Silenciar notificações", e por isso só
-// existe onde há push (app Android; ver hooks/useAndroidPush.ts). Mesmo
+// existe onde há push (app Android; ver hooks/useAndroidPush.ts). Para quem
+// pode reordenar canais o tocar e segurar vira arrastar; o mesmo silêncio
+// fica no sino do cabeçalho do canal (MainPanel.tsx). Mesmo
 // visual e fechamento do ServerMenu, aberto logo abaixo do canal.
 export function ChannelMenu({ anchor, channelName, muted, onToggleMute, onClose }: ChannelMenuProps) {
   const { t } = useTranslation()

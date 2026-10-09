@@ -280,6 +280,12 @@ export function ChannelSidebar({
                               : 'channel-item'
                           }
                           onClick={() => onSelectChannel(channel.id)}
+                          // Tocar e segurar abre o ChannelMenu só quando a linha não é
+                          // arrastável: com reorderChannels, o Chromium começa o
+                          // arrastar nativo (draggable) no mesmo gesto, sem limite de
+                          // movimento que dê para ajustar sem trocar o arrastar todo.
+                          // Por isso o sino no cabeçalho do canal (MainPanel.tsx) é o
+                          // caminho para silenciar que sempre funciona no Android.
                           onContextMenu={
                             channelNotifications && channel.type !== 'voice'
                               ? (event) => {

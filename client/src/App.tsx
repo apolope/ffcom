@@ -778,6 +778,14 @@ function App() {
                     server={server}
                     members={members}
                     canModerateMessages={canModerateMessages}
+                    notifications={
+                      push.available && channel
+                        ? {
+                            muted: push.mutes.isMuted(server.baseUrl, channel.id),
+                            onToggle: () => togglePushMute(server.baseUrl, channel.id),
+                          }
+                        : undefined
+                    }
                   />
                   <MemberList members={members} roles={roles} friendActions={memberFriendActions} />
                 </>
