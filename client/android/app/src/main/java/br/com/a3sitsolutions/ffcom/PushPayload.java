@@ -34,6 +34,11 @@ final class PushPayload {
     // Todos; pode vir vazio em dm e friend_* (conta sem nome de exibição).
     final String author;
     final String sentAt;
+    // Todos, opcionais: o link do avatar de quem mandou (sem login, vence
+    // por tempo) e a versão desse avatar, chave do cache em disco
+    // (PushAvatars). Sem avatar, os dois vêm vazios e fica a letra.
+    final String authorAvatar;
+    final String authorKey;
 
     private PushPayload(Map<String, String> data, String type) {
         this.type = type;
@@ -50,6 +55,8 @@ final class PushPayload {
         this.requestId = value(data, "requestId");
         this.author = value(data, "author");
         this.sentAt = value(data, "sentAt");
+        this.authorAvatar = value(data, "authorAvatar");
+        this.authorKey = value(data, "authorKey");
     }
 
     // null quando a mensagem não é deste formato ou falta o que identifica

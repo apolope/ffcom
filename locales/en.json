@@ -476,6 +476,8 @@
       "reorder_failed": "error reordering servers"
     },
     "push": {
+      "avatar_not_found": "invalid or expired avatar link",
+      "avatar_read_failed": "error reading the avatar",
       "channel_id_invalid": "invalid channelId",
       "device_delete_failed": "error removing the device",
       "device_save_failed": "error registering the device",
@@ -1154,7 +1156,7 @@
     },
     "permission": {
       "title": "Get notifications?",
-      "body": "FFCom lets you know about new channel messages, direct messages and friend requests even when the app is closed. Channel message text goes through Google's Firebase only to reach your phone; for direct messages, which are encrypted, only the sender's name is sent. You can mute a server or a channel from its menu.",
+      "body": "FFCom lets you know about new channel messages, direct messages and friend requests even when the app is closed. Channel message text goes through Google's Firebase only to reach your phone; for direct messages, which are encrypted, only the sender's name and a temporary link to their photo are sent. You can mute a server or a channel from its menu.",
       "allow": "Turn on notifications",
       "notNow": "Not now"
     },

@@ -74,6 +74,13 @@ Firebase: nada é gravado. Rotas e formato em
 em [`../docs/architecture.md`](../docs/architecture.md), "Decisão:
 notificações push (fase 6)".
 
+A notificação leva um link temporário (até 48 h) para a foto de quem
+mandou, que o app baixa sem login em `GET /api/push/avatars/{token}`. O
+link é montado com `CENTRAL_PUBLIC_URL`, o endereço público deste
+servidor com `https://` (vazia: a instância oficial). Quem roda outra
+instância precisa defini-la, ou as notificações apontam para a oficial e
+saem sem foto.
+
 ## Backup / restore
 
 Nenhum backup automático embutido — ver [`../docs/backup-restore.md`](../docs/backup-restore.md) para o procedimento de `pg_dump`/`pg_restore` do banco e dos avatares (`avatars_data`).

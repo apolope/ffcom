@@ -15,6 +15,15 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## client v0.24.1 · 2026-10-09
+- No app Android, as notificações mostram a foto de quem mandou, nas mensagens dos canais, nas mensagens diretas e nos avisos de amizade. Quem não tem foto continua com a letra.
+
+## channel v0.11.1 · 2026-10-09
+- As notificações push levam ao server-central quem mandou a mensagem, para o app Android mostrar a foto da pessoa.
+
+## central v0.15.1 · 2026-10-09
+- As notificações push levam um link temporário para a foto de quem mandou, que o app Android baixa sem login. O link vale por até 48 horas e só serve para aquela foto. `CENTRAL_PUBLIC_URL` diz o endereço público do servidor para montar o link (vazia: a instância oficial).
+
 ## site v0.9.0 · 2026-10-09
 - Botão "Baixar para Android", com o passo a passo para instalar o APK fora da Play Store e um link para todas as versões do app no GitHub, com as notas de cada uma.
 - Seção nova de Privacidade, no rodapé: o que a instância oficial guarda e por onde passa cada coisa, inclusive as notificações do app Android pelo Firebase, do Google.

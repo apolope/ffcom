@@ -44,6 +44,10 @@ type Message struct {
 	ThreadTitle    string
 	AuthorMemberID string
 	Author         string
+	// AuthorSubject é o "sub" do Authentik do autor (store.Member.OIDCSubject),
+	// que o server-central usa para achar o avatar da conta e mostrá-lo na
+	// notificação.
+	AuthorSubject string
 	Text           string
 	Attachment     string
 	// Viewers são os membros com o WebSocket do canal aberto no momento
@@ -147,6 +151,7 @@ func (n *Notifier) process(m Message) {
 				ChannelID:     m.ChannelID,
 				ChannelName:   channelName,
 				Author:        m.Author,
+				AuthorSubject: m.AuthorSubject,
 				Text:          truncate(m.Text, maxTextRunes),
 				MessageID:     m.MessageID,
 				ThreadID:      m.ThreadID,
@@ -202,5 +207,6 @@ type notifyRequest struct {
 	ThreadID      string   `json:"threadId,omitempty"`
 	ThreadTitle   string   `json:"threadTitle,omitempty"`
 	Attachment    string   `json:"attachment,omitempty"`
+	AuthorSubject string   `json:"authorSubject,omitempty"`
 	Grants        []string `json:"grants"`
 }

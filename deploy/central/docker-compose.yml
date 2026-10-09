@@ -86,6 +86,9 @@ services:
       # chave da conta de serviço o push fica desligado. Ver .env.example e
       # docs/architecture.md, "Decisão: notificações push (fase 6)".
       FCM_SERVICE_ACCOUNT_JSON: ${FCM_SERVICE_ACCOUNT_JSON:-}
+      # Endereço público deste server-central, para os links de avatar que
+      # saem nas notificações push. Vazio: a instância oficial.
+      CENTRAL_PUBLIC_URL: ${CENTRAL_PUBLIC_URL:-}
     volumes:
       - ffcom_central_avatars:/data/avatars
     networks:

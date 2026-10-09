@@ -1,5 +1,6 @@
 package br.com.a3sitsolutions.ffcom;
 
+import android.graphics.Bitmap;
 import androidx.annotation.NonNull;
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
@@ -18,7 +19,11 @@ public class PushMessagingService extends FirebaseMessagingService {
     public void onMessageReceived(@NonNull RemoteMessage message) {
         PushPayload payload = PushPayload.parse(message.getData());
         if (payload == null || PushState.suppress(payload)) return;
-        PushNotifier.show(this, payload);
+        // Avatar de quem mandou: do cache ou baixado agora, com prazo de
+        // 5 s (PushAvatars). Fora do lock do PushNotifier, para um download
+        // lento não segurar outra notificação. null: fica a letra.
+        Bitmap avatar = PushAvatarImages.load(this, payload);
+        PushNotifier.show(this, payload, avatar);
     }
 
     // O FCM trocou o token do aparelho. Com a página aberta, ela registra o

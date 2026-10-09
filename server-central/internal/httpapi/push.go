@@ -279,6 +279,9 @@ func notifyChannelMessage(ctx context.Context, pushStore *store.PushStore, dispa
 		return
 	}
 
+	// Avatar do autor: resolvido uma vez, só quando há alguém para
+	// notificar (chamada com grants inválidos não emite link).
+	var authorFields map[string]string
 	notified := make(map[string]bool, len(targets))
 	for _, t := range targets {
 		// Dois grants da mesma conta (dois aparelhos que entregaram o seu)
@@ -318,6 +321,13 @@ func notifyChannelMessage(ctx context.Context, pushStore *store.PushStore, dispa
 				data[k] = v
 			}
 		}
+		if authorFields == nil {
+			authorFields = map[string]string{}
+			dispatcher.AddAuthorAvatar(ctx, authorFields, "", strings.TrimSpace(body.AuthorSubject))
+		}
+		for k, v := range authorFields {
+			data[k] = v
+		}
 		dispatcher.Notify(t.AccountID, data)
 	}
 }
@@ -339,6 +349,7 @@ func pushFromAccount(dispatcher *push.Dispatcher, profiles *store.ProfileStore, 
 		if requestID != "" {
 			data["requestId"] = requestID
 		}
+		dispatcher.AddAuthorAvatar(ctx, data, fromID, "")
 		return data
 	})
 }
@@ -388,5 +399,10 @@ type pushNotifyRequest struct {
 	ThreadID      string   `json:"threadId"`
 	ThreadTitle   string   `json:"threadTitle"`
 	Attachment    string   `json:"attachment"`
+	// AuthorSubject é o "sub" do Authentik de quem mandou, que o
+	// server-channel guarda por membro; o central o usa só para achar o
+	// avatar da conta. Opcional: server-channel antigo não manda, e a
+	// notificação sai sem avatar.
+	AuthorSubject string   `json:"authorSubject"`
 	Grants        []string `json:"grants"`
 }

@@ -112,6 +112,7 @@ Base URL: `VITE_SERVER_CENTRAL_URL` no client (`http://localhost:8081` em dev).
 | GET | `/api/push/mutes` | Bearer | sem corpo | `{mutes: [{serverAddress, channelId?}]}`: sem `channelId`, o servidor inteiro está silenciado | nenhum |
 | PUT | `/api/push/mutes` | Bearer | `{serverAddress, channelId?, muted}`: um item por vez; sem `channelId` vale para o servidor inteiro | `204` | `400` `push.channel_id_invalid` ou sem `muted`; `404` `push.server_unknown` |
 | POST | `/api/push/notify` | não (chamada pelo `server-channel`; o grant é a credencial) | ver "Notificações push" | `202` `{status: "accepted"}`, sempre igual | `400` corpo inválido; `429` limite por IP |
+| GET | `/api/push/avatars/{token}` | não (o token do link é a credencial) | sem corpo; o link chega pronto no campo `authorAvatar` da notificação | `200` com os bytes do avatar, `Content-Type` da imagem e `Cache-Control: private, max-age=<segundos até vencer>`. Ler não gasta o link | `404` `push.avatar_not_found`, igual para link desconhecido, vencido ou de conta que tirou o avatar |
 | GET | `/api/ideas?view=ranking\|implemented\|review` | opcional | — | `[Idea]` — `ranking` (padrão): publicadas e planejadas, maior pontuação primeiro, empate para a mais antiga; `implemented`: implementadas, mais recentes primeiro; `review`: fila de moderação | `403` `review` sem o grupo de admin |
 | GET | `/api/ideas/me` | Bearer | — | `{assistEnabled, wandLimit, wandLeft, wandUsed, wandPenalty, pendingAssist?, suggestedToday, todayIdea?: Idea, lastDiscarded?: Idea, discardsLeft, isAdmin}` — `lastDiscarded` é a última ideia de hoje descartada por não ser sugestão (com a dica em `feedback`), só enquanto não houver ideia do dia | — |
 | POST | `/api/ideas` | Bearer | `{text}` (10 a 1000 caracteres) | `202` + `Idea` em `checking`; vira `open`, `review` ou `discarded` (não é sugestão; não gasta o dia) quando a checagem final termina | `400` tamanho; `409` já enviou hoje; `429` já teve 3 textos descartados hoje |
@@ -243,9 +244,10 @@ Só o app Android usa. Decisão em `docs/architecture.md`, "Decisão: notificaç
 ```json
 {"serverAddress": "https://chat.exemplo.com", "channelId": "...", "channelName": "geral", "author": "Marina",
  "text": "Ficaram lindas!", "messageId": "...", "threadId": "...", "threadTitle": "...", "attachment": "foto.jpg",
- "grants": ["...", "..."]}
+ "authorSubject": "...", "grants": ["...", "..."]}
 ```
 
+- `authorSubject`: opcional, o `sub` do Authentik de quem mandou (o mesmo que o `server-channel` guarda por membro). O central só o usa para achar a conta e pôr `authorAvatar` na notificação; sem ele (`server-channel` anterior ao channel-v0.11.1), sem conta ou sem avatar, a notificação sai sem foto.
 - `grants`: até 500 por chamada; o `server-channel` manda um lote por `serverAddress` guardado com os grants. Só entram membros ativos com `ViewChannels` no canal, menos o autor e quem está com o WebSocket do canal aberto.
 - `threadId`/`threadTitle` só em fórum; `attachment` (nome do arquivo) só em mensagem com anexo; `serverName` é aceito, mas o central prefere o nome que a pessoa deu ao servidor na lista dela.
 - O central confere cada grant contra `serverAddress` (grant de outro endereço não vale), o silêncio e os limites, e responde sempre `202 {"status":"accepted"}`.
@@ -267,6 +269,8 @@ Só o app Android usa. Decisão em `docs/architecture.md`, "Decisão: notificaç
 | `attachment` | `channel_message`, opcional | nome do arquivo anexado |
 | `accountId` | `dm`, `friend_request`, `friend_accepted` | conta de quem mandou a DM, pediu ou aceitou (abre a conversa ou o pedido) |
 | `requestId` | `friend_request` | id do pedido, o mesmo de `GET /api/friends/requests` |
+| `authorAvatar` | todos, opcional | link absoluto `https://<central>/api/push/avatars/<token>` para o avatar de quem mandou, sem login. O token tem 256 bits aleatórios; o link vale para várias leituras e vence em até 48 h, mas sempre chega com pelo menos 24 h pela frente (o TTL da mensagem no FCM). Ausente quando a pessoa não tem avatar (o app mostra a letra) |
+| `authorKey` | todos, opcional, só junto com `authorAvatar` | versão do avatar de quem mandou: 32 caracteres hexadecimais, iguais enquanto a foto não muda e diferentes depois de trocar. Não identifica a conta sozinho. O app guarda a foto baixada com essa chave |
 
 Exemplos:
 
@@ -276,6 +280,8 @@ Exemplos:
 {"v": "1", "type": "dm", "sentAt": "2026-10-08T14:03:00Z", "accountId": "...", "author": "Marina"}
 {"v": "1", "type": "friend_request", "sentAt": "2026-10-08T14:03:00Z", "accountId": "...", "author": "Marina", "requestId": "..."}
 ```
+
+O endereço público que entra em `authorAvatar` é `CENTRAL_PUBLIC_URL` do `server-central` (vazia: `https://central.ffcom.a3sitsolutions.com.br`). A rota entra no rate limit geral, pelo IP, porque não tem token de login.
 
 O app monta o texto na tela no idioma dele: a DM vira "Nova mensagem de <author>", porque o conteúdo é cifrado de ponta a ponta e não passa pelo push. As de canal agrupam por `serverAddress` + `channelId`.
 

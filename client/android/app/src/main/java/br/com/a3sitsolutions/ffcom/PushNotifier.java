@@ -6,10 +6,12 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
 import android.service.notification.StatusBarNotification;
 import android.util.Log;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.Person;
+import androidx.core.graphics.drawable.IconCompat;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -76,7 +78,8 @@ final class PushNotifier {
         manager.createNotificationChannel(channel(CHANNEL_FRIENDS, texts.get(PushTexts.CHANNEL_FRIENDS), NotificationManager.IMPORTANCE_DEFAULT));
     }
 
-    static synchronized void show(Context context, PushPayload payload) {
+    // avatar: a foto de quem mandou (PushAvatarImages), ou null para a letra.
+    static synchronized void show(Context context, PushPayload payload, Bitmap avatar) {
         NotificationManager manager = manager(context);
         if (manager == null || !NotificationAccess.enabled(context)) return;
         PushTexts texts = texts(context);
@@ -96,8 +99,9 @@ final class PushNotifier {
             // contagem de novo.
             PushGroup group = isShowing(manager, id) ? PushGroup.decode(groups.getString(key, null)) : new PushGroup();
             if (payload.isChannelMessage()) {
-                group.add(texts.author(payload.author), texts.messageLine(payload.text, payload.attachment, payload.threadTitle), now);
-                builder = channelNotification(context, texts, payload, group);
+                String avatarKey = avatar == null ? "" : PushAvatars.cacheKey(payload);
+                group.add(texts.author(payload.author), texts.messageLine(payload.text, payload.attachment, payload.threadTitle), now, avatarKey);
+                builder = channelNotification(context, texts, payload, group, avatar);
             } else {
                 group.add(texts.author(payload.author), texts.dmTitle(payload.author), now);
                 builder = new NotificationCompat.Builder(context, CHANNEL_DMS)
@@ -108,6 +112,9 @@ final class PushNotifier {
             }
             groups.edit().putString(key, group.encode()).apply();
         }
+        // A foto de quem mandou também no ícone grande (no canal, a do
+        // autor da última mensagem).
+        if (avatar != null) builder.setLargeIcon(avatar);
         builder
             .setSmallIcon(R.drawable.ic_stat_message)
             .setAutoCancel(true)
@@ -124,7 +131,7 @@ final class PushNotifier {
         }
     }
 
-    private static NotificationCompat.Builder channelNotification(Context context, PushTexts texts, PushPayload payload, PushGroup group) {
+    private static NotificationCompat.Builder channelNotification(Context context, PushTexts texts, PushPayload payload, PushGroup group, Bitmap avatar) {
         // Sem nome na lista (não deveria acontecer), o endereço sem o esquema.
         String serverName = payload.serverName.isEmpty() ? payload.serverAddress.replaceFirst("^https?://", "") : payload.serverName;
         String title = texts.channelTitle(payload.channelName, serverName);
@@ -133,8 +140,19 @@ final class PushNotifier {
             .setConversationTitle(title)
             .setGroupConversation(true);
         PushGroup.Line last = null;
+        // Uma foto por autor: a desta mensagem já veio carregada, as das
+        // linhas anteriores saem do cache em disco (sem rede).
+        Map<String, Bitmap> icons = new HashMap<>();
+        String currentKey = avatar == null ? null : PushAvatars.cacheKey(payload);
+        if (currentKey != null) icons.put(currentKey, avatar);
         for (PushGroup.Line line : group.lines()) {
-            style.addMessage(line.text, line.time, new Person.Builder().setName(line.author).build());
+            Person.Builder person = new Person.Builder().setName(line.author);
+            if (!line.avatarKey.isEmpty()) {
+                if (!icons.containsKey(line.avatarKey)) icons.put(line.avatarKey, PushAvatarImages.cached(context, line.avatarKey));
+                Bitmap icon = icons.get(line.avatarKey);
+                if (icon != null) person.setIcon(IconCompat.createWithBitmap(icon));
+            }
+            style.addMessage(line.text, line.time, person.build());
             last = line;
         }
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_MESSAGES)

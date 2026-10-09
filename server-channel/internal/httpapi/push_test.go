@@ -128,7 +128,7 @@ func TestPushRecipients(t *testing.T) {
 		}
 	}
 	central.mu.Unlock()
-	want := map[string]any{"serverAddress": address, "channelId": channel.ID, "channelName": channel.Name, "author": author.DisplayName(), "text": "Ficaram lindas!", "messageId": msg.ID}
+	want := map[string]any{"serverAddress": address, "channelId": channel.ID, "channelName": channel.Name, "author": author.DisplayName(), "text": "Ficaram lindas!", "messageId": msg.ID, "authorSubject": author.OIDCSubject}
 	for k, v := range want {
 		if req[k] != v {
 			t.Errorf("corpo[%q] = %v, esperado %v", k, req[k], v)

@@ -145,6 +145,7 @@ Cada fase termina num estado publicável. A **primeira versão pública do APK s
 - tirar o servidor da lista para as notificações dele;
 - um server-channel sem `FFCOM_CENTRAL_URL` continua funcionando;
 - num servidor de teste, mandar `notify` com um grant de outro servidor não entrega nada.
+- com `central-v0.15.1`, `channel-v0.11.1` e `client-v0.24.1`: a notificação de canal, de DM e de amizade mostra a foto de quem mandou (de quem não tem foto, a letra); a segunda mensagem do mesmo autor não baixa a foto de novo (`adb logcat -s FfcomPush` sem "avatar não baixou" e sem tráfego novo); com o celular sem internet no meio, a notificação sai com a letra sem atraso visível.
 
 ### Documentação ao longo das fases
 

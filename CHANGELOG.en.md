@@ -15,6 +15,15 @@ One section per published tag, in the exact format below (the site and the CI ch
 
 `<component>` is one of: `client` (the app), `central` (server-central), `channel` (server-channel), `channel-image` (the server-channel container image), `site` (this home page). Items accept `code` in backticks and **bold**. Text outside the sections (like this) is ignored by the site.
 
+## client v0.24.1 · 2026-10-09
+- In the Android app, notifications show the sender's photo, for channel messages, direct messages and friend alerts. People without a photo still get the letter.
+
+## channel v0.11.1 · 2026-10-09
+- Push notifications now tell server-central who sent the message, so the Android app can show that person's photo.
+
+## central v0.15.1 · 2026-10-09
+- Push notifications carry a temporary link to the sender's photo, which the Android app downloads without signing in. The link lasts up to 48 hours and only serves that photo. `CENTRAL_PUBLIC_URL` sets the server's public address for building the link (empty: the official instance).
+
 ## site v0.9.0 · 2026-10-09
 - "Download for Android" button, with step-by-step instructions for installing the APK outside the Play Store and a link to every version of the app on GitHub, with the notes for each one.
 - New Privacy section, in the footer: what the official instance stores and where each thing goes, including the Android app notifications through Google's Firebase.

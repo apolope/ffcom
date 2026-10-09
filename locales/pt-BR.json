@@ -477,6 +477,8 @@
       "reorder_failed": "erro ao reordenar servidores"
     },
     "push": {
+      "avatar_not_found": "link de avatar inválido ou vencido",
+      "avatar_read_failed": "erro ao ler o avatar",
       "channel_id_invalid": "channelId inválido",
       "device_delete_failed": "erro ao remover o aparelho",
       "device_save_failed": "erro ao registrar o aparelho",
@@ -1158,7 +1160,7 @@
     },
     "permission": {
       "title": "Receber notificações?",
-      "body": "O FFCom avisa de mensagens novas nos canais, de mensagens diretas e de pedidos de amizade mesmo com o app fechado. O texto das mensagens de canal passa pelo Firebase, do Google, só para chegar ao celular; nas mensagens diretas, que são cifradas, vai só o nome de quem mandou. Dá para silenciar um servidor ou um canal pelo menu dele.",
+      "body": "O FFCom avisa de mensagens novas nos canais, de mensagens diretas e de pedidos de amizade mesmo com o app fechado. O texto das mensagens de canal passa pelo Firebase, do Google, só para chegar ao celular; nas mensagens diretas, que são cifradas, vão só o nome de quem mandou e um link temporário para a foto da pessoa. Dá para silenciar um servidor ou um canal pelo menu dele.",
       "allow": "Ativar notificações",
       "notNow": "Agora não"
     },
