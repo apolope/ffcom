@@ -15,6 +15,9 @@ One section per published tag, in the exact format below (the site and the CI ch
 
 `<component>` is one of: `client` (the app), `central` (server-central), `channel` (server-channel), `channel-image` (the server-channel container image), `site` (this home page). Items accept `code` in backticks and **bold**. Text outside the sections (like this) is ignored by the site.
 
+## client v0.24.4 · 2026-10-09
+- In the Android app, muted channels show a 🔕 after their name, and a muted server shows the 🔕 on its icon and at the top of the channel list.
+
 ## client v0.24.3 · 2026-10-09
 - Phone notifications now arrive even when FFCom is open on your computer in a hidden tab or a minimized window. Only someone with the channel on screen, the window in focus and not away stops getting them.
 - In the Android app, a bell at the top of the channel mutes its notifications.

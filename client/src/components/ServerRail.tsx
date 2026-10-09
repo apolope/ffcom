@@ -5,6 +5,7 @@ import type { Language } from '../i18n'
 import type { MyProfile } from '../lib/serverCentralApi'
 import { AvatarWithStatus } from './AvatarWithStatus'
 import { statusLabel } from './PresenceContext'
+import { MutedIcon } from './MutedIcon'
 import { ServerMenu, type ServerMenuActions } from './ServerMenu'
 import { StatusMenu, type AccountIdentity } from './StatusMenu'
 import { UpdateButton } from './UpdateButton'
@@ -39,6 +40,9 @@ interface ServerRailProps {
   // Ações do menu de contexto do servidor selecionado (o botão direito
   // seleciona o servidor antes de abrir o menu).
   serverMenuActions: ServerMenuActions
+  // Servidor com notificações silenciadas (push do app Android): 🔕 no canto
+  // do ícone. Ausente onde não há push.
+  isServerMuted?: (server: KnownServer) => boolean
   onSelectFriends: () => void
   onAddServer: () => void
   onOpenMyAvatar: () => void
@@ -66,6 +70,7 @@ export function ServerRail({
   onSelectServer,
   onReorderServers,
   serverMenuActions,
+  isServerMuted,
   onSelectFriends,
   onAddServer,
   onOpenMyAvatar,
@@ -193,6 +198,7 @@ export function ServerRail({
                 >
                   {unreadServerIds.has(server.id) && <span className="rail-unread-pill" aria-hidden="true" />}
                   {server.initials}
+                  {isServerMuted?.(server) && <MutedIcon variant="badge" />}
                 </button>
               </li>
             ))}

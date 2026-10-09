@@ -1169,6 +1169,7 @@
       "unmute": "Reativar notificações",
       "channelMute": "Silenciar notificações deste canal",
       "channelUnmute": "Reativar notificações",
+      "mutedLabel": "Notificações silenciadas",
       "saveFailed": "Não deu para mudar as notificações. Tente de novo."
     }
   }

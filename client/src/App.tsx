@@ -647,6 +647,7 @@ function App() {
                         ? { muted: push.mutes.isMuted(server.baseUrl), onToggle: () => togglePushMute(server.baseUrl) }
                         : undefined,
                   }}
+                  isServerMuted={push.available ? (s) => push.mutes.isMuted(s.baseUrl) : undefined}
                   onReorderServers={saveServerOrder}
                   onSelectFriends={() => setShowFriends(true)}
                   onAddServer={() => setShowAddServer(true)}
@@ -720,6 +721,7 @@ function App() {
                           ? {
                               isMuted: (channelId) => push.mutes.isMuted(server.baseUrl, channelId),
                               onToggle: (channelId) => togglePushMute(server.baseUrl, channelId),
+                              serverMuted: push.mutes.isMuted(server.baseUrl),
                             }
                           : undefined
                       }
