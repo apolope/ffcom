@@ -15,6 +15,9 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## client v0.24.2 · 2026-10-09
+- No app Android, as notificações mostram a foto de quem mandou, nas mensagens dos canais, nas mensagens diretas e nos avisos de amizade. Quem não tem foto continua com a letra. (A v0.24.1, com a mesma mudança, não chegou a ser publicada.)
+
 ## site v0.9.1 · 2026-10-09
 - A seção de Privacidade explica que as notificações do app Android levam também um link temporário para a foto de quem mandou, que vale por até 48 horas.
 

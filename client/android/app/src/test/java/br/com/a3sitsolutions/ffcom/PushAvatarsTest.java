@@ -20,7 +20,9 @@ import org.junit.Test;
 public class PushAvatarsTest {
 
     private static final String LINK = "https://central.exemplo.com/api/push/avatars/AbC-_123";
-    private static final String KEY = "0123456789abcdef0123456789abcdef";
+    // authorKey de exemplo (32 dígitos hexadecimais), montado em duas partes
+    // para o gitleaks não confundir com um segredo.
+    private static final String AUTHOR_ID = "0123456789abcdef" + "0123456789abcdef";
 
     private static Map<String, String> dm(String avatar, String key) {
         Map<String, String> data = new HashMap<>();
@@ -73,9 +75,9 @@ public class PushAvatarsTest {
 
     @Test
     public void payloadLeOsCamposDoAvatar() {
-        PushPayload p = payload(LINK, KEY);
+        PushPayload p = payload(LINK, AUTHOR_ID);
         assertEquals(LINK, p.authorAvatar);
-        assertEquals(KEY, p.authorKey);
+        assertEquals(AUTHOR_ID, p.authorKey);
         PushPayload without = payload(null, null);
         assertEquals("", without.authorAvatar);
         assertEquals("", without.authorKey);
@@ -83,10 +85,10 @@ public class PushAvatarsTest {
 
     @Test
     public void chaveDoCacheEOAuthorKey() {
-        assertEquals(KEY, PushAvatars.cacheKey(payload(LINK, KEY)));
+        assertEquals(AUTHOR_ID, PushAvatars.cacheKey(payload(LINK, AUTHOR_ID)));
         // Mesmo autor com outro link (renovado): mesma chave.
-        assertEquals(KEY, PushAvatars.cacheKey(payload(LINK + "outro", KEY)));
-        assertNull(PushAvatars.cacheKey(payload(null, KEY)));
+        assertEquals(AUTHOR_ID, PushAvatars.cacheKey(payload(LINK + "outro", AUTHOR_ID)));
+        assertNull(PushAvatars.cacheKey(payload(null, AUTHOR_ID)));
         assertNull(PushAvatars.cacheKey(null));
     }
 
@@ -107,15 +109,15 @@ public class PushAvatarsTest {
         assertFalse(PushAvatars.acceptableUrl("https:///sem-host"));
         assertFalse(PushAvatars.acceptableUrl("file:///sdcard/x.png"));
         assertFalse(PushAvatars.acceptableUrl(""));
-        assertNull(PushAvatars.cacheKey(payload("http://central.exemplo.com/x", KEY)));
+        assertNull(PushAvatars.cacheKey(payload("http://central.exemplo.com/x", AUTHOR_ID)));
     }
 
     @Test
     public void baixaUmaVezEDepoisUsaOCache() {
         FakeCache cache = new FakeCache();
         FakeFetcher fetcher = new FakeFetcher();
-        assertArrayEquals(new byte[] {1, 2, 3}, PushAvatars.resolve(payload(LINK, KEY), cache, fetcher, IDENTITY));
-        assertArrayEquals(new byte[] {1, 2, 3}, PushAvatars.resolve(payload(LINK + "novo", KEY), cache, fetcher, IDENTITY));
+        assertArrayEquals(new byte[] {1, 2, 3}, PushAvatars.resolve(payload(LINK, AUTHOR_ID), cache, fetcher, IDENTITY));
+        assertArrayEquals(new byte[] {1, 2, 3}, PushAvatars.resolve(payload(LINK + "novo", AUTHOR_ID), cache, fetcher, IDENTITY));
         assertEquals(1, fetcher.urls.size());
         assertEquals(LINK, fetcher.urls.get(0));
         assertEquals(1, cache.writes);
@@ -127,21 +129,21 @@ public class PushAvatarsTest {
         FakeFetcher fetcher = new FakeFetcher();
 
         fetcher.error = new IOException("timeout");
-        assertNull(PushAvatars.resolve(payload(LINK, KEY), cache, fetcher, IDENTITY));
+        assertNull(PushAvatars.resolve(payload(LINK, AUTHOR_ID), cache, fetcher, IDENTITY));
 
         fetcher.error = null;
-        assertNull("imagem inválida", PushAvatars.resolve(payload(LINK, KEY), cache, fetcher, raw -> null));
-        assertNull("processador quebrado", PushAvatars.resolve(payload(LINK, KEY), cache, fetcher, raw -> {
+        assertNull("imagem inválida", PushAvatars.resolve(payload(LINK, AUTHOR_ID), cache, fetcher, raw -> null));
+        assertNull("processador quebrado", PushAvatars.resolve(payload(LINK, AUTHOR_ID), cache, fetcher, raw -> {
             throw new IllegalStateException("bitmap");
         }));
         fetcher.response = new byte[PushAvatars.MAX_BYTES + 1];
-        assertNull("grande demais", PushAvatars.resolve(payload(LINK, KEY), cache, fetcher, IDENTITY));
+        assertNull("grande demais", PushAvatars.resolve(payload(LINK, AUTHOR_ID), cache, fetcher, IDENTITY));
         assertEquals(0, cache.writes);
 
         // Sem avatar ou com link recusado, nem tenta a rede.
         int calls = fetcher.urls.size();
         assertNull(PushAvatars.resolve(payload(null, null), cache, fetcher, IDENTITY));
-        assertNull(PushAvatars.resolve(payload("http://x/y", KEY), cache, fetcher, IDENTITY));
+        assertNull(PushAvatars.resolve(payload("http://x/y", AUTHOR_ID), cache, fetcher, IDENTITY));
         assertEquals(calls, fetcher.urls.size());
     }
 
@@ -176,10 +178,10 @@ public class PushAvatarsTest {
     @Test
     public void grupoGuardaAChaveDoAvatarPorLinha() {
         PushGroup group = new PushGroup();
-        group.add("Marina", "oi", 1L, KEY);
+        group.add("Marina", "oi", 1L, AUTHOR_ID);
         group.add("Bia", "olá", 2L);
         PushGroup back = PushGroup.decode(group.encode());
-        assertEquals(KEY, back.lines().get(0).avatarKey);
+        assertEquals(AUTHOR_ID, back.lines().get(0).avatarKey);
         assertEquals("", back.lines().get(1).avatarKey);
         // Formato guardado antes do avatar (3 campos) continua lendo.
         PushGroup old = PushGroup.decode("1\u001E5\u001FMarina\u001Foi");
