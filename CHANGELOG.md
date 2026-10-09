@@ -15,6 +15,28 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## site v0.9.0 · 2026-10-09
+- Botão "Baixar para Android", com o passo a passo para instalar o APK fora da Play Store e um link para todas as versões do app no GitHub, com as notas de cada uma.
+- Seção nova de Privacidade, no rodapé: o que a instância oficial guarda e por onde passa cada coisa, inclusive as notificações do app Android pelo Firebase, do Google.
+- A demonstração do app na home tem agora o mesmo desenho do canal de texto do app.
+
+## client v0.24.0 · 2026-10-09
+- O FFCom agora tem app para Android: baixe o APK pelo botão "Baixar para Android" no site. O próprio app avisa quando há versão nova e instala com um toque.
+- No app Android, "Entrar" abre o login no navegador do celular e volta sozinho para o app.
+- Os links de convite agora são endereços `https://app.ffcom.a3sitsolutions.com.br/convite?...`: no celular com o app, abrem direto no app; no navegador e no desktop, abrem o "Adicionar servidor" já preenchido, mesmo se for preciso entrar antes. Links de convite antigos continuam valendo.
+- No app Android, a chamada de voz continua com a tela apagada ou com outro app aberto, com uma notificação "Em chamada" que tem o tempo de chamada e os botões de mutar e de sair.
+- No app Android, chegam notificações de mensagens novas nos canais, de mensagens diretas e de pedidos de amizade, agrupadas por canal. Tocar abre o canal, a conversa ou os Amigos.
+- "Silenciar notificações" no menu do servidor e no menu de cada canal, para parar de receber os avisos de onde não interessa. A escolha fica salva na conta.
+- Quem tem a nova permissão "Mover membros entre salas de voz" arrasta uma pessoa, na barra lateral, de uma sala de voz para outra.
+- Os avisos de microfone negado, ausente ou em uso por outro aplicativo aparecem no seu idioma, e você entra na sala só ouvindo em vez de ficar de fora.
+
+## channel v0.11.0 · 2026-10-09
+- Notificações push no app Android: cada membro entrega ao servidor um token de push, que sai junto com a pessoa num kick ou ban, e a cada mensagem nova o servidor avisa pelo server-central quem pode ver o canal, menos o autor e quem está com o canal aberto. `FFCOM_CENTRAL_URL` escolhe o server-central (vazia: a instância oficial; `off`: desliga o push).
+- Nova permissão "Mover membros entre salas de voz" (`MoveMembers`) e a rota `POST /api/voice/move`, para mover alguém de sala de voz.
+
+## central v0.15.0 · 2026-10-09
+- Notificações push do app Android pelo Firebase Cloud Messaging: registro do aparelho, token de push por servidor da lista da conta, silêncio por servidor ou canal guardado na conta, e avisos de mensagem direta (só com o nome de quem mandou) e de pedido e aceite de amizade. O texto das mensagens passa pelo servidor só em trânsito, sem ficar guardado.
+
 ## client v0.23.0 · 2026-10-08
 - Em chamada, quem está falando ganha um anel verde: no ícone do microfone, na tela da chamada, e no avatar, na lista da sala na barra lateral.
 - A lista de quem está em cada sala de voz, na barra lateral, não muda mais de ordem sozinha: as pessoas aparecem em ordem alfabética.

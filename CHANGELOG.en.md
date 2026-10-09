@@ -15,6 +15,28 @@ One section per published tag, in the exact format below (the site and the CI ch
 
 `<component>` is one of: `client` (the app), `central` (server-central), `channel` (server-channel), `channel-image` (the server-channel container image), `site` (this home page). Items accept `code` in backticks and **bold**. Text outside the sections (like this) is ignored by the site.
 
+## site v0.9.0 · 2026-10-09
+- "Download for Android" button, with step-by-step instructions for installing the APK outside the Play Store and a link to every version of the app on GitHub, with the notes for each one.
+- New Privacy section, in the footer: what the official instance stores and where each thing goes, including the Android app notifications through Google's Firebase.
+- The app demo on the home page now has the same design as the app's text channel.
+
+## client v0.24.0 · 2026-10-09
+- FFCom now has an Android app: download the APK with the "Download for Android" button on the site. The app itself tells you when there is a new version and installs it with one tap.
+- In the Android app, "Sign in" opens the login in the phone's browser and comes back to the app on its own.
+- Invite links are now `https://app.ffcom.a3sitsolutions.com.br/convite?...` addresses: on a phone with the app, they open straight in the app; in the browser and on desktop, they open "Add a server" already filled in, even if you need to sign in first. Old invite links still work.
+- In the Android app, a voice call keeps going with the screen off or another app open, with an "In a call" notification showing the call time and buttons to mute and to leave.
+- In the Android app, you get notifications for new messages in channels, direct messages and friend requests, grouped by channel. Tapping one opens the channel, the conversation or Friends.
+- "Mute notifications" in the server menu and in each channel's menu, to stop getting alerts from where they don't matter. The choice is saved to your account.
+- Anyone with the new "Move members between voice rooms" permission can drag a person, in the sidebar, from one voice room to another.
+- Warnings about a microphone that is denied, missing or in use by another app show up in your language, and you join the room listen-only instead of being left out.
+
+## channel v0.11.0 · 2026-10-09
+- Push notifications in the Android app: each member hands the server a push token, which is removed along with the person on a kick or ban, and on each new message the server alerts, through server-central, everyone who can see the channel, except the author and whoever has the channel open. `FFCOM_CENTRAL_URL` picks the server-central (empty: the official instance; `off`: turns push off).
+- New "Move members between voice rooms" permission (`MoveMembers`) and the `POST /api/voice/move` route, to move someone to another voice room.
+
+## central v0.15.0 · 2026-10-09
+- Push notifications for the Android app through Firebase Cloud Messaging: device registration, a push token per server in the account's list, muting per server or channel saved to the account, and alerts for direct messages (with only the sender's name) and for friend requests and acceptances. Message text passes through the server only in transit, without being stored.
+
 ## client v0.23.0 · 2026-10-08
 - In a call, whoever is speaking gets a green ring: around the microphone icon on the call screen, and around their avatar in the room list in the sidebar.
 - The list of who is in each voice room, in the sidebar, no longer reorders itself: people are listed alphabetically.
