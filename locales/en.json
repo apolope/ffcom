@@ -725,7 +725,7 @@
       "hostServer": "Host a server",
       "forgotPassword": "Forgot my password",
       "windowsNote": "In the Windows app, the app itself tells you when there is a new version. When installing, Windows may show \"Windows protected your PC\": click <strong>More info</strong> and then <strong>Run anyway</strong>.",
-      "androidNote": "On Android, the app comes as an APK, outside the Play Store. When you open the file, Android asks you to <strong>allow installing apps from this source</strong> (the browser or the files app), and Play Protect may warn that the app is unknown: tap <strong>More details</strong> and then <strong>Install anyway</strong>. After that, the app itself tells you when there is a new version."
+      "androidNote": "On Android, the app comes as an APK, outside the Play Store. When you open the file, Android asks you to <strong>allow installing apps from this source</strong> (the browser or the files app), and Play Protect may warn that the app is unknown: tap <strong>More details</strong> and then <strong>Install anyway</strong>. After that, the app itself tells you when there is a new version. Every APK version, with its release notes, is in the <a href=\"https://github.com/apolope/ffcom/releases?q=client-v&expanded=true\">app releases on GitHub</a>."
     },
     "mock": {
       "serverName": "Ana's Family",
