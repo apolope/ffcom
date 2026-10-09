@@ -86,6 +86,13 @@ func main() {
 	ideasCfg := ideasConfigFromEnv()
 	signupCfg := signupConfigFromEnv()
 	pushDispatcher := pushDispatcherFromEnv(db)
+	// Links do avatar de quem mandou, nas notificações push (ver
+	// internal/httpapi/push_avatar.go). A limpeza dos vencidos roda mesmo
+	// com o push desligado, para não sobrar linha de quando ele estava
+	// ligado.
+	pushAvatarLinks := httpapi.NewPushAvatarLinks(db.Push, publicURLFromEnv())
+	pushDispatcher.SetAuthorAvatars(pushAvatarLinks)
+	go pushAvatarLinks.RunPurge(ctx, time.Hour)
 	router := httpapi.NewRouter(verifier, db, avatarFiles, avatarMaxBytes, parseAllowedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS")), version, rateLimitRPM, rateLimitBurst, requireTLS, ideasCfg, signupCfg, pushDispatcher)
 
 	// Listener interno, numa porta que o proxy público não encaminha: o
@@ -195,6 +202,24 @@ func pushDispatcherFromEnv(db *store.Store) *push.Dispatcher {
 		log.Fatalf("server-central: %v", err)
 	}
 	return push.NewDispatcher(sender, db.Push, 4, 2000)
+}
+
+// defaultPublicURL é o endereço público da instância oficial, o mesmo que
+// o server-channel usa quando FFCOM_CENTRAL_URL está vazia.
+const defaultPublicURL = "https://central.ffcom.a3sitsolutions.com.br"
+
+// publicURLFromEnv lê CENTRAL_PUBLIC_URL, o endereço pelo qual o app
+// alcança este server-central. Só monta os links absolutos que saem nas
+// notificações push (authorAvatar); vazia, vale a instância oficial.
+func publicURLFromEnv() string {
+	raw := strings.TrimRight(strings.TrimSpace(os.Getenv("CENTRAL_PUBLIC_URL")), "/")
+	if raw == "" {
+		return defaultPublicURL
+	}
+	if !strings.HasPrefix(raw, "https://") {
+		log.Printf("server-central: CENTRAL_PUBLIC_URL sem https (%q); o app Android não baixa avatar por http", raw)
+	}
+	return raw
 }
 
 func requireEnv(name string) string {

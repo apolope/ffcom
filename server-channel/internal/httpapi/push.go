@@ -176,6 +176,7 @@ func messagePusher(notifier *push.Notifier, hub *realtime.Hub, author store.Memb
 			ThreadTitle:    threadTitle,
 			AuthorMemberID: author.ID,
 			Author:         author.DisplayName(),
+			AuthorSubject:  author.OIDCSubject,
 			Text:           m.Content,
 			Attachment:     attachment,
 			Viewers:        hub.MemberIDs(m.ChannelID),

@@ -22,11 +22,15 @@ final class PushGroup {
         final String author;
         final String text;
         final long time;
+        // Chave do avatar de quem mandou no cache (PushAvatars.cacheKey), ou
+        // vazio: a linha mostra a letra.
+        final String avatarKey;
 
-        Line(String author, String text, long time) {
+        Line(String author, String text, long time, String avatarKey) {
             this.author = clean(author);
             this.text = clean(text);
             this.time = time;
+            this.avatarKey = clean(avatarKey);
         }
     }
 
@@ -43,8 +47,12 @@ final class PushGroup {
     }
 
     void add(String author, String text, long time) {
+        add(author, text, time, "");
+    }
+
+    void add(String author, String text, long time, String avatarKey) {
         count++;
-        lines.add(new Line(author, text, time));
+        lines.add(new Line(author, text, time, avatarKey));
         while (lines.size() > MAX_LINES) lines.remove(0);
     }
 
@@ -56,7 +64,7 @@ final class PushGroup {
         StringBuilder sb = new StringBuilder();
         sb.append(count);
         for (Line line : lines) {
-            sb.append(RECORD).append(line.time).append(FIELD).append(line.author).append(FIELD).append(line.text);
+            sb.append(RECORD).append(line.time).append(FIELD).append(line.author).append(FIELD).append(line.text).append(FIELD).append(line.avatarKey);
         }
         return sb.toString();
     }
@@ -75,9 +83,10 @@ final class PushGroup {
         List<Line> lines = new ArrayList<>();
         for (int i = 1; i < records.length; i++) {
             String[] fields = records[i].split(String.valueOf(FIELD), -1);
-            if (fields.length != 3) return new PushGroup();
+            // 3 campos: guardado antes do avatar na notificação.
+            if (fields.length != 3 && fields.length != 4) return new PushGroup();
             try {
-                lines.add(new Line(fields[1], fields[2], Long.parseLong(fields[0])));
+                lines.add(new Line(fields[1], fields[2], Long.parseLong(fields[0]), fields.length == 4 ? fields[3] : ""));
             } catch (NumberFormatException e) {
                 return new PushGroup();
             }

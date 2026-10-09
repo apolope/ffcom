@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -214,4 +215,74 @@ func (s *PushStore) SetMute(ctx context.Context, accountID, address, channelID s
 		return fmt.Errorf("push_mutes: set: %w", err)
 	}
 	return nil
+}
+
+// CreateAvatarLink guarda o hash de um link novo para o avatar de
+// accountID, válido até expiresAt. Ver internal/httpapi/push_avatar.go.
+func (s *PushStore) CreateAvatarLink(ctx context.Context, tokenHash []byte, accountID string, expiresAt time.Time) error {
+	const query = `INSERT INTO push_avatar_links (token_hash, account_id, expires_at) VALUES ($1, $2, $3)`
+	if _, err := s.pool.Exec(ctx, query, tokenHash, accountID, expiresAt); err != nil {
+		return fmt.Errorf("push_avatar_links: create: %w", err)
+	}
+	return nil
+}
+
+// AvatarLinkAccount devolve a conta e o vencimento do link de hash
+// tokenHash. Link vencido (mesmo antes da limpeza) e desconhecido dão o
+// mesmo ErrNotFound. Ler não consome o link.
+func (s *PushStore) AvatarLinkAccount(ctx context.Context, tokenHash []byte) (accountID string, expiresAt time.Time, err error) {
+	const query = `SELECT account_id, expires_at FROM push_avatar_links WHERE token_hash = $1 AND expires_at > now()`
+	err = s.pool.QueryRow(ctx, query, tokenHash).Scan(&accountID, &expiresAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", time.Time{}, ErrNotFound
+	}
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("push_avatar_links: get: %w", err)
+	}
+	return accountID, expiresAt, nil
+}
+
+// PurgeExpiredAvatarLinks apaga os links vencidos e devolve quantos.
+func (s *PushStore) PurgeExpiredAvatarLinks(ctx context.Context) (int64, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM push_avatar_links WHERE expires_at <= now()`)
+	if err != nil {
+		return 0, fmt.Errorf("push_avatar_links: purge: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
+// PushAvatar é o avatar de quem mandou uma notificação: a conta e quando o
+// perfil mudou pela última vez (versão do avatar para o cache do app).
+type PushAvatar struct {
+	AccountID string
+	UpdatedAt time.Time
+}
+
+// AvatarByAccountID devolve o avatar de accountID, ou ErrNotFound se a
+// conta não tem avatar.
+func (s *PushStore) AvatarByAccountID(ctx context.Context, accountID string) (PushAvatar, error) {
+	return s.avatarWhere(ctx, `a.id = $1`, accountID)
+}
+
+// AvatarBySubject é AvatarByAccountID a partir do "sub" do Authentik (o
+// que o server-channel conhece de cada membro). Subject sem conta ou sem
+// avatar dá ErrNotFound.
+func (s *PushStore) AvatarBySubject(ctx context.Context, subject string) (PushAvatar, error) {
+	return s.avatarWhere(ctx, `a.oidc_subject = $1`, subject)
+}
+
+func (s *PushStore) avatarWhere(ctx context.Context, where, arg string) (PushAvatar, error) {
+	query := `
+		SELECT a.id, p.updated_at FROM accounts a JOIN profiles p ON p.account_id = a.id
+		WHERE ` + where + ` AND p.avatar_url IS NOT NULL
+	`
+	var out PushAvatar
+	err := s.pool.QueryRow(ctx, query, arg).Scan(&out.AccountID, &out.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return PushAvatar{}, ErrNotFound
+	}
+	if err != nil {
+		return PushAvatar{}, fmt.Errorf("push: buscar avatar: %w", err)
+	}
+	return out, nil
 }

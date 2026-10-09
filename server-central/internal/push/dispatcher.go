@@ -19,6 +19,15 @@ type Devices interface {
 // cancela o envio.
 type Builder func(ctx context.Context) map[string]string
 
+// AuthorAvatars dá os campos authorAvatar (link do avatar, sem login) e
+// authorKey (versão estável do avatar, chave do cache do app) de quem
+// mandou a notificação. url vazia: sem avatar, e os dois campos ficam de
+// fora. Implementado por httpapi.PushAvatarLinks.
+type AuthorAvatars interface {
+	ForAccount(ctx context.Context, accountID string) (url, key string)
+	ForSubject(ctx context.Context, subject string) (url, key string)
+}
+
 type job struct {
 	accountID string
 	build     Builder
@@ -33,6 +42,7 @@ type job struct {
 type Dispatcher struct {
 	sender  Sender
 	devices Devices
+	avatars AuthorAvatars
 	jobs    chan job
 	pending sync.WaitGroup
 }
@@ -44,6 +54,37 @@ func NewDispatcher(sender Sender, devices Devices, workers, queueSize int) *Disp
 		go d.run()
 	}
 	return d
+}
+
+// SetAuthorAvatars liga o avatar de quem mandou nas notificações. Chamar
+// antes do primeiro Notify.
+func (d *Dispatcher) SetAuthorAvatars(a AuthorAvatars) {
+	if d != nil {
+		d.avatars = a
+	}
+}
+
+// AddAuthorAvatar põe em data os campos authorAvatar e authorKey da conta
+// accountID ou, sem ela, do "sub" subject. Sem avatar, sem AuthorAvatars ou
+// com erro, data fica como está (o app mostra a letra).
+func (d *Dispatcher) AddAuthorAvatar(ctx context.Context, data map[string]string, accountID, subject string) {
+	if d == nil || d.avatars == nil {
+		return
+	}
+	var url, key string
+	switch {
+	case accountID != "":
+		url, key = d.avatars.ForAccount(ctx, accountID)
+	case subject != "":
+		url, key = d.avatars.ForSubject(ctx, subject)
+	}
+	if url == "" {
+		return
+	}
+	data["authorAvatar"] = url
+	if key != "" {
+		data["authorKey"] = key
+	}
 }
 
 // Enabled diz se o push está ligado.

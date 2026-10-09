@@ -74,6 +74,10 @@ func NewRouter(verifier *auth.Verifier, db *store.Store, avatarFiles *storage.Av
 	mux.Handle("PUT /api/push/mutes", protected(handleSetPushMute(db.Push)))
 	// Chamada por server-channel, sem conta: o grant é a credencial.
 	mux.Handle("POST "+pushNotifyPath, handlePushNotify(db.Push, pushDispatcher, newPushLimits()))
+	// Avatar de quem mandou, baixado pelo serviço de push do app sem login:
+	// o token aleatório do link é a credencial (ver push_avatar.go). Entra
+	// no rate limit geral, pelo IP.
+	mux.Handle("GET "+pushAvatarsPathPrefix+"{token}", handleGetPushAvatar(db.Push, avatarFiles))
 
 	optional := auth.OptionalAccount(verifier, db.Accounts)
 	mux.Handle("GET /api/ideas", optional(handleListIdeas(db.Ideas, ideasCfg)))
