@@ -156,6 +156,8 @@ Token bucket em memória por usuário, aplicado a toda a API exceto `/healthz` (
 
 Base URL: `KnownServer.baseUrl`, uma por servidor cadastrado no client (endereço completo informado pelo self-hoster ou embutido num link de convite).
 
+**Link de convite.** Montado e lido só no client (`client/src/lib/inviteLink.ts`), sem rota própria no backend: `https://app.ffcom.a3sitsolutions.com.br/convite?server=<endereço>&invite=<código>&name=<nome>`, com `server` sendo a base URL do server-channel sem barra final, `invite` o `code` devolvido por `POST /api/invites` e `name` (opcional) o nome com que quem convida chama o servidor, todos codificados como query string. Gerado no navegador, a origem é a da página; no desktop e no app Android, a oficial. O client abre o caminho `/convite` no "Adicionar servidor" já preenchido, e o app Android o recebe por App Link. O formato antigo, `<endereço>/?invite=<código>&name=<nome>`, continua aceito ao colar. Ver `docs/architecture.md`, "Decisão: convites pelo domínio do app (fase 4)".
+
 ### REST
 
 | Método | Rota | Auth | Request | Response | Erros |

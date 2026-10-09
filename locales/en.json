@@ -118,13 +118,14 @@
       "namePlaceholder": "Server name",
       "inviteCode": "Invite code",
       "inviteCodePlaceholder": "Leave blank if you own this server",
+      "fromInvite": "You opened an invite. Check the details and confirm to join the server.",
       "insecureAddress": "The address must use https:// (http:// is only accepted for localhost)",
       "adding": "Adding…",
       "failed": "failed to add the server"
     },
     "invite": {
       "title": "Invite people to {{server}}",
-      "hint": "Generate a link and share it with the people you want to invite. The link already carries this server's address, so they just paste it into \"Add a server\".",
+      "hint": "Generate a link and share it with the people you want to invite. Opening the link goes straight to the invite, in the app or in the browser. It can also be pasted into \"Add a server\".",
       "copied": "Copied!",
       "generating": "Generating…",
       "generate": "Generate invite code",

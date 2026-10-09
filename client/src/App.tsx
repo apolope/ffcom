@@ -61,6 +61,8 @@ import {
 } from './lib/serverChannelApi'
 import { friendRequestName, sendPresenceIdleFrame } from './lib/serverCentralApi'
 import { markRead } from './lib/unread'
+import type { ParsedInvite } from './lib/inviteLink'
+import { onPendingInvite, takePendingInvite } from './lib/pendingInvite'
 import { NO_STRUCTURE_PERMISSIONS, PERMISSIONS, hasPermission, structurePermissionsOf } from './lib/permissions'
 import type { Category } from './types'
 import './App.css'
@@ -130,6 +132,8 @@ function App() {
   const [selectedServerId, setSelectedServerId] = useState<string>()
   const [showFriends, setShowFriends] = useState(false)
   const [showAddServer, setShowAddServer] = useState(false)
+  // Convite da rota /convite que abriu o "Adicionar servidor" já preenchido.
+  const [addServerInvite, setAddServerInvite] = useState<ParsedInvite>()
   const [showInviteServer, setShowInviteServer] = useState(false)
   const [showManageRoles, setShowManageRoles] = useState(false)
   const [showAddFriend, setShowAddFriend] = useState(false)
@@ -171,6 +175,23 @@ function App() {
       window.history.back()
     }
   }, [drawerOpen])
+
+  // Convite aberto pela rota /convite (lib/pendingInvite.ts): guardado até
+  // haver sessão (inclusive através do login) e mostrado no "Adicionar
+  // servidor" já preenchido. Chegando outro com a página aberta (App Link no
+  // Android), abre na hora. Ver docs/architecture.md, "Decisão: convites
+  // pelo domínio do app (fase 4)".
+  useEffect(() => {
+    if (status !== 'signed-in') return
+    const openPendingInvite = () => {
+      const invite = takePendingInvite()
+      if (!invite) return
+      setAddServerInvite(invite)
+      setShowAddServer(true)
+    }
+    openPendingInvite()
+    return onPendingInvite(openPendingInvite)
+  }, [status])
 
   const selectedFriend = friends.find((f) => f.accountId === selectedFriendId)
 
@@ -680,7 +701,15 @@ function App() {
                 </div>
               )}
               {showAddServer && (
-                <AddServerDialog onAdd={addServer} onClose={() => setShowAddServer(false)} />
+                <AddServerDialog
+                  key={addServerInvite ? `${addServerInvite.address} ${addServerInvite.inviteCode}` : 'manual'}
+                  onAdd={addServer}
+                  initialInvite={addServerInvite}
+                  onClose={() => {
+                    setShowAddServer(false)
+                    setAddServerInvite(undefined)
+                  }}
+                />
               )}
               {showInviteServer && server && (
                 <InviteServerDialog

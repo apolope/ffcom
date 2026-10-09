@@ -9,6 +9,11 @@
 export const AUTHENTIK_ISSUER = 'https://auth.ffcom.a3sitsolutions.com.br/application/o/ffcom/'
 export const AUTHENTIK_CLIENT_ID = 'ffcom'
 export const AUTH_CALLBACK_PATH = '/auth/callback'
+// Endereço oficial do client web. É o domínio dos App Links do app Android
+// (login e convites) e o destino dos links de convite gerados no desktop e no
+// app, onde window.location não é um endereço que se possa compartilhar. Ver
+// docs/architecture.md, "Decisão: convites pelo domínio do app (fase 4)".
+export const APP_WEB_ORIGIN = 'https://app.ffcom.a3sitsolutions.com.br'
 // Retorno do login do app desktop empacotado, que entra pelo navegador do
 // sistema (ver docs/architecture.md, "Decisão: login do app desktop no
 // navegador do sistema"). O esquema é registrado por client/electron/main.ts.
@@ -20,7 +25,7 @@ export const DESKTOP_AUTH_CALLBACK_URL = 'ffcom://auth/callback'
 // mostra components/AndroidAuthHandoff.tsx. Ver docs/architecture.md,
 // "Decisão: login do app Android no navegador do sistema (fase 3)".
 export const ANDROID_AUTH_CALLBACK_PATH = '/auth/android'
-export const ANDROID_AUTH_CALLBACK_URL = `https://app.ffcom.a3sitsolutions.com.br${ANDROID_AUTH_CALLBACK_PATH}`
+export const ANDROID_AUTH_CALLBACK_URL = `${APP_WEB_ORIGIN}${ANDROID_AUTH_CALLBACK_PATH}`
 
 // "Esqueci minha senha": fluxo de recuperação do FFCom na brand própria do
 // Authentik (domínio auth.ffcom), o mesmo em que cai o link do e-mail de

@@ -119,13 +119,14 @@
       "namePlaceholder": "Nome do servidor",
       "inviteCode": "Código de convite",
       "inviteCodePlaceholder": "Deixe em branco se você for o dono deste servidor",
+      "fromInvite": "Você abriu um convite. Confira os dados e confirme para entrar no servidor.",
       "insecureAddress": "Endereço precisa usar https:// (http:// só é aceito para localhost)",
       "adding": "Adicionando…",
       "failed": "falha ao adicionar servidor"
     },
     "invite": {
       "title": "Convidar para {{server}}",
-      "hint": "Gere um link e compartilhe com quem você quer convidar. O link já leva o endereço deste servidor, então basta colar em \"Adicionar servidor\".",
+      "hint": "Gere um link e compartilhe com quem você quer convidar. Quem abrir o link cai direto no convite, no app ou no navegador. Ele também pode ser colado em \"Adicionar servidor\".",
       "copied": "Copiado!",
       "generating": "Gerando…",
       "generate": "Gerar código de convite",

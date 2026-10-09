@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { errorMessage } from '../lib/apiError'
+import { buildInviteLink } from '../lib/inviteLink'
 import './Dialog.css'
 import './InviteCode.css'
 
@@ -11,23 +12,14 @@ interface InviteServerDialogProps {
   onClose: () => void
 }
 
-// Monta um link de convite auto-contido (endereço + código) para não exigir
-// que o dono divulgue o endereço do servidor por um canal separado do
-// código — ver docs/architecture.md, "Decisão: convite auto-contido". O
-// resgate acontece do outro lado, em AddServerDialog, que reconhece esse
-// formato e separa endereço/código de volta. O nome com que quem convida
-// chama o servidor vai junto (`&name=`) para já preencher o campo de nome.
-function buildInviteLink(serverBaseUrl: string, code: string, serverName: string): string {
-  const base = serverBaseUrl.replace(/\/+$/, '')
-  const params = new URLSearchParams({ invite: code })
-  if (serverName.trim()) params.set('name', serverName.trim())
-  return `${base}/?${params.toString()}`
-}
-
 // Gera um código de convite para este server-channel (ver
 // docs/architecture.md, "Convites obrigatórios para entrar em
 // server-channel"). O resgate acontece do outro lado, em
-// AddServerDialog, junto com o endereço do servidor.
+// AddServerDialog, junto com o endereço do servidor. O link é auto-contido
+// (endereço, código e o nome com que quem convida chama o servidor) e vai
+// pelo domínio do client, na rota /convite, para abrir o app Android pelo
+// App Link: ver lib/inviteLink.ts e docs/architecture.md, "Decisão: convites
+// pelo domínio do app (fase 4)".
 export function InviteServerDialog({
   serverName,
   serverBaseUrl,

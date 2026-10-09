@@ -3,12 +3,15 @@ import type { FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18n from '../i18n'
 import { errorMessage, LocalizedError } from '../lib/apiError'
-import { parseInviteLink } from '../lib/inviteLink'
+import { parseInviteLink, type ParsedInvite } from '../lib/inviteLink'
 import './Dialog.css'
 
 interface AddServerDialogProps {
   onAdd: (address: string, name: string, inviteCode?: string) => Promise<void>
   onClose: () => void
+  // Convite aberto pela rota /convite (lib/pendingInvite.ts): os campos já
+  // vêm preenchidos e a pessoa só confere e confirma.
+  initialInvite?: ParsedInvite
 }
 
 // TLS obrigatório fora de localhost (ver docs/architecture.md, "Criptografia
@@ -37,17 +40,18 @@ function isAddressSecure(address: string): boolean {
 // casos sem exigir que quem está configurando um servidor novo saiba disso.
 //
 // O campo "Endereço" também aceita colar o link gerado por
-// InviteServerDialog (endereço + `?invite=CODE`) — parseInviteLink
-// (lib/inviteLink.ts) separa os dois de volta, para quem só tem o link não
-// precisar copiar/colar duas vezes. A separação acontece ao colar, ao sair
+// InviteServerDialog (`/convite?server=...&invite=...`, ou o antigo
+// endereço + `?invite=CODE`): parseInviteLink (lib/inviteLink.ts) separa
+// endereço e código de volta, para quem só tem o link não precisar
+// copiar/colar duas vezes. A separação acontece ao colar, ao sair
 // do campo e no envio, nunca a cada tecla: digitando, `?invite=J` já é um
 // link válido e o resto do código iria parar no fim do endereço. Ver
 // docs/architecture.md, "Decisão: convite auto-contido".
-export function AddServerDialog({ onAdd, onClose }: AddServerDialogProps) {
+export function AddServerDialog({ onAdd, onClose, initialInvite }: AddServerDialogProps) {
   const { t } = useTranslation()
-  const [address, setAddress] = useState('')
-  const [name, setName] = useState('')
-  const [inviteCode, setInviteCode] = useState('')
+  const [address, setAddress] = useState(initialInvite?.address ?? '')
+  const [name, setName] = useState(initialInvite?.name ?? '')
+  const [inviteCode, setInviteCode] = useState(initialInvite?.inviteCode ?? '')
   const [error, setError] = useState<unknown>()
   const [submitting, setSubmitting] = useState(false)
 
@@ -94,6 +98,7 @@ export function AddServerDialog({ onAdd, onClose }: AddServerDialogProps) {
         onSubmit={handleSubmit}
       >
         <h2>{t('server.add.title')}</h2>
+        {initialInvite && <p className="dialog-hint">{t('server.add.fromInvite')}</p>}
         <label>
           {t('server.add.address')}
           <input
@@ -110,7 +115,7 @@ export function AddServerDialog({ onAdd, onClose }: AddServerDialogProps) {
             }}
             onBlur={() => splitInviteLink(address)}
             required
-            autoFocus
+            autoFocus={!initialInvite}
           />
         </label>
         <label>

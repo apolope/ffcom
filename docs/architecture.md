@@ -518,6 +518,8 @@ Há bastante espaço sobrando no `BIGINT` para bits futuros (canal forum, gerenc
 
 **Extensão (2026-09-30): nome do servidor no link.** O nome de exibição de um servidor não mora no `server-channel`, e sim em `known_servers.name` de cada conta, digitado por quem adiciona. Ao chamar amigos para a instância de teste, cada um acabaria com um nome diferente para o mesmo servidor. Alternativas: um nome canônico no `server-channel` (endpoint e coluna novos, e decidir como ele convive com o nome de cada conta), ou levar o nome no próprio link. Escolhida a segunda, sem backend: `buildInviteLink` (`InviteServerDialog.tsx`) acrescenta `&name=` com o nome que quem convida usa, e `parseInviteLink` (`AddServerDialog.tsx`) preenche o campo de nome só se ele estiver vazio, sem passar por cima do que a pessoa digitou; links antigos, sem `name`, continuam valendo. Na mesma data, os `known_servers` que apontavam para `channel-test` foram renomeados à mão para "Games With Respect" no banco do `server-central`, e `ivaldoneto19` passou a ser dono do `channel-test` junto com `apolonio.serafim` (`members.is_owner`, que nunca teve restrição de dono único); cópia das linhas anteriores em `~/ffcom-backups/` no host. **Revisitar quando:** um dono quiser renomear o servidor para todos os membros de uma vez, o que pede o nome canônico no `server-channel`.
 
+**Formato novo (2026-10-08):** o link passou a ir pelo domínio do client (`/convite?server=...&invite=...&name=...`), para abrir o app Android pelo App Link. O formato desta decisão continua aceito ao colar. Ver "Decisão: convites pelo domínio do app (fase 4)".
+
 ## Decisão: versionamento e release dos binários — semver independente por componente, disparado por git tag
 
 **Contexto:** os três workflows de deploy (`deploy-ffcom-{central,channel,client}.yml`) só tinham `workflow_dispatch` manual, taggeando a imagem GHCR só com o sha curto do commit (`git rev-parse --short HEAD`) — nenhum conceito de versão, changelog ou release existia (TODO "Definir versionamento e forma de release dos binários").
@@ -2019,6 +2021,30 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 - Se o Android não passar o link ao app (domínio sem verificar, Chrome desativado), o login para na página do item 7, e a saída é o web.
 
 **Revisitar quando:** o "Conferir" da fase 3 rodar num aparelho (se o App Link passar sem gesto, o `prompt=login` pode virar o mesmo critério do desktop, só depois de sair), a fase 4 tratar o `/convite`, ou a chave do APK mudar (o SHA-256 novo entra no `assetlinks.json` antes do APK novo sair).
+
+## Decisão: convites pelo domínio do app (fase 4)
+
+**Contexto:** o link de convite era `<endereço do server-channel>/?invite=<código>&name=<nome>` (ver "Decisão: convite auto-contido"). O endereço do server-channel é de qualquer domínio, então o Android não tem como verificar um App Link para ele, e abrir o link no celular caía na resposta crua do server-channel. A pessoa precisava copiar o link e colar em "Adicionar servidor".
+
+**Alternativas consideradas:** (1) esquema próprio (`ffcom://convite?...`), que o Android abre sem verificação, mas que o WhatsApp e outros apps não mostram como link clicável e que sem o app não leva a lugar nenhum; (2) o server-channel responder a `/?invite=` com uma página que tenta abrir o app, o que exigiria mudança em todo servidor self-hosted e ainda assim não seria App Link verificado; (3) o link ir pelo domínio do client, que já tem App Link verificado desde a fase 3.
+
+**Decisão:** opção 3, sem mudança de backend.
+
+1. **Formato:** `https://app.ffcom.a3sitsolutions.com.br/convite?server=<endereço>&invite=<código>&name=<nome>`, com os valores codificados por `URLSearchParams`. Montado por `buildInviteLink` em `client/src/lib/inviteLink.ts`, chamado pelo `InviteServerDialog`.
+2. **Origem do link:** a da própria página quando ela é http(s) (o client publicado, ou `localhost` em desenvolvimento, que gera links testáveis localmente); a oficial (`APP_WEB_ORIGIN` em `client/src/auth/config.ts`) no desktop (`app://ffcom`) e no app Android. Um client publicado em outro domínio gera links para ele mesmo.
+3. **Leitura:** `parseInviteLink` aceita os dois formatos. Com o caminho `/convite` lê `server`, `invite` e `name`; fora dele, trata a URL como o formato antigo (endereço + `?invite=`). Links antigos colados em "Adicionar servidor" ou no aviso de membro expulso continuam valendo.
+4. **Rota `/convite` no client** (`client/src/lib/pendingInvite.ts`): no navegador e no PWA, antes do primeiro render, o `main.tsx` guarda o convite no `sessionStorage` e troca o endereço por `/` com `history.replaceState`, que não empilha entrada nem dispara `popstate` (o "voltar" das gavetas continua igual). Logado, o `App.tsx` abre o "Adicionar servidor" já preenchido, com um aviso de que veio de um convite; a pessoa confere e confirma. Sem sessão, o convite atravessa o login: no web o Authentik volta na mesma aba e o `sessionStorage` continua lá. O nginx e o service worker já servem o `index.html` para caminhos desconhecidos, então `/convite` não pediu mudança de servidor.
+5. **App Android:** o App Link `/convite` (intent filter da fase 3) chega por `appUrlOpen` com o app aberto, ou por `App.getLaunchUrl()` com o app fechado. A WebView continua na raiz (o Capacitor não navega até a URL do intent), e o `pendingInvite.ts` guarda o convite como no web. O listener do login (`auth/androidSignIn.ts`) recebe o mesmo `appUrlOpen` e ignora o que não é `/auth/android`. A última URL de abertura tratada fica no `localStorage`, porque o `getLaunchUrl` devolve a mesma URL a cada reload enquanto a Activity vive.
+6. **Desktop:** o app Electron não registra o link (só o `ffcom://auth/callback` do login). Um `/convite` clicado abre no navegador, como no web, e colar o link no "Adicionar servidor" do desktop continua funcionando.
+
+**Razão:** o domínio do client é o único que controlamos e que já tem `assetlinks.json`. Quem tem o app abre nele; quem não tem cai no client web, que trata o mesmo caminho. O endereço do server-channel continua só dentro do link, sem o backend precisar saber o próprio endereço público.
+
+**Consequências:**
+- O link depende do client oficial estar no ar. Quem só tem o link e um client self-hosted ainda pode colá-lo no "Adicionar servidor", que lê o `server` de dentro dele.
+- O link ficou mais comprido (o endereço vai codificado num parâmetro).
+- Convite aberto sem login no app Android espera o login e abre depois dele, sem recarregar a página.
+
+**Revisitar quando:** o desktop quiser abrir o convite direto (registrar `ffcom://convite` ou tratar o `https` pelo sistema, com o link `https` continuando como fallback), ou um client self-hosted quiser que os links que gera apontem para o domínio oficial.
 
 ## Decisão: notificações push (fase 6)
 
