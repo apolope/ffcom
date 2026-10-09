@@ -7,6 +7,7 @@ import './ChannelSidebar.css'
 import { AvatarWithStatus, MemberAvatar } from './AvatarWithStatus'
 import { useVoiceSession } from './VoiceSessionContext'
 import { ChannelMenu } from './ChannelMenu'
+import { MutedIcon } from './MutedIcon'
 
 const CHANNEL_ICON: Record<ChannelType, string> = {
   text: '#',
@@ -47,8 +48,14 @@ interface ChannelSidebarProps {
   // destino e, se mudou de categoria, a de origem).
   onReorderChannels: (groups: ChannelOrderGroup[]) => void
   // "Silenciar notificações" por canal, no menu de contexto dos canais de
-  // texto e fórum. Ausente onde não há push (navegador, desktop).
-  channelNotifications?: { isMuted: (channelId: string) => boolean; onToggle: (channelId: string) => void }
+  // texto e fórum. Ausente onde não há push (navegador, desktop). Os
+  // silenciados ganham um 🔕 depois do nome; o servidor inteiro silenciado
+  // (serverMuted, pelo ServerMenu) ganha o mesmo 🔕 no cabeçalho.
+  channelNotifications?: {
+    isMuted: (channelId: string) => boolean
+    onToggle: (channelId: string) => void
+    serverMuted: boolean
+  }
 }
 
 // O que está sendo arrastado e onde cairia. Canal solto no cabeçalho ou no
@@ -178,7 +185,10 @@ export function ChannelSidebar({
   return (
     <nav className="channel-sidebar" aria-label={t('channels.title')}>
       <div className="server-name">
-        <span>{server.name}</span>
+        <span>
+          {server.name}
+          {channelNotifications?.serverMuted && <MutedIcon />}
+        </span>
       </div>
       <div className="category-list">
         {structure.createChannels && categories.length === 0 && (
@@ -299,6 +309,7 @@ export function ChannelSidebar({
                             {CHANNEL_ICON[channel.type]}
                           </span>
                           {channel.name}
+                          {channel.type !== 'voice' && channelNotifications?.isMuted(channel.id) && <MutedIcon />}
                           {unreadChannelIds.has(channel.id) && (
                             <span className="unread-dot" aria-label={t('channels.unread')} />
                           )}

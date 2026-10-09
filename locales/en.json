@@ -1165,6 +1165,7 @@
       "unmute": "Unmute notifications",
       "channelMute": "Mute this channel's notifications",
       "channelUnmute": "Unmute notifications",
+      "mutedLabel": "Notifications muted",
       "saveFailed": "Couldn't change notifications. Try again."
     }
   }

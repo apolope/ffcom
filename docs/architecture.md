@@ -2085,6 +2085,10 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Decisão:** um sino (🔔, 🔕 quando silenciado) no cabeçalho do canal de texto ou fórum, só onde há push (o mesmo `push.available` do menu), com `aria-pressed` e o rótulo "Silenciar notificações deste canal" ou "Reativar notificações". Usa o mesmo estado e a mesma chamada do menu. O arrastar fica como está: o arrastar é o HTML5 nativo, e separar "segurar parado" de "segurar e mover" exigiria trocá-lo por um arrastar próprio com eventos de toque. O menu continua abrindo para quem não pode reordenar. No web e no desktop nada muda (sem push, o botão direito segue com o menu do navegador).
 
+**Por que o sino não aparecia no aparelho do dono (client-v0.24.4):** inspecionado pelo `adb`, o WebView rodava o bundle anterior: o service worker antigo serviu o shell antigo e o novo ficou esperando o clique (`registerType: 'prompt'`). O gating (`push.available`) estava certo. Foi considerado aplicar a versão web nova sozinha na abertura do app, e o dono recusou: fica só o botão verde de atualizar, então depois de um deploy web o sino (e o indicador abaixo) só aparece depois de tocar nele.
+
+**Indicador de silenciado:** onde há push, canal silenciado ganha 🔕 logo depois do nome na barra de canais, e servidor silenciado ganha 🔕 no canto do ícone no rail (círculo em `--bg-deep`) e depois do nome no topo da barra de canais (`components/MutedIcon.tsx`, rótulo "Notificações silenciadas"). Sem esmaecer o nome, para não baixar o contraste de `--text` abaixo do mínimo do design system; e logo depois do nome, não na direita da linha, que já tem a bolinha de não lida e os botões de permissões e editar.
+
 ### Quem está vendo o canal (2026-10-09)
 
 **Contexto:** incidente em produção em 2026-10-09: as notificações de canal pararam de chegar no celular do dono. O `server-channel` deixava de mandar push para todos os aparelhos de uma conta se qualquer sessão dela tivesse o WebSocket daquele canal aberto. Uma aba do Chrome escondida ou o app desktop minimizado, com o canal selecionado, segurava o push do celular indefinidamente.

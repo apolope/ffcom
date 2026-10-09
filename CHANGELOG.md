@@ -15,6 +15,9 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## client v0.24.4 · 2026-10-09
+- No app Android, canais silenciados mostram um 🔕 depois do nome, e um servidor silenciado mostra o 🔕 no ícone e no topo da lista de canais.
+
 ## client v0.24.3 · 2026-10-09
 - As notificações do celular chegam mesmo com o FFCom aberto e escondido numa aba ou minimizado no computador. Só deixa de notificar quem está com o canal na tela, com a janela em foco e sem estar ausente.
 - No app Android, um sino no topo do canal silencia as notificações dele.
