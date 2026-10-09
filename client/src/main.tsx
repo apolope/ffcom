@@ -1,7 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import App from './App.tsx'
+import { Root } from './Root'
 import { AuthProvider } from './auth/AuthProvider'
 import { initI18n } from './i18n'
 import { setupAndroidBackButton } from './lib/androidBackButton'
@@ -15,7 +15,7 @@ void setupAndroidBackButton()
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>
-      <App />
+      <Root />
     </AuthProvider>
   </StrictMode>,
 )

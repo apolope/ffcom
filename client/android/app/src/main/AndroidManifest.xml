@@ -18,6 +18,22 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- App Links verificados (assetlinks.json em
+                 https://app.ffcom.a3sitsolutions.com.br/.well-known/): o
+                 retorno do login no Custom Tab (/auth/android) e os convites
+                 (/convite, fase 4). Com o singleTask acima, a URL chega à
+                 Activity aberta por onNewIntent, que o @capacitor/app passa à
+                 página como appUrlOpen. Ver docs/architecture.md, "Decisão:
+                 login do app Android no navegador do sistema (fase 3)". -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="app.ffcom.a3sitsolutions.com.br" />
+                <data android:path="/auth/android" />
+                <data android:path="/convite" />
+            </intent-filter>
         </activity>
 
         <provider

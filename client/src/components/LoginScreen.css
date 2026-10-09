@@ -91,3 +91,9 @@
   font-size: 13px;
   color: var(--text);
 }
+
+/* /auth/android aberto no navegador (AndroidAuthHandoff.tsx). */
+.login-handoff-title {
+  margin: 0;
+  font-size: 18px;
+}

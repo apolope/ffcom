@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "br.com.a3sitsolutions.ffcom",
+      "sha256_cert_fingerprints": [
+        "CB:D4:BB:28:65:13:F1:94:58:B5:F5:3D:11:5B:36:11:18:AB:AE:C9:2A:72:32:F4:CB:89:B8:7E:1A:0B:8E:E3"
+      ]
+    }
+  }
+]

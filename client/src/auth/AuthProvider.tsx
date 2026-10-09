@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { OidcClient, type User } from 'oidc-client-ts'
-import { externalSignIn, userManager } from './userManager'
+import { androidExternalSignIn, desktopExternalSignIn, externalSignIn, userManager } from './userManager'
+import { listenAndroidSignIn, openAndroidSignIn, takeAndroidLaunchCallback } from './androidSignIn'
 import { AUTH_CALLBACK_PATH } from './config'
 import { currentLanguage } from '../i18n'
 
@@ -19,15 +20,29 @@ function signinLocale() {
 // Redirecionamento ao Authentik em andamento. O oidc-client-ts busca o
 // discovery antes de navegar, e no logout remove o usuário antes disso: sem
 // este estado a tela de login aparece com o botão ativo por um instante, e
-// clicar nele ali abria um login novo no meio da saída. No app desktop o
-// login segue no navegador do sistema ('in-browser') até o retorno chegar.
+// clicar nele ali abria um login novo no meio da saída. Nos apps desktop e
+// Android o login segue no navegador do sistema ('in-browser') até o retorno
+// chegar.
 type AuthRedirect = 'signing-in' | 'in-browser' | 'signing-out'
 
 // App desktop: "Sair" só esquece a sessão do app, a do Authentik no navegador
 // continua. Sem esta marca, o "Entrar" seguinte voltaria direto para a mesma
 // conta, sem chance de trocar; com ela, o próximo login pede a senha de novo
-// (prompt=login). O primeiro login aproveita a sessão do navegador.
+// (prompt=login). O primeiro login aproveita a sessão do navegador. O nome da
+// chave fica o do desktop para não perder a marca de quem já saiu.
 const DESKTOP_SIGNED_OUT_KEY = 'ffcom:desktop-signed-out'
+
+// No app Android todo login pede a senha (prompt=login). Com a sessão do
+// Authentik viva no Chrome, o Authentik devolveria o code por redirect sem
+// nenhum toque da pessoa, e o Chrome não costuma passar a um App Link uma
+// navegação sem gesto: o retorno ficaria preso no Custom Tab. O toque em
+// "Entrar" no Authentik (com a senha salva no Chrome, um toque só) garante o
+// gesto. Ver docs/architecture.md, "Decisão: login do app Android no
+// navegador do sistema (fase 3)".
+function externalSigninPrompt(): string | undefined {
+  if (androidExternalSignIn || readDesktopSignedOut()) return 'login'
+  return undefined
+}
 
 function readDesktopSignedOut(): boolean {
   try {
@@ -69,6 +84,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setStatus(u && !u.expired ? 'signed-in' : 'signed-out')
     }
 
+    // Retorno do login do app Android (App Link /auth/android). Uma falha
+    // (state vencido, code recusado) só registra: a sessão que houver
+    // continua valendo.
+    async function completeAndroidSignIn(url: string) {
+      try {
+        const u = await userManager.signinRedirectCallback(url)
+        writeDesktopSignedOut(false)
+        applyUser(u)
+        return true
+      } catch (err) {
+        console.error('ffcom: falha ao concluir login OIDC', err)
+        return false
+      } finally {
+        setRedirecting(undefined)
+      }
+    }
+
     // Retorno do login do app desktop (ffcom://auth/callback), entregue pelo
     // main. O "code" é de uso único: takeAuthCallback devolve cada URL uma
     // vez só, então o aviso e a busca do init não concluem o mesmo login duas
@@ -88,7 +120,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     async function init() {
-      if (externalSignIn && (await completeExternalSignIn())) return
+      if (desktopExternalSignIn && (await completeExternalSignIn())) return
+      if (androidExternalSignIn) {
+        // App aberto pelo App Link do login, com o processo morto enquanto o
+        // Custom Tab estava na frente.
+        const url = await takeAndroidLaunchCallback()
+        if (url && (await completeAndroidSignIn(url))) return
+      }
 
       if (window.location.pathname === AUTH_CALLBACK_PATH) {
         try {
@@ -129,9 +167,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (e.persisted) setRedirecting(undefined)
     }
     window.addEventListener('pageshow', onPageShow)
-    const removeAuthCallbackListener = externalSignIn
+    const removeAuthCallbackListener = desktopExternalSignIn
       ? window.ffcomElectron?.onAuthCallback(() => void completeExternalSignIn())
-      : undefined
+      : androidExternalSignIn
+        ? listenAndroidSignIn(
+            (url) => void completeAndroidSignIn(url),
+            // Custom Tab fechado sem terminar o login: volta o botão "Entrar".
+            () => setRedirecting((r) => (r === 'in-browser' ? undefined : r)),
+          )
+        : undefined
 
     userManager.events.addUserLoaded(applyUser)
     userManager.events.addUserUnloaded(() => applyUser(null))
@@ -160,10 +204,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           new OidcClient(userManager.settings)
             .createSigninRequest({
               request_type: 'si:r',
-              prompt: readDesktopSignedOut() ? 'login' : undefined,
+              prompt: externalSigninPrompt(),
               ...signinLocale(),
             })
-            .then((request) => window.ffcomElectron?.openExternalSignIn(request.url))
+            .then(async (request) => {
+              if (androidExternalSignIn) await openAndroidSignIn(request.url)
+              else await window.ffcomElectron?.openExternalSignIn(request.url)
+            })
             .then(() => setRedirecting('in-browser'))
             .catch((err) => {
               console.error('ffcom: falha ao abrir o login', err)
@@ -183,8 +230,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setRedirecting('signing-out')
         if (externalSignIn) {
           // A sessão do Authentik está no navegador, não nesta janela: o
-          // encerramento por redirect aqui não a alcançaria. Revoga o refresh
-          // token e esquece o usuário; o próximo login pede a senha.
+          // encerramento por redirect aqui não a alcançaria (e no Android o
+          // destino do logout não é um App Link, então ele terminaria no
+          // Custom Tab). Revoga o refresh token e esquece o usuário; o
+          // próximo login pede a senha.
           writeDesktopSignedOut(true)
           userManager
             .revokeTokens(['refresh_token'])

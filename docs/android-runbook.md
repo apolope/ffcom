@@ -86,6 +86,8 @@ Cada fase termina num estado publicável. A **primeira versão pública do APK s
 
 **Conferir:** `adb shell pm get-app-links br.com.a3sitsolutions.ffcom` mostra o domínio como `verified`. Login com a conta salva no Chrome, volta direto ao app, e logout e login de novo funcionam. Conferir também que o desktop e o web continuam logando.
 
+**Build local:** o APK de debug não verifica o App Link (a chave de debug não está no `assetlinks.json`, de propósito). Para testar o login com ele, `adb shell pm set-app-links-user-selection --user cur --package br.com.a3sitsolutions.ffcom true app.ffcom.a3sitsolutions.com.br`. Detalhes, e por que o login no app sempre pede a senha, em "Decisão: login do app Android no navegador do sistema (fase 3)".
+
 ### Fase 4 — convites que abrem o app
 
 1. `InviteServerDialog` passa a gerar `https://app.ffcom.a3sitsolutions.com.br/convite?server=<endereço>&invite=<código>&name=<nome>`.

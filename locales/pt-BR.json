@@ -35,7 +35,12 @@
     "signInPrompt": "Entre com sua conta para acessar seus servidores.",
     "openingSignIn": "Abrindo o login…",
     "reopenSignIn": "Abrir o login de novo",
-    "forgotPassword": "Esqueci minha senha"
+    "forgotPassword": "Esqueci minha senha",
+    "androidHandoff": {
+      "title": "Este endereço é do app para Android",
+      "body": "É aqui que o login volta para o app FFCom no Android, e só o app consegue concluí-lo. Se você entrou pelo app, volte para ele e toque em \"Entrar\" de novo. Para usar o FFCom neste navegador, continue abaixo.",
+      "continue": "Abrir no navegador"
+    }
   },
   "friends": {
     "title": "Amigos",
@@ -705,9 +710,11 @@
       "lead": "O FFCom organiza a conversa do jeito que você já conhece: servidores, categorias e canais de texto, voz e fórum. A diferença está em quem guarda tudo isso, porque cada servidor roda na máquina de quem cria a comunidade, e nenhuma empresa pode desligar, vender ou mudar as regras dele por você.",
       "signIn": "Entrar no FFCom",
       "downloadWindows": "Baixar para Windows",
+      "downloadAndroid": "Baixar para Android",
       "hostServer": "Hospedar um servidor",
       "forgotPassword": "Esqueci minha senha",
-      "windowsNote": "No app para Windows, o próprio app avisa quando há versão nova. Ao instalar, o Windows pode mostrar \"O Windows protegeu o computador\": clique em <strong>Mais informações</strong> e em <strong>Executar assim mesmo</strong>."
+      "windowsNote": "No app para Windows, o próprio app avisa quando há versão nova. Ao instalar, o Windows pode mostrar \"O Windows protegeu o computador\": clique em <strong>Mais informações</strong> e em <strong>Executar assim mesmo</strong>.",
+      "androidNote": "No Android, o app vem como APK, fora da Play Store. Ao abrir o arquivo, o Android pede para <strong>permitir instalar apps desta fonte</strong> (o navegador ou o app de arquivos), e o Play Protect pode avisar que o app é desconhecido: toque em <strong>Mais detalhes</strong> e em <strong>Instalar mesmo assim</strong>. Depois, o próprio app avisa quando há versão nova."
     },
     "mock": {
       "serverName": "Família da Ana",

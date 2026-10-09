@@ -16,8 +16,9 @@ const config: CapacitorConfig = {
   server: {
     url: 'https://app.ffcom.a3sitsolutions.com.br',
     // Só o próprio domínio navega dentro da WebView; qualquer outro endereço
-    // abre fora do app. O login no Authentik passa para o navegador do
-    // sistema na fase 3 do runbook.
+    // abre fora do app. O login no Authentik abre num Custom Tab e volta pelo
+    // App Link /auth/android (auth/androidSignIn.ts; docs/architecture.md,
+    // "Decisão: login do app Android no navegador do sistema (fase 3)").
     allowNavigation: ['app.ffcom.a3sitsolutions.com.br'],
   },
 }
