@@ -39,6 +39,14 @@
       "title": "This address belongs to the Android app",
       "body": "This is where sign-in returns to the FFCom Android app, and only the app can complete it. If you signed in from the app, go back to it and tap \"Sign in\" again. To use FFCom in this browser, continue below.",
       "continue": "Open in the browser"
+    },
+    "desktopHandoff": {
+      "title": "Signed in",
+      "body": "Sign-in was handed to the FFCom app. You can close this tab now. If the app did not open, use the button below.",
+      "openApp": "Open FFCom",
+      "strayTitle": "This address belongs to the Windows app",
+      "strayBody": "This is where sign-in returns to the FFCom Windows app. To use FFCom in this browser, continue below.",
+      "continue": "Open in the browser"
     }
   },
   "friends": {

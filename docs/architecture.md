@@ -1845,6 +1845,20 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Escopo aceito:** o dev do Electron (`http://localhost:5173`) continua com o login dentro da janela. A entrada do esquema no registro do Windows (HKCU) fica para trás ao desinstalar, como em outros apps.
 
+## Decisão: página de passagem no login do desktop — `/auth/desktop`
+
+**Contexto:** com `ffcom://auth/callback` direto no `redirect_uri` ("Decisão: login do app desktop no navegador do sistema"), o app recebia o `code` e entrava, mas a aba do navegador ficava em "carregando" para sempre. No fim do `ffcom-authentication-flow`, o Authentik 2026.8.3 manda a página para o `next` (`/application/o/authorize/...`), que é `https`: o `RedirectStage` do frontend mostra o card de carregamento e navega. Com a sessão aberta e o consentimento implícito, o authorize não abre o flow de autorização: `FlowPlan.to_redirect` com `allowed_silent_types=[OAuthFulfillmentStage]` (`authentik/providers/oauth2/views/authorize.py`, `authentik/flows/planner.py`) responde direto um **302 para `ffcom://...`**. O navegador entrega a URL ao Windows sem trocar de página, e a aba fica no estado anterior. A mensagem "You may close this page now." que o Authentik tem para esquemas próprios (`renderLoading` do `RedirectStage.ts`) só aparece quando o `ffcom://` chega pela página do flow, o que esse atalho pula. Não há configuração do Authentik que desligue o atalho só para um provider.
+
+**Alternativas consideradas:** (1) loopback (`http://127.0.0.1:<porta>`), com o main servindo a página final: mais peças (servidor no main, `redirect_uri` em regex) e destoa do Android. (2) **página `https` de passagem** no domínio do app, como o `/auth/android`. Escolhido (2).
+
+**Decisão:**
+1. O `redirect_uri` do desktop passa a ser `https://app.ffcom.a3sitsolutions.com.br/auth/desktop` (`DESKTOP_AUTH_CALLBACK_URL` em `client/src/auth/config.ts`). O resto do login do desktop não muda: o main continua recebendo `ffcom://auth/callback` (`DESKTOP_APP_CALLBACK_URL`), e o `userManager.signinRedirectCallback(url)` usa o `redirect_uri` guardado no `state` na troca do `code`.
+2. `src/Root.tsx` mostra `components/DesktopAuthHandoff.tsx` em `/auth/desktop` fora do Electron. A página tira `code`/`state` (ou o `error` do Authentik) da barra de endereço, abre `ffcom://auth/callback?<mesmos parâmetros>` uma vez e fica em "Login concluído, você já pode fechar esta aba", com o botão "Abrir o FFCom" (um link para a mesma URL) caso o navegador não tenha aberto o app. Sem parâmetros (endereço aberto à mão), explica que é do app para Windows e oferece "Abrir no navegador".
+3. Nada muda no `client/nginx.conf` nem no service worker: `/auth/` já cai no `index.html` do fallback de SPA e já está fora do fallback do service worker.
+4. **Authentik (antes do deploy do `client-v*`):** `https://app.ffcom.a3sitsolutions.com.br/auth/desktop` entra nos `redirect_uris` do provider `ffcom` (`providers-ffcom.yaml`, repo `abs-3d-printer`). O `ffcom://auth/callback` continua lá para as versões instaladas que ainda não atualizaram; nelas a aba segue em "carregando" até a atualização.
+
+**Escopo aceito:** o `code` passa pela página `https` do app antes de chegar ao app, como no web e no Android; sem o `code_verifier`, que fica no app, ele não serve a mais ninguém. Quem tinha marcado "sempre permitir" para abrir o `ffcom://` vê a pergunta do navegador mais uma vez, porque a origem que abre o esquema passa a ser `app.ffcom` em vez de `auth.ffcom`.
+
 ## Decisão: chamada de voz continua ao navegar
 
 **Contexto:** em 2026-10-02 as pessoas reclamaram que a chamada "caía". O LiveKit registrou `CLIENT_REQUEST_LEAVE` em todas as 12 quedas, e o access log do proxy mostrou que, no mesmo segundo de cada uma, a pessoa tinha aberto um canal de texto ou um fórum. A sala ficava dentro do `VoiceChannelView`, que só existe com o canal de voz selecionado, e um efeito do `useVoiceChannel` saía da sala ao desmontar, de propósito ("nunca deixar uma sala conectada sem UI"). No Discord a pessoa continua na voz enquanto lê os canais de texto.
