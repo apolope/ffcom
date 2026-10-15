@@ -15,6 +15,14 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## client v0.26.0 · 2026-10-14
+- O microfone tem três modos: **manual** (abre e fecha pelo botão), **automático** (abre enquanto segura a tecla) e **semiautomático** (uma tecla fecha e, apertada de novo, abre). Quem já usava o atalho de mutar passa direto para o semiautomático.
+- Na barra lateral, quem está com o microfone fechado ganha um 🔇 do lado do nome. Nas salas em que você não está, precisa do servidor na `channel` v0.13.0 ou mais nova.
+- O anel verde de quem está falando não fica mais cortado no avatar da barra lateral.
+
+## channel v0.13.0 · 2026-10-14
+- A lista de quem está em cada sala de voz diz também quem está com o microfone fechado, para o app mostrar o 🔇 na barra lateral.
+
 ## client v0.25.0 · 2026-10-14
 - No fórum, dá para anexar um arquivo ao abrir um tópico e ao responder, pelo mesmo clipe do chat. Imagens aparecem no post e os outros arquivos viram link para baixar. Com anexo, o texto do post é opcional. Precisa do servidor na `channel` v0.12.0 ou mais nova.
 

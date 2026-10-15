@@ -2,6 +2,7 @@ package livekit
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -62,9 +63,37 @@ func TestRoomClientAgainstLiveKit(t *testing.T) {
 	if len(participants) != 1 || participants[0].Identity != "member-1" || participants[0].Name != "Ana" {
 		t.Fatalf("participantes inesperados: %+v", participants)
 	}
+	// Entrou pela sinalização sem publicar nada: microfone fechado.
+	if !participants[0].MicMuted {
+		t.Error("participante sem faixa de microfone deveria vir com MicMuted")
+	}
 
 	if _, err := NewRoomClient(baseURL, key, "segredo-errado-segredo-errado-xx").ListRoomNames(ctx); err == nil {
 		t.Fatal("esperava erro com segredo errado")
+	}
+}
+
+func TestMicMuted(t *testing.T) {
+	cases := []struct {
+		name   string
+		tracks string
+		want   bool
+	}{
+		{"sem faixas", `[]`, true},
+		{"só câmera", `[{"source":"CAMERA"}]`, true},
+		{"microfone aberto", `[{"source":"MICROPHONE"}]`, false},
+		{"microfone mutado", `[{"source":"MICROPHONE","muted":true}]`, true},
+		{"microfone aberto como número", `[{"source":2,"muted":false}]`, false},
+		{"tela com áudio e microfone mutado", `[{"source":"SCREEN_SHARE_AUDIO"},{"source":"MICROPHONE","muted":true}]`, true},
+	}
+	for _, c := range cases {
+		var tracks []participantTrack
+		if err := json.Unmarshal([]byte(c.tracks), &tracks); err != nil {
+			t.Fatal(err)
+		}
+		if got := micMuted(tracks); got != c.want {
+			t.Errorf("%s: micMuted = %v, esperava %v", c.name, got, c.want)
+		}
 	}
 }
 

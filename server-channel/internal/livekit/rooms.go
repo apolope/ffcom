@@ -55,6 +55,9 @@ func APIURLFromPublicURL(publicURL string) string {
 type Participant struct {
 	Identity string
 	Name     string
+	// MicMuted: sem faixa de microfone publicada ou com ela mutada (quem
+	// entrou e nunca abriu o microfone, ou está no push-to-talk sem falar).
+	MicMuted bool
 }
 
 // ListRoomNames devolve o nome das salas abertas agora. Nome da sala é o id
@@ -87,6 +90,7 @@ func (c *RoomClient) ListParticipants(ctx context.Context, room string) ([]Parti
 			Permission *struct {
 				Hidden bool `json:"hidden"`
 			} `json:"permission"`
+			Tracks []participantTrack `json:"tracks"`
 		} `json:"participants"`
 	}
 	if err := c.call(ctx, "ListParticipants", adminGrant{RoomAdmin: true, Room: room}, map[string]string{"room": room}, &resp); err != nil {
@@ -97,7 +101,7 @@ func (c *RoomClient) ListParticipants(ctx context.Context, room string) ([]Parti
 		if p.State == "DISCONNECTED" || (p.Permission != nil && p.Permission.Hidden) {
 			continue
 		}
-		out = append(out, Participant{Identity: p.Identity, Name: p.Name})
+		out = append(out, Participant{Identity: p.Identity, Name: p.Name, MicMuted: micMuted(p.Tracks)})
 	}
 	return out, nil
 }
@@ -167,4 +171,26 @@ func (c *RoomClient) call(ctx context.Context, method string, grant adminGrant, 
 		return fmt.Errorf("livekit: %s: status %d: %s", method, resp.StatusCode, strings.TrimSpace(string(msg)))
 	}
 	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+// participantTrack é o subconjunto de TrackInfo usado para saber se o
+// microfone está aberto. Source fica cru porque o JSON do Twirp manda enum
+// pelo nome ("MICROPHONE"), mas aceitar o número (2) não custa nada.
+type participantTrack struct {
+	Source json.RawMessage `json:"source"`
+	Muted  bool            `json:"muted"`
+}
+
+func (t participantTrack) isMicrophone() bool {
+	s := strings.TrimSpace(string(t.Source))
+	return s == `"MICROPHONE"` || s == "2"
+}
+
+func micMuted(tracks []participantTrack) bool {
+	for _, t := range tracks {
+		if t.isMicrophone() && !t.Muted {
+			return false
+		}
+	}
+	return true
 }

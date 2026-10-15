@@ -41,7 +41,7 @@ export function VoiceConnectionBar({ onOpen }: VoiceConnectionBarProps) {
       )}
       {/* No push-to-talk o microfone é da tecla de falar: alternar aqui o
           deixaria aberto. */}
-      {connected && !voicePrefs.pushToTalk && (
+      {connected && voicePrefs.micMode !== 'pushToTalk' && (
         <button
           type="button"
           className="voice-connection-icon"

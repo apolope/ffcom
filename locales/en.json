@@ -172,6 +172,7 @@
     "editChannelNamed": "Edit channel {{name}}",
     "voiceRoom": "In {{name}}",
     "youSuffix": "(you)",
+    "micMuted": "Microphone muted",
     "createCategory": "Create new category",
     "types": {
       "text": "Text",
@@ -226,6 +227,7 @@
     },
     "shortcut": {
       "muteLabel": "Mute shortcut",
+      "toggleLabel": "Mute/unmute key",
       "unsupportedKey": "Unsupported key. Use a letter, a number, F1-F24, or space.",
       "needsModifier": "Use Ctrl, Alt, or Win with the key (or an F key on its own).",
       "pressKey": "Press the key (Esc to cancel)",
@@ -269,8 +271,14 @@
     "shareScreen": "Share screen",
     "stopScreenShare": "Stop sharing",
     "micMode": "Microphone mode",
-    "openMic": "Voice activity",
-    "pushToTalk": "Push to talk",
+    "micModes": {
+      "manual": "Manual",
+      "manualHint": "Click the button to open and mute the microphone.",
+      "pushToTalk": "Automatic",
+      "pushToTalkHint": "The microphone opens while you hold the key and mutes when you release it.",
+      "toggle": "Semi-automatic",
+      "toggleHint": "Press the key to mute the microphone and press it again to open it."
+    },
     "enhancedNoiseSuppression": "Enhanced noise suppression",
     "enhancedNoiseSuppressionHint": "Filters out typing, fans and background noise with RNNoise instead of the browser's suppression. Uses a bit more processing.",
     "noiseSuppressionFailed": "Enhanced noise suppression didn't work here; using the browser's instead.",

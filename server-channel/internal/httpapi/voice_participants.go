@@ -120,7 +120,7 @@ func handleListVoiceParticipants(presence *voicePresence, channels *store.Channe
 			}
 			views := make([]voiceParticipantView, len(participants))
 			for i, p := range participants {
-				views[i] = voiceParticipantView{MemberID: p.Identity, Name: p.Name}
+				views[i] = voiceParticipantView{MemberID: p.Identity, Name: p.Name, MicMuted: p.MicMuted}
 			}
 			out[c.ID] = views
 		}
@@ -140,4 +140,7 @@ type listVoiceParticipantsResponse struct {
 type voiceParticipantView struct {
 	MemberID string `json:"memberId"`
 	Name     string `json:"name"`
+	// Microfone fechado, na foto do LiveKit (até o cache de voicePresence
+	// de atraso).
+	MicMuted bool `json:"micMuted"`
 }

@@ -4,6 +4,7 @@ import { participantAudioOf } from '../lib/participantAudio'
 import { formatNumber } from '../lib/format'
 import { isAndroidApp } from '../lib/platform'
 import { formatShortcut } from '../lib/shortcut'
+import type { MicMode } from '../lib/voicePrefs'
 import { MuteShortcutSetting } from './MuteShortcutSetting'
 import { ParticipantVolumeControls } from './ParticipantVolumeControls'
 import { ScreenSharePicker } from './ScreenSharePicker'
@@ -21,6 +22,9 @@ interface VoiceChannelViewProps {
 // pede um token novo em server-channel (hooks/useVoiceChannel.ts). A chamada
 // em si é da sessão (VoiceSessionProvider): esta tela só a mostra quando é a
 // deste canal, e sair dela não sai da chamada.
+// Semiautomático depende de tecla, que o app Android não tem.
+const micModes: MicMode[] = isAndroidApp() ? ['manual', 'pushToTalk'] : ['manual', 'pushToTalk', 'toggle']
+
 export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
   const {
     target,
@@ -213,7 +217,7 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
             />
           )}
           <div className="voice-controls">
-            {voicePrefs.pushToTalk ? (
+            {voicePrefs.micMode === 'pushToTalk' ? (
               <button
                 type="button"
                 className={micEnabled ? 'voice-ptt-button talking' : 'voice-ptt-button'}
@@ -245,24 +249,17 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
           </div>
           <div className="voice-prefs">
             <div className="voice-pref voice-mode" role="radiogroup" aria-label={t('voice.micMode')}>
-              <label className="voice-pref">
-                <input
-                  type="radio"
-                  name="voice-mode"
-                  checked={!voicePrefs.pushToTalk}
-                  onChange={() => updateVoicePrefs({ pushToTalk: false })}
-                />
-                {t('voice.openMic')}
-              </label>
-              <label className="voice-pref">
-                <input
-                  type="radio"
-                  name="voice-mode"
-                  checked={voicePrefs.pushToTalk}
-                  onChange={() => updateVoicePrefs({ pushToTalk: true })}
-                />
-                {t('voice.pushToTalk')}
-              </label>
+              {micModes.map((mode) => (
+                <label key={mode} className="voice-pref" title={t(`voice.micModes.${mode}Hint`)}>
+                  <input
+                    type="radio"
+                    name="voice-mode"
+                    checked={voicePrefs.micMode === mode}
+                    onChange={() => updateVoicePrefs({ micMode: mode })}
+                  />
+                  {t(`voice.micModes.${mode}`)}
+                </label>
+              ))}
             </div>
             <label className="voice-pref" title={t('voice.enhancedNoiseSuppressionHint')}>
               <input
@@ -279,7 +276,7 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
                 checked={voicePrefs.micToggleSound}
                 onChange={() => updateVoicePrefs({ micToggleSound: !voicePrefs.micToggleSound })}
               />
-              {voicePrefs.pushToTalk ? t('voice.soundOnPushToTalk') : t('voice.soundOnMute')}
+              {voicePrefs.micMode === 'pushToTalk' ? t('voice.soundOnPushToTalk') : t('voice.soundOnMute')}
             </label>
             <label className="voice-pref">
               <input
@@ -289,9 +286,13 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
               />
               {t('voice.soundOnJoinLeave')}
             </label>
+            {voicePrefs.micMode === 'manual' && (
+              <span className="voice-prefs-note">{t('voice.micModes.manualHint')}</span>
+            )}
             {/* Atalhos de teclado não existem no app Android: lá o apertar
-                para falar é só o botão "Segure para falar". */}
-            {isAndroidApp() ? null : voicePrefs.pushToTalk ? (
+                para falar é só o botão "Segure para falar", e o modo
+                semiautomático nem aparece. */}
+            {!isAndroidApp() && voicePrefs.micMode === 'pushToTalk' && (
               <>
                 <MuteShortcutSetting
                   label={t('voice.shortcut.pushToTalkLabel')}
@@ -308,9 +309,11 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
                   {window.ffcomElectron ? t('voice.pushToTalkHint.desktop') : t('voice.pushToTalkHint.browser')}
                 </span>
               </>
-            ) : (
+            )}
+            {!isAndroidApp() && voicePrefs.micMode === 'toggle' && (
               <>
                 <MuteShortcutSetting
+                  label={t('voice.shortcut.toggleLabel')}
                   shortcut={voicePrefs.muteShortcut}
                   onChange={setMuteShortcut}
                   recording={recording === 'mute'}
@@ -321,9 +324,10 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
                     {t('voice.shortcut.registerFailed')}
                   </span>
                 )}
-                {!window.ffcomElectron && voicePrefs.muteShortcut && (
-                  <span className="voice-prefs-note">{t('voice.shortcut.browserFocusOnly')}</span>
-                )}
+                <span className="voice-prefs-note">
+                  {t('voice.micModes.toggleHint')}
+                  {!window.ffcomElectron && voicePrefs.muteShortcut && <> {t('voice.shortcut.browserFocusOnly')}</>}
+                </span>
               </>
             )}
           </div>

@@ -47,20 +47,20 @@ export function VoiceSessionProvider({ serverIds, children }: VoiceSessionProvid
     accessToken!,
     voicePrefs.micToggleSound,
     participantAudio,
-    voicePrefs.pushToTalk,
+    voicePrefs.micMode === 'pushToTalk',
     voicePrefs.enhancedNoiseSuppression,
     voicePrefs.presenceSound,
   )
-  // Em push-to-talk o atalho de mutar fica desligado (o microfone é da tecla
-  // de falar); no Electron isso também libera a combinação global.
+  // O atalho de mutar só vale no modo semiautomático (toggle); nos outros
+  // fica desligado, e no Electron isso também libera a combinação global.
   const { registerFailed: shortcutRegisterFailed } = useMuteShortcut(
     voicePrefs.muteShortcut,
-    voice.status === 'connected' && !voicePrefs.pushToTalk && recording === undefined,
+    voice.status === 'connected' && voicePrefs.micMode === 'toggle' && recording === undefined,
     voice.toggleMic,
   )
   const { buttonProps: pushToTalkButtonProps } = usePushToTalk(
     voicePrefs.pushToTalkKey,
-    voice.status === 'connected' && voicePrefs.pushToTalk && recording === undefined,
+    voice.status === 'connected' && voicePrefs.micMode === 'pushToTalk' && recording === undefined,
     voice.setTalking,
   )
 
