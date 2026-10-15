@@ -92,8 +92,17 @@
   color: var(--text);
 }
 
-/* /auth/android aberto no navegador (AndroidAuthHandoff.tsx). */
+/* /auth/android aberto no navegador (AndroidAuthHandoff.tsx) e a página de
+   passagem do login do desktop (DesktopAuthHandoff.tsx). */
 .login-handoff-title {
   margin: 0;
   font-size: 18px;
+}
+
+/* "Abrir o FFCom" é um link (ffcom://), com a cara do botão. */
+a.login-button {
+  box-sizing: border-box;
+  display: block;
+  text-align: center;
+  text-decoration: none;
 }

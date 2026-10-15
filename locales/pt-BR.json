@@ -40,6 +40,14 @@
       "title": "Este endereço é do app para Android",
       "body": "É aqui que o login volta para o app FFCom no Android, e só o app consegue concluí-lo. Se você entrou pelo app, volte para ele e toque em \"Entrar\" de novo. Para usar o FFCom neste navegador, continue abaixo.",
       "continue": "Abrir no navegador"
+    },
+    "desktopHandoff": {
+      "title": "Login concluído",
+      "body": "O login foi entregue ao app FFCom. Você já pode fechar esta aba. Se o app não abriu, use o botão abaixo.",
+      "openApp": "Abrir o FFCom",
+      "strayTitle": "Este endereço é do app para Windows",
+      "strayBody": "É aqui que o login volta para o app FFCom no Windows. Para usar o FFCom neste navegador, continue abaixo.",
+      "continue": "Abrir no navegador"
     }
   },
   "friends": {

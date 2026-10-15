@@ -9,7 +9,8 @@ import {
 import { isAndroidApp } from '../lib/platform'
 
 // App desktop empacotado (servido de app://ffcom): o login sai para o
-// navegador do sistema, onde ficam a conta e as senhas salvas, e volta por
+// navegador do sistema, onde ficam a conta e as senhas salvas, e volta pela
+// página https /auth/desktop, que repassa o code ao app por
 // ffcom://auth/callback. No dev do Electron (http://localhost) e no web, o
 // login continua na própria janela. Ver docs/architecture.md, "Decisão:
 // login do app desktop no navegador do sistema".

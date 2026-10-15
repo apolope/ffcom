@@ -66,8 +66,9 @@ function resolveDistFile(pathname: string): string {
 
 // Login no navegador do sistema (ver docs/architecture.md, "Decisão: login
 // do app desktop no navegador do sistema"). O renderer abre a URL de
-// autorização com shell.openExternal; o Authentik volta para
-// ffcom://auth/callback, que o sistema entrega ao app: no Windows e no Linux
+// autorização com shell.openExternal; o Authentik volta para a página
+// https /auth/desktop (components/DesktopAuthHandoff.tsx), que repassa o
+// code para ffcom://auth/callback, que o sistema entrega ao app: no Windows e no Linux
 // como argumento de uma segunda instância (repassado pelo evento
 // second-instance, graças ao single instance lock), no macOS pelo open-url.
 // Se o app estava fechado, a URL chega no argv da primeira instância. A URL

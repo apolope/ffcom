@@ -16,8 +16,15 @@ export const AUTH_CALLBACK_PATH = '/auth/callback'
 export const APP_WEB_ORIGIN = 'https://app.ffcom.a3sitsolutions.com.br'
 // Retorno do login do app desktop empacotado, que entra pelo navegador do
 // sistema (ver docs/architecture.md, "Decisão: login do app desktop no
-// navegador do sistema"). O esquema é registrado por client/electron/main.ts.
-export const DESKTOP_AUTH_CALLBACK_URL = 'ffcom://auth/callback'
+// navegador do sistema"). O Authentik volta para uma página https de
+// passagem (components/DesktopAuthHandoff.tsx), que repassa o code ao app
+// por ffcom://auth/callback, esquema registrado por client/electron/main.ts,
+// e fica dizendo que a aba pode ser fechada. Com o ffcom:// direto no
+// redirect_uri a aba ficava em "carregando" para sempre (ver
+// docs/architecture.md, "Decisão: página de passagem no login do desktop").
+export const DESKTOP_AUTH_CALLBACK_PATH = '/auth/desktop'
+export const DESKTOP_AUTH_CALLBACK_URL = `${APP_WEB_ORIGIN}${DESKTOP_AUTH_CALLBACK_PATH}`
+export const DESKTOP_APP_CALLBACK_URL = 'ffcom://auth/callback'
 // Retorno do login do app Android, que entra por um Custom Tab: um App Link
 // verificado (intent filter autoVerify no AndroidManifest.xml e
 // public/.well-known/assetlinks.json), então só o app assinado com a nossa
