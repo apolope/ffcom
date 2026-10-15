@@ -15,7 +15,7 @@ One section per published tag, in the exact format below (the site and the CI ch
 
 `<component>` is one of: `client` (the app), `central` (server-central), `channel` (server-channel), `channel-image` (the server-channel container image), `site` (this home page). Items accept `code` in backticks and **bold**. Text outside the sections (like this) is ignored by the site.
 
-## client v0.26.1 · 2026-10-14
+## client v0.26.1 · 2026-10-15
 - New voice icons: whoever muted their microphone shows a **crossed-out microphone**, and the crossed-out speaker now only means "you muted this person for yourself", in the sidebar and in the voice channel.
 - People you set to a volume other than 100% get a speaker with an up arrow (above 100%) or a down arrow (below), bigger the closer it is to 200% or 0%. Hovering shows the percentage.
 

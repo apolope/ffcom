@@ -15,7 +15,7 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
-## client v0.26.1 · 2026-10-14
+## client v0.26.1 · 2026-10-15
 - Ícones novos para a voz: quem fechou o microfone aparece com um **microfone cortado**, e o alto-falante cortado passa a significar só "você silenciou essa pessoa para você", na barra lateral e no canal de voz.
 - Quem você deixou com volume diferente de 100% ganha um alto-falante com seta para cima (acima de 100%) ou para baixo (abaixo), maior quanto mais perto de 200% ou de 0%. Passar o mouse mostra o percentual.
 
