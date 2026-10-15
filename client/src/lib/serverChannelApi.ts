@@ -619,6 +619,9 @@ export interface VoiceParticipant {
   memberId: string
   // Nome com que a pessoa entrou na sala (apelido na hora do token).
   name: string
+  // Microfone fechado (servidor a partir do channel-v0.13.0; ausente nos
+  // anteriores, e aí a barra lateral só sabe da sala em que você está).
+  micMuted?: boolean
 }
 
 // GET /api/voice/participants — quem está em cada canal de voz visível,

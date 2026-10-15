@@ -106,12 +106,21 @@ export function ChannelSidebar({
   const participantName = (p: VoiceParticipant) =>
     memberById.get(p.memberId)?.nickname ?? (p.name || p.memberId.slice(0, 8))
   // Quem está falando só se sabe da sala em que você está (pelo LiveKit);
-  // nas outras a lista vem do poll e não tem esse dado.
+  // nas outras a lista vem do poll e não tem esse dado. O microfone fechado
+  // também vem do LiveKit na sua sala (na hora) e do poll nas outras
+  // (micMuted, com alguns segundos de atraso).
   const voice = useVoiceSession()
-  const speakingIn = (channelId: string) =>
+  const inRoom = (channelId: string) =>
     voice.status === 'connected' && voice.target?.baseUrl === server.baseUrl && voice.target.channelId === channelId
-      ? new Set(voice.participants.filter((p) => p.speaking).map((p) => p.identity))
-      : undefined
+  const speakingIn = (channelId: string) =>
+    inRoom(channelId) ? new Set(voice.participants.filter((p) => p.speaking).map((p) => p.identity)) : undefined
+  const isMicMuted = (channelId: string, p: VoiceParticipant) => {
+    if (inRoom(channelId)) {
+      const live = voice.participants.find((lp) => lp.identity === p.memberId)
+      if (live) return !live.micEnabled
+    }
+    return p.micMuted === true
+  }
   const canEditChannel = structure.rename || structure.reorderChannels || structure.deleteChannels
   const canEditCategory = structure.rename || structure.deleteCategories
 
@@ -370,6 +379,16 @@ export function ChannelSidebar({
                                 />
                                 {participantName(p)}
                                 {p.memberId === selfMemberId && <span className="voice-participant-self">{t('channels.youSuffix')}</span>}
+                                {isMicMuted(channel.id, p) && (
+                                  <span
+                                    className="voice-participant-muted"
+                                    role="img"
+                                    aria-label={t('channels.micMuted')}
+                                    title={t('channels.micMuted')}
+                                  >
+                                    🔇
+                                  </span>
+                                )}
                               </li>
                             ))}
                           </ul>

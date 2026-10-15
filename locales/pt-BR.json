@@ -173,6 +173,7 @@
     "editChannelNamed": "Editar canal {{name}}",
     "voiceRoom": "Na sala {{name}}",
     "youSuffix": "(você)",
+    "micMuted": "Microfone fechado",
     "createCategory": "Criar nova categoria",
     "types": {
       "text": "Texto",
@@ -227,6 +228,7 @@
     },
     "shortcut": {
       "muteLabel": "Atalho para mutar",
+      "toggleLabel": "Tecla para fechar e abrir",
       "unsupportedKey": "Tecla não suportada. Use uma letra, um número, F1-F24 ou espaço.",
       "needsModifier": "Use Ctrl, Alt ou Win junto com a tecla (ou uma tecla F sozinha).",
       "pressKey": "Aperte a tecla (Esc cancela)",
@@ -270,8 +272,14 @@
     "shareScreen": "Compartilhar tela",
     "stopScreenShare": "Parar compartilhamento",
     "micMode": "Modo do microfone",
-    "openMic": "Microfone aberto",
-    "pushToTalk": "Apertar para falar",
+    "micModes": {
+      "manual": "Manual",
+      "manualHint": "Clique no botão para abrir e fechar o microfone.",
+      "pushToTalk": "Automático",
+      "pushToTalkHint": "O microfone abre enquanto você segura a tecla e fecha ao soltar.",
+      "toggle": "Semiautomático",
+      "toggleHint": "Aperte a tecla para fechar o microfone e aperte de novo para abrir."
+    },
     "enhancedNoiseSuppression": "Supressão de ruído reforçada",
     "enhancedNoiseSuppressionHint": "Filtra teclado, ventilador e barulho de fundo com o RNNoise, no lugar da supressão do navegador. Usa um pouco mais de processamento.",
     "noiseSuppressionFailed": "A supressão de ruído reforçada não funcionou aqui; usando a do navegador.",

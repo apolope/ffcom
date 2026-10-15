@@ -5,6 +5,15 @@ import { isShortcutFormat } from './shortcut'
 
 const PREFIX = 'ffcom:voicePrefs:v1:'
 
+// Como o microfone abre e fecha:
+// - manual: só pelo botão na tela (ou na barra de voz conectada);
+// - pushToTalk ("automático"): aberto enquanto segura a tecla ou o botão
+//   "Segure para falar", fechado ao soltar;
+// - toggle ("semiautomático"): a tecla de muteShortcut fecha e abre, além
+//   do botão.
+export type MicMode = 'manual' | 'pushToTalk' | 'toggle'
+const MIC_MODES: readonly MicMode[] = ['manual', 'pushToTalk', 'toggle']
+
 export interface VoicePrefs {
   // Aviso sonoro ao mutar/desmutar e, no push-to-talk, ao apertar e soltar
   // (lib/micToggleSound.ts).
@@ -12,11 +21,11 @@ export interface VoicePrefs {
   // Aviso sonoro quando alguém entra ou sai da chamada, inclusive a própria
   // pessoa (lib/presenceSound.ts).
   presenceSound: boolean
-  // Atalho de mutar/desmutar no formato de lib/shortcut.ts; ausente = sem
-  // atalho (padrão, para não roubar nenhuma combinação sem a pessoa pedir).
+  // Atalho de mutar/desmutar do modo toggle, no formato de lib/shortcut.ts;
+  // ausente = sem atalho (padrão, para não roubar nenhuma combinação sem a
+  // pessoa pedir). Fica guardado ao trocar de modo.
   muteShortcut?: string
-  // Push-to-talk ("apertar para falar") em vez do microfone sempre aberto.
-  pushToTalk: boolean
+  micMode: MicMode
   // Tecla do push-to-talk, mesmo formato; ausente = só o botão de segurar
   // na tela. Pode ser uma tecla sozinha, porque só vale com a janela em foco.
   pushToTalkKey?: string
@@ -29,7 +38,7 @@ export interface VoicePrefs {
 const DEFAULTS: VoicePrefs = {
   micToggleSound: true,
   presenceSound: true,
-  pushToTalk: false,
+  micMode: 'manual',
   enhancedNoiseSuppression: false,
 }
 
@@ -38,7 +47,8 @@ export function getVoicePrefs(accountSub: string): VoicePrefs {
   try {
     const raw = localStorage.getItem(PREFIX + accountSub)
     if (!raw) return DEFAULTS
-    const prefs: VoicePrefs = { ...DEFAULTS, ...(JSON.parse(raw) as Partial<VoicePrefs>) }
+    const stored = JSON.parse(raw) as Partial<VoicePrefs> & { pushToTalk?: unknown }
+    const prefs: VoicePrefs = { ...DEFAULTS, ...stored }
     if (prefs.muteShortcut !== undefined && !isShortcutFormat(prefs.muteShortcut)) {
       delete prefs.muteShortcut
     }
@@ -46,7 +56,13 @@ export function getVoicePrefs(accountSub: string): VoicePrefs {
       delete prefs.pushToTalkKey
     }
     prefs.presenceSound = prefs.presenceSound !== false
-    prefs.pushToTalk = prefs.pushToTalk === true
+    if (!MIC_MODES.includes(stored.micMode as MicMode)) {
+      // Antes do micMode só existia o booleano pushToTalk, e o atalho de
+      // mutar valia no microfone aberto: quem tinha atalho já usava o que
+      // hoje é o modo toggle.
+      prefs.micMode = stored.pushToTalk === true ? 'pushToTalk' : prefs.muteShortcut ? 'toggle' : 'manual'
+    }
+    delete (prefs as { pushToTalk?: unknown }).pushToTalk
     prefs.enhancedNoiseSuppression = prefs.enhancedNoiseSuppression === true
     return prefs
   } catch {
