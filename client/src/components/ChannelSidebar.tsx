@@ -8,6 +8,8 @@ import { AvatarWithStatus, MemberAvatar } from './AvatarWithStatus'
 import { useVoiceSession } from './VoiceSessionContext'
 import { ChannelMenu } from './ChannelMenu'
 import { MutedIcon } from './MutedIcon'
+import { MicIcon, ParticipantAudioIcon } from './VoiceIcons'
+import { participantAudioOf } from '../lib/participantAudio'
 
 const CHANNEL_ICON: Record<ChannelType, string> = {
   text: '#',
@@ -108,7 +110,9 @@ export function ChannelSidebar({
   // Quem está falando só se sabe da sala em que você está (pelo LiveKit);
   // nas outras a lista vem do poll e não tem esse dado. O microfone fechado
   // também vem do LiveKit na sua sala (na hora) e do poll nas outras
-  // (micMuted, com alguns segundos de atraso).
+  // (micMuted, com alguns segundos de atraso). Depois do microfone vem o
+  // que você fez com o áudio da pessoa (silenciada ou volume), em qualquer
+  // sala, porque fica guardado por memberId.
   const voice = useVoiceSession()
   const inRoom = (channelId: string) =>
     voice.status === 'connected' && voice.target?.baseUrl === server.baseUrl && voice.target.channelId === channelId
@@ -386,8 +390,11 @@ export function ChannelSidebar({
                                     aria-label={t('channels.micMuted')}
                                     title={t('channels.micMuted')}
                                   >
-                                    🔇
+                                    <MicIcon off />
                                   </span>
+                                )}
+                                {p.memberId !== selfMemberId && (
+                                  <ParticipantAudioIcon audio={participantAudioOf(voice.participantAudio, p.memberId)} />
                                 )}
                               </li>
                             ))}

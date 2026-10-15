@@ -255,6 +255,7 @@
     "audioBlocked": "Your browser blocked the call audio.",
     "enableAudio": "Enable audio",
     "mutedForYou": "muted for you",
+    "volumeForYou": "volume at {{percent}} for you",
     "volume": "Volume",
     "volumeOf": "Volume for {{name}}",
     "screenNoAudio": {
