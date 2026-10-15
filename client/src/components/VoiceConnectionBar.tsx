@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import type { VoiceTarget } from '../hooks/useVoiceChannel'
+import { MicIcon } from './VoiceIcons'
 import { useVoiceSession } from './VoiceSessionContext'
 import './VoiceConnectionBar.css'
 
@@ -50,7 +51,7 @@ export function VoiceConnectionBar({ onOpen }: VoiceConnectionBarProps) {
           aria-label={micEnabled ? t('voice.muteMic') : t('voice.unmuteMic')}
           title={micEnabled ? t('voice.muteMic') : t('voice.unmuteMic')}
         >
-          {micEnabled ? '🎤' : '🔇'}
+          <MicIcon off={!micEnabled} />
         </button>
       )}
       <button

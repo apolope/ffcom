@@ -256,6 +256,7 @@
     "audioBlocked": "O navegador bloqueou o som da chamada.",
     "enableAudio": "Ativar som",
     "mutedForYou": "silenciado para você",
+    "volumeForYou": "volume em {{percent}} para você",
     "volume": "Volume",
     "volumeOf": "Volume de {{name}}",
     "screenNoAudio": {

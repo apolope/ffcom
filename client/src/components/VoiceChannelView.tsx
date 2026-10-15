@@ -8,6 +8,7 @@ import type { MicMode } from '../lib/voicePrefs'
 import { MuteShortcutSetting } from './MuteShortcutSetting'
 import { ParticipantVolumeControls } from './ParticipantVolumeControls'
 import { ScreenSharePicker } from './ScreenSharePicker'
+import { MicIcon, ParticipantAudioIcon, SpeakerIcon } from './VoiceIcons'
 import { useVoiceSession } from './VoiceSessionContext'
 import type { Channel, KnownServer } from '../types'
 import './VoiceChannelView.css'
@@ -154,7 +155,7 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
                         'voice-mic-icon' + (p.micEnabled ? '' : ' muted') + (p.speaking ? ' speaking' : '')
                       }
                     >
-                      {p.micEnabled ? '🎤' : '🔇'}
+                      <MicIcon off={!p.micEnabled} />
                     </span>
                     <span>
                       {p.isLocal ? t('voice.selfName', { name: p.name }) : p.name}
@@ -181,7 +182,7 @@ export function VoiceChannelView({ server, channel }: VoiceChannelViewProps) {
                           title={t('voice.volume')}
                           onClick={() => setVolumeOpenFor(volumeOpen ? undefined : p.identity)}
                         >
-                          {audio.muted ? '🔕' : '🔉'}
+                          {audio.muted || audio.voice !== 1 ? <ParticipantAudioIcon audio={audio} /> : <SpeakerIcon />}
                         </button>
                       </>
                     )}
