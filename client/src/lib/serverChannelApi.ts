@@ -47,8 +47,8 @@ export interface ChannelMessage {
   content: string
   createdAt: string
   editedAt?: string
-  // Só preenchido em mensagem de canal de texto (canal forum fora do
-  // escopo, mesmo critério de edição/exclusão de mensagem).
+  // Mensagem de canal de texto ou post de fórum com anexo (servidor a
+  // partir do channel-v0.12.0 no fórum).
   attachments?: RemoteAttachment[]
 }
 
@@ -693,6 +693,50 @@ export async function sendMessageWithAttachment(
   if (content) form.set('content', content)
   form.set('file', file)
   const res = await fetch(`${baseUrl}/api/channels/${channelId}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: form,
+  })
+  return parseJsonOrThrow<ChannelMessage>(res)
+}
+
+// POST /api/channels/{id}/threads — abre uma thread de fórum com anexo no
+// post inicial. Mesmo motivo e mesmo retorno de sendMessageWithAttachment:
+// thread sem anexo continua indo por sendCreateThread, e o
+// "thread.created" chega pelo socket já aberto.
+export async function createThreadWithAttachment(
+  baseUrl: string,
+  channelId: string,
+  accessToken: string,
+  title: string,
+  content: string,
+  file: File,
+): Promise<{ thread: RemoteThread; message: ChannelMessage }> {
+  const form = new FormData()
+  form.set('title', title)
+  if (content) form.set('content', content)
+  form.set('file', file)
+  const res = await fetch(`${baseUrl}/api/channels/${channelId}/threads`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: form,
+  })
+  return parseJsonOrThrow<{ thread: RemoteThread; message: ChannelMessage }>(res)
+}
+
+// POST /api/threads/{id}/messages — responde numa thread de fórum com
+// anexo; o "post.created" chega pelo socket já aberto.
+export async function sendPostWithAttachment(
+  baseUrl: string,
+  threadId: string,
+  accessToken: string,
+  content: string,
+  file: File,
+): Promise<ChannelMessage> {
+  const form = new FormData()
+  if (content) form.set('content', content)
+  form.set('file', file)
+  const res = await fetch(`${baseUrl}/api/threads/${threadId}/messages`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
     body: form,

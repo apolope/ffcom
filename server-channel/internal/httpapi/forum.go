@@ -72,7 +72,7 @@ func handleListThreads(channels *store.ChannelStore, roles *store.RoleStore, ove
 // dos posts de uma thread (mesmo esquema de keyset pagination do canal de
 // texto, ver handleListMessages). A permissão checada é ViewChannels do
 // canal forum dono da thread, resolvido via MessageStore.GetThread.
-func handleListThreadMessages(roles *store.RoleStore, overwrites *store.ChannelOverwriteStore, messages *store.MessageStore) http.Handler {
+func handleListThreadMessages(roles *store.RoleStore, overwrites *store.ChannelOverwriteStore, messages *store.MessageStore, attachments *store.AttachmentStore) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		threadID := r.PathValue("id")
 
@@ -127,9 +127,21 @@ func handleListThreadMessages(roles *store.RoleStore, overwrites *store.ChannelO
 			return
 		}
 
+		messageIDs := make([]string, len(rows))
+		for i, m := range rows {
+			messageIDs[i] = m.ID
+		}
+		byMessage, err := attachments.ListForMessages(r.Context(), messageIDs)
+		if err != nil {
+			apierr.Write(w, http.StatusInternalServerError, "messages.attachments_fetch_failed", "erro ao buscar anexos")
+			return
+		}
+
 		out := make([]realtime.MessageView, len(rows))
 		for i, m := range rows {
-			out[i] = toMessageView(m)
+			view := toMessageView(m)
+			view.Attachments = toAttachmentViews(byMessage[m.ID])
+			out[i] = view
 		}
 
 		w.Header().Set("Content-Type", "application/json")

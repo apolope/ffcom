@@ -15,6 +15,12 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## client v0.25.0 · 2026-10-14
+- No fórum, dá para anexar um arquivo ao abrir um tópico e ao responder, pelo mesmo clipe do chat. Imagens aparecem no post e os outros arquivos viram link para baixar. Com anexo, o texto do post é opcional. Precisa do servidor na `channel` v0.12.0 ou mais nova.
+
+## channel v0.12.0 · 2026-10-14
+- O fórum aceita anexos: abrir tópico com arquivo no primeiro post e responder com arquivo, com o mesmo limite de tamanho (`ATTACHMENT_MAX_MB`) e as mesmas permissões do canal de texto. Quem está com o fórum aberto recebe na hora, e o histórico do tópico traz os anexos.
+
 ## client v0.24.7 · 2026-10-14
 - No app para Windows, a aba do navegador não fica mais em "carregando" depois do login: ela mostra "Login concluído" e pode ser fechada, com um botão para abrir o FFCom caso o navegador não o tenha aberto.
 

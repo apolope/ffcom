@@ -4,6 +4,7 @@ import { LocalizedError, problemFromFrame, useErrorText, type DisplayError } fro
 import { isViewing, subscribeViewing } from '../lib/channelViewing'
 import { createReconnectingSocket, type ChannelConnectionStatus, type ReconnectingSocket } from '../lib/reconnectingSocket'
 import {
+  createThreadWithAttachment,
   decodeChannelSocketFrame,
   fetchForumThreads,
   fetchThreadMessages,
@@ -13,6 +14,7 @@ import {
   sendChannelViewing,
   sendCreatePost,
   sendCreateThread,
+  sendPostWithAttachment,
   type ChannelMessage,
   type RemoteThread,
 } from '../lib/serverChannelApi'
@@ -31,6 +33,8 @@ interface UseForumChannelResult {
   openThread: (threadId: string | undefined) => void
   createThread: (title: string, content: string) => void
   createPost: (content: string) => void
+  createThreadWithFile: (title: string, content: string, file: File) => Promise<void>
+  createPostWithFile: (content: string, file: File) => Promise<void>
 }
 
 // Carrega as threads (REST) e mantém uma conexão WebSocket para um canal
@@ -174,6 +178,30 @@ export function useForumChannel(
     sendCreatePost(socket, threadId, content)
   }
 
+  // Com anexo vai por REST, como em useChannelChat.sendMessageWithFile: o
+  // WebSocket não carrega arquivo, e a thread/o post chega de volta pelo
+  // broadcast do socket já aberto (ver docs/architecture.md, "Decisão:
+  // anexo em canal forum").
+  async function createThreadWithFile(title: string, content: string, file: File) {
+    triedPostRef.current = true
+    try {
+      await createThreadWithAttachment(serverBaseUrl, channelId, accessToken, title, content, file)
+    } catch (err) {
+      setError(err instanceof Error ? err : new LocalizedError(() => i18n.t('chat.attachmentSendFailed')))
+    }
+  }
+
+  async function createPostWithFile(content: string, file: File) {
+    const threadId = activeThreadIdRef.current
+    if (!threadId) return
+    triedPostRef.current = true
+    try {
+      await sendPostWithAttachment(serverBaseUrl, threadId, accessToken, content, file)
+    } catch (err) {
+      setError(err instanceof Error ? err : new LocalizedError(() => i18n.t('chat.attachmentSendFailed')))
+    }
+  }
+
   const errorText = useErrorText(error)
 
   return {
@@ -186,5 +214,7 @@ export function useForumChannel(
     openThread,
     createThread,
     createPost,
+    createThreadWithFile,
+    createPostWithFile,
   }
 }

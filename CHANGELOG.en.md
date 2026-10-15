@@ -15,6 +15,12 @@ One section per published tag, in the exact format below (the site and the CI ch
 
 `<component>` is one of: `client` (the app), `central` (server-central), `channel` (server-channel), `channel-image` (the server-channel container image), `site` (this home page). Items accept `code` in backticks and **bold**. Text outside the sections (like this) is ignored by the site.
 
+## client v0.25.0 · 2026-10-14
+- In forums, you can attach a file when opening a topic and when replying, using the same paperclip as the chat. Images show up in the post and other files become a download link. With an attachment, the post text is optional. Requires the server on `channel` v0.12.0 or newer.
+
+## channel v0.12.0 · 2026-10-14
+- Forums accept attachments: open a topic with a file in the first post and reply with a file, with the same size limit (`ATTACHMENT_MAX_MB`) and the same permissions as text channels. Whoever has the forum open gets it right away, and the topic history includes the attachments.
+
 ## client v0.24.7 · 2026-10-14
 - In the Windows app, the browser tab no longer stays on "loading" after sign-in: it shows "Signed in" and can be closed, with a button to open FFCom in case the browser did not.
 

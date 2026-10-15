@@ -817,7 +817,21 @@ Deliberadamente **não** adicionada a mesma checagem em `DELETE /api/roles/{id}`
 
 **Exclusão de mensagem limpa o arquivo:** `attachments.message_id` é `ON DELETE CASCADE`, então apagar uma mensagem já limpa a linha em Postgres sozinho — mas não o arquivo em disco. `handleIncomingMessageDelete` busca os anexos antes de apagar a mensagem e chama `FileStore.Delete` depois, best-effort (erro ao apagar o arquivo fica só logado, não desfaz a exclusão da mensagem nem bloqueia a resposta ao client). Editar mensagem (`message.update`) não mexe em anexo — é imutável nesta v1 — mas o broadcast da edição precisa reanexar o que já existia, ou o client perderia a exibição do anexo ao aplicar o `message.updated` (que substitui a mensagem inteira no estado local).
 
-**Revisitar quando:** existir demanda por mais de um anexo por mensagem (schema já é 1:N, só a v1 que assume um só); por anexo em canal forum; ou por um self-hoster relatar que 8 MB é baixo demais para o uso real (ajustar via `ATTACHMENT_MAX_MB`, sem mudança de código).
+**Revisitar quando:** existir demanda por mais de um anexo por mensagem (schema já é 1:N, só a v1 que assume um só); por anexo em canal forum (*feito, ver "Decisão: anexo em canal forum" logo abaixo*); ou por um self-hoster relatar que 8 MB é baixo demais para o uso real (ajustar via `ATTACHMENT_MAX_MB`, sem mudança de código).
+
+## Decisão: anexo em canal forum — duas rotas REST espelhando os frames `thread.create`/`post.create`
+
+**Contexto:** o fórum só aceitava texto; a decisão de upload acima deixou o canal forum de fora e registrou "anexo em canal forum" como gatilho para revisitar. Pedido concreto (2026-10-14): poder mandar arquivo num tópico do fórum.
+
+**Alternativas consideradas:** (1) uma rota só, `POST /api/channels/{id}/messages` aceitando também canal forum com um campo `threadId` (e `title` para abrir thread) — menos rotas, mas mistura três operações (mensagem de texto, abrir thread, responder) num só handler com validações diferentes por combinação de campos; (2) subir o arquivo antes, numa rota de upload "solta", e mandar só o id dele no frame WS — exigiria anexo sem mensagem (linha órfã até o frame chegar, e limpeza para o que nunca chegasse); (3) uma rota REST para cada operação do fórum, espelhando os frames que já existem.
+
+**Decisão:** (3). `POST /api/channels/{id}/threads` (multipart `title`, `content?`, `file?`) abre a thread com anexo no post inicial; `POST /api/threads/{id}/messages` (multipart `content?`, `file?`) responde numa thread. Sem anexo, o client continua usando os frames `thread.create`/`post.create` — mesmo split do canal de texto. O broadcast é o mesmo `thread.created`/`post.created` do WebSocket, agora com `message.attachments` preenchido, então quem está com o fórum aberto recebe pelo socket, inclusive quem enviou. `GET /api/threads/{id}/messages` passou a trazer os anexos de cada post. Download, permissão (`ViewChannels` do canal da mensagem) e limpeza dos arquivos ao apagar o canal já funcionavam para post de fórum sem mudança: os três olham `messages.channel_id`, que post de thread também tem.
+
+**Regras:** com anexo, o texto do post inicial passa a ser opcional (pelo WebSocket, `forum.first_post_empty` continua valendo — lá não existe anexo); título continua obrigatório. Se a thread foi criada e o post inicial falha ao gravar, a thread é apagada (`MessageStore.DeleteThread`), para não sobrar tópico vazio na lista. Permissão é o mesmo `SendMessages` dos frames, com o mesmo código `forum.post_denied`. Parse do multipart, gravação do arquivo e desfazer em caso de erro foram extraídos de `handleCreateMessageWithAttachment` para `parseMessageUpload`/`createUploadedMessage` (`internal/httpapi/attachments.go`), usados pelas três rotas.
+
+**Client:** o clipe de anexar virou `components/AttachFileButton.tsx`, usado pelo canal de texto e pelos dois formulários do fórum (nova thread e resposta); `ForumChannelView` mostra os anexos dos posts com o mesmo `MessageAttachment`. Client novo com servidor anterior ao channel-v0.12.0: as rotas não existem e o envio com anexo mostra o erro do servidor; texto puro continua funcionando.
+
+**Revisitar quando:** editar/apagar post de fórum existir (hoje não existe nem para texto; precisará apagar os arquivos como `handleIncomingMessageDelete` faz); ou o mesmo gatilho de mais de um anexo por mensagem da decisão acima.
 
 ## Decisão: upload de avatar de conta — disco local com chave fixa por conta, `display_name` provisório no primeiro upload
 
