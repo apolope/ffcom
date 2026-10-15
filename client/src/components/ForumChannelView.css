@@ -144,3 +144,24 @@
   font-weight: 600;
   color: var(--text-h);
 }
+
+/* Clipe de anexar no formulário de nova thread (o da resposta usa o
+   estilo de .message-form): fica à esquerda, longe de Cancelar/Publicar. */
+.forum-new-thread-actions .message-attach-button {
+  margin-right: auto;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.forum-new-thread-actions .message-attach-button:hover:not(:disabled) {
+  color: var(--text-h);
+  border-color: var(--text-h);
+}
+
+.forum-new-thread-form .pending-attachment {
+  padding: 0;
+}

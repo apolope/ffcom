@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../auth/AuthProvider'
 import { useChannelChat } from '../hooks/useChannelChat'
 import { formatDateTime, formatMessageTime } from '../lib/format'
 import { fetchMe } from '../lib/serverChannelApi'
+import { AttachFileButton } from './AttachFileButton'
 import { MessageAttachment } from './MessageAttachment'
 import type { Channel } from '../types'
 import './TextChannelView.css'
@@ -29,7 +30,6 @@ export function TextChannelView({ serverBaseUrl, channel, authorName, canModerat
   // tem como recuperar o que apagou por engano.
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string>()
   const listRef = useRef<HTMLDivElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { messages, status, error, sendMessage, sendMessageWithFile, editMessage, deleteMessage } =
     useChannelChat(serverBaseUrl, channel.id, accessToken!)
@@ -52,20 +52,11 @@ export function TextChannelView({ serverBaseUrl, channel, authorName, canModerat
     if (!content && !pendingFile) return
     if (pendingFile) {
       sendMessageWithFile(content, pendingFile)
-      clearPendingFile()
+      setPendingFile(undefined)
     } else {
       sendMessage(content)
     }
     setDraft('')
-  }
-
-  function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
-    setPendingFile(e.target.files?.[0])
-  }
-
-  function clearPendingFile() {
-    setPendingFile(undefined)
-    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   function startEditing(id: string, content: string) {
@@ -172,35 +163,13 @@ export function TextChannelView({ serverBaseUrl, channel, authorName, canModerat
       {pendingFile && (
         <div className="pending-attachment">
           <span>{pendingFile.name}</span>
-          <button type="button" onClick={clearPendingFile}>
+          <button type="button" onClick={() => setPendingFile(undefined)}>
             {t('chat.removeAttachment')}
           </button>
         </div>
       )}
       <form className="message-form" onSubmit={handleSubmit}>
-        {/* Input nativo escondido: o texto dele ("Nenhum ficheiro
-            selecionado", no idioma do navegador) era cortado pela largura
-            do formulário, e o nome do arquivo escolhido já aparece em
-            .pending-attachment. O botão de clipe abre o seletor. */}
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          disabled={status !== 'open'}
-          hidden
-        />
-        <button
-          type="button"
-          className="message-attach-button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={status !== 'open'}
-          title={t('chat.attachFile')}
-          aria-label={t('chat.attachFile')}
-        >
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
-            <path d="M16.5 6.5v10a4.5 4.5 0 0 1-9 0V5a3 3 0 0 1 6 0v10.5a1.5 1.5 0 0 1-3 0V6.5H9v9a3 3 0 0 0 6 0V5a4.5 4.5 0 0 0-9 0v11.5a6 6 0 0 0 12 0v-10h-1.5z" />
-          </svg>
-        </button>
+        <AttachFileButton onPick={setPendingFile} disabled={status !== 'open'} />
         <input
           type="text"
           value={draft}

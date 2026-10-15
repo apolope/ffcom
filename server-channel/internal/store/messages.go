@@ -58,6 +58,18 @@ func (s *MessageStore) ListThreads(ctx context.Context, channelID string) ([]Thr
 	return out, nil
 }
 
+// DeleteThread apaga uma thread (e, via CASCADE, os posts dela). Só usado
+// para desfazer uma thread recém-criada cujo post inicial falhou ao gravar
+// (ver internal/httpapi.handleCreateThreadWithAttachment) -- não existe
+// rota de apagar thread.
+func (s *MessageStore) DeleteThread(ctx context.Context, id string) error {
+	const query = `DELETE FROM threads WHERE id = $1`
+	if _, err := s.pool.Exec(ctx, query, id); err != nil {
+		return fmt.Errorf("messages: delete thread: %w", err)
+	}
+	return nil
+}
+
 // GetThread busca uma thread por id — usado para resolver o channel_id ao
 // checar permissão de quem lista/posta numa thread (ver internal/httpapi).
 func (s *MessageStore) GetThread(ctx context.Context, id string) (Thread, error) {
