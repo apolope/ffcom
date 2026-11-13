@@ -15,6 +15,14 @@ Uma seção por tag publicada, no formato exato abaixo (o site e a checagem do C
 
 `<componente>` é um de: `client` (o app), `central` (server-central), `channel` (server-channel), `channel-image` (imagem do container do server-channel), `site` (esta home page). Itens aceitam `código` entre crases e **negrito**. Texto fora das seções (como este) é ignorado pelo site.
 
+## channel v0.13.1 · 2026-11-13
+- O servidor sobe mesmo com o login (Authentik) fora do ar, em vez de reiniciar sem parar: ele tenta de novo em segundo plano até o login voltar, e o lançador não desiste mais do serviço por causa disso.
+- Enquanto o login não responde, quem entra recebe "o login está fora do ar no momento; tente de novo em instantes" (código `auth.issuer_unavailable`, HTTP 503) em vez de ter a sessão recusada, e tudo volta sozinho quando o login volta.
+
+## central v0.15.4 · 2026-11-13
+- O servidor sobe mesmo com o login (Authentik) fora do ar, em vez de reiniciar sem parar: ele tenta de novo em segundo plano até o login voltar.
+- Enquanto o login não responde, quem entra recebe "o login está fora do ar no momento; tente de novo em instantes" (código `auth.issuer_unavailable`, HTTP 503) em vez de ter a sessão recusada, e tudo volta sozinho quando o login volta.
+
 ## channel-image v1.1.1 · 2026-11-12
 - O compose da instância oficial aceita `DATABASE_URL` no `.env`, para apontar o servidor para outro Postgres; sem ela, nada muda e continua o banco local. As imagens do Postgres (17.11) e do LiveKit (v1.13.7) ficam fixadas por digest na versão em produção, para o deploy não atualizá-las sem querer. O lançador não mudou; a cópia do serviço embutida na imagem passa para a versão mais nova publicada.
 

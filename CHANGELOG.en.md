@@ -15,6 +15,14 @@ One section per published tag, in the exact format below (the site and the CI ch
 
 `<component>` is one of: `client` (the app), `central` (server-central), `channel` (server-channel), `channel-image` (the server-channel container image), `site` (this home page). Items accept `code` in backticks and **bold**. Text outside the sections (like this) is ignored by the site.
 
+## channel v0.13.1 · 2026-11-13
+- The server starts even when sign-in (Authentik) is down, instead of restarting over and over: it keeps retrying in the background until sign-in is back, and the launcher no longer gives up on the service because of it.
+- While sign-in doesn't respond, people get "sign-in is unavailable right now; try again in a moment" (code `auth.issuer_unavailable`, HTTP 503) instead of having their session rejected, and everything recovers on its own once sign-in is back.
+
+## central v0.15.4 · 2026-11-13
+- The server starts even when sign-in (Authentik) is down, instead of restarting over and over: it keeps retrying in the background until sign-in is back.
+- While sign-in doesn't respond, people get "sign-in is unavailable right now; try again in a moment" (code `auth.issuer_unavailable`, HTTP 503) instead of having their session rejected, and everything recovers on its own once sign-in is back.
+
 ## channel-image v1.1.1 · 2026-11-12
 - The official instance's compose accepts `DATABASE_URL` in `.env`, to point the server at another Postgres; without it nothing changes and the local database stays. The Postgres (17.11) and LiveKit (v1.13.7) images are pinned by digest to the production versions, so a deploy doesn't upgrade them by accident. The launcher is unchanged; the service copy bundled in the image moves to the newest published version.
 
