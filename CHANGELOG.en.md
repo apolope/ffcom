@@ -15,6 +15,12 @@ One section per published tag, in the exact format below (the site and the CI ch
 
 `<component>` is one of: `client` (the app), `central` (server-central), `channel` (server-channel), `channel-image` (the server-channel container image), `site` (this home page). Items accept `code` in backticks and **bold**. Text outside the sections (like this) is ignored by the site.
 
+## channel-image v1.1.1 · 2026-11-12
+- The official instance's compose accepts `DATABASE_URL` in `.env`, to point the server at another Postgres; without it nothing changes and the local database stays. The Postgres (17.11) and LiveKit (v1.13.7) images are pinned by digest to the production versions, so a deploy doesn't upgrade them by accident. The launcher is unchanged; the service copy bundled in the image moves to the newest published version.
+
+## central v0.15.3 · 2026-11-12
+- The official instance's compose accepts `DATABASE_URL` in `.env`, to point the server at another Postgres; without it nothing changes and the local database stays. The Postgres image is pinned to the production version (17.11, by digest), so a deploy doesn't upgrade the database by accident. No change to the server code.
+
 ## client v0.26.1 · 2026-10-15
 - New voice icons: whoever muted their microphone shows a **crossed-out microphone**, and the crossed-out speaker now only means "you muted this person for yourself", in the sidebar and in the voice channel.
 - People you set to a volume other than 100% get a speaker with an up arrow (above 100%) or a down arrow (below), bigger the closer it is to 200% or 0%. Hovering shows the percentage.

@@ -23,7 +23,8 @@ name: channel
 
 services:
   db:
-    image: postgres:17-alpine
+    # Fixado na versão em produção; atualizar de propósito, em janela própria.
+    image: postgres:17.11-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
     container_name: ffcom-channel-db
     restart: unless-stopped
     environment:
@@ -41,7 +42,8 @@ services:
       retries: 10
 
   livekit:
-    image: livekit/livekit-server:latest
+    # Fixado na versão em produção; atualizar de propósito, em janela própria.
+    image: livekit/livekit-server:v1.13.7@sha256:6fd3b7088874c4d119160dd688798dfec852bc014786d392caad15f6f63912a3
     container_name: ffcom-livekit
     restart: unless-stopped
     environment:
@@ -117,7 +119,10 @@ services:
       livekit:
         condition: service_started
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-ffcom}:${POSTGRES_PASSWORD}@ffcom-channel-db:5432/${POSTGRES_DB:-ffcom_channel}?sslmode=disable
+      # DATABASE_URL vem do env do host (/opt/ffcom/envs/ffcom-channel.env) para o
+      # corte para o pg-ha (a3s-pg-router, sslmode=require); sem ela, vale o
+      # Postgres local (ffcom-channel-db).
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-ffcom}:${POSTGRES_PASSWORD}@ffcom-channel-db:5432/${POSTGRES_DB:-ffcom_channel}?sslmode=disable}
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:?defina OIDC_ISSUER_URL no .env}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?defina CORS_ALLOWED_ORIGINS no .env}
       # Exige X-Forwarded-Proto: https em toda requisição — ver

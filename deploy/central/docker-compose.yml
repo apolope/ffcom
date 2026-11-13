@@ -7,7 +7,8 @@
 # para o Nginx Proxy Manager alcançar o container por nome.
 services:
   db:
-    image: postgres:17-alpine
+    # Fixado na versão em produção; atualizar de propósito, em janela própria.
+    image: postgres:17.11-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
     container_name: ffcom-central-db
     restart: unless-stopped
     environment:
@@ -32,7 +33,10 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-ffcom}:${POSTGRES_PASSWORD}@ffcom-central-db:5432/${POSTGRES_DB:-ffcom_central}?sslmode=disable
+      # DATABASE_URL vem do env do host (/opt/ffcom/envs/ffcom-central.env) para o
+      # corte para o pg-ha (a3s-pg-router, sslmode=require); sem ela, vale o
+      # Postgres local (ffcom-central-db).
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-ffcom}:${POSTGRES_PASSWORD}@ffcom-central-db:5432/${POSTGRES_DB:-ffcom_central}?sslmode=disable}
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:?defina OIDC_ISSUER_URL no .env}
       # Domínio público do client (ex. https://app.ffcom.a3sitsolutions.com.br)
       # — sem isso o navegador bloqueia as chamadas REST/WebSocket por CORS.
