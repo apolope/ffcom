@@ -407,6 +407,7 @@
     "auth": {
       "account_resolve_failed": "error resolving the account",
       "secret_invalid": "invalid secret",
+      "issuer_unavailable": "sign-in is unavailable right now; try again in a moment",
       "token_invalid": "invalid token",
       "token_missing": "missing or malformed token",
       "join_required": "you must join this server (POST /api/join) first",

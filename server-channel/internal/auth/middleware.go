@@ -43,7 +43,7 @@ func VerifyToken(verifier *Verifier) func(http.Handler) http.Handler {
 
 			claims, err := verifier.Verify(r.Context(), rawToken)
 			if err != nil {
-				apierr.Write(w, http.StatusUnauthorized, "auth.token_invalid", "token inválido")
+				writeVerifyError(w, err)
 				return
 			}
 
@@ -53,12 +53,27 @@ func VerifyToken(verifier *Verifier) func(http.Handler) http.Handler {
 	}
 }
 
+// writeVerifyError responde à falha de Verify. Issuer conhecido ainda sem
+// discovery (Authentik fora do ar, ver ErrIssuerUnavailable) vira 503 com
+// Retry-After: o token pode estar ótimo e o client não deve tratar como
+// sessão recusada. O resto (token malformado, assinatura, expirado, issuer
+// desconhecido) continua 401.
+func writeVerifyError(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrIssuerUnavailable) {
+		w.Header().Set("Retry-After", "5")
+		apierr.Write(w, http.StatusServiceUnavailable, "auth.issuer_unavailable", "autenticação indisponível no momento, tente de novo em instantes")
+		return
+	}
+	apierr.Write(w, http.StatusUnauthorized, "auth.token_invalid", "token inválido")
+}
+
 // IdentifyRequest verifica o token da requisição, se houver, e devolve o
 // "sub" e o "sid" (sessão do dispositivo) junto com a requisição já com os
 // dois no contexto (VerifyToken, mais
 // adiante na cadeia, reaproveita em vez de verificar de novo). Sem token ou
 // com token inválido devolve ok=false e a requisição intacta: quem decide
-// o 401 continua sendo VerifyToken. Usado pelo rate limit, que conta por
+// o 401 continua sendo VerifyToken (e o 503, com o issuer do token fora do
+// ar: aqui isso também é só ok=false). Usado pelo rate limit, que conta por
 // usuário+dispositivo e só cai para IP quando não sabe quem é (ver
 // docs/rate-limits.md).
 func IdentifyRequest(verifier *Verifier, r *http.Request) (*http.Request, string, string, bool) {
