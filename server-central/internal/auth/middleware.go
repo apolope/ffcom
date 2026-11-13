@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -42,7 +43,7 @@ func Middleware(verifier *Verifier, accounts *store.AccountStore) func(http.Hand
 
 				claims, err := verifier.Verify(r.Context(), rawToken)
 				if err != nil {
-					apierr.Write(w, http.StatusUnauthorized, "auth.token_invalid", "token inválido")
+					writeVerifyError(w, err)
 					return
 				}
 				subject = claims.Subject
@@ -63,12 +64,27 @@ func Middleware(verifier *Verifier, accounts *store.AccountStore) func(http.Hand
 	}
 }
 
+// writeVerifyError responde à falha de Verify. Issuer conhecido ainda sem
+// discovery (Authentik fora do ar, ver ErrIssuerUnavailable) vira 503 com
+// Retry-After: o token pode estar ótimo e o client não deve tratar como
+// sessão recusada. O resto (token malformado, assinatura, expirado, issuer
+// desconhecido) continua 401.
+func writeVerifyError(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrIssuerUnavailable) {
+		w.Header().Set("Retry-After", "5")
+		apierr.Write(w, http.StatusServiceUnavailable, "auth.issuer_unavailable", "autenticação indisponível no momento, tente de novo em instantes")
+		return
+	}
+	apierr.Write(w, http.StatusUnauthorized, "auth.token_invalid", "token inválido")
+}
+
 // IdentifyRequest verifica o token da requisição, se houver, e devolve o
 // "sub" e o "sid" (sessão do dispositivo) junto com a requisição já com os
 // dois no contexto (Middleware, mais
 // adiante na cadeia, reaproveita em vez de verificar de novo). Sem token ou
 // com token inválido devolve ok=false e a requisição intacta: quem decide
-// o 401 continua sendo Middleware. Usado pelo rate limit, que conta por
+// o 401 continua sendo Middleware (e o 503, com o issuer do token fora do ar:
+// aqui isso também é só ok=false). Usado pelo rate limit, que conta por
 // usuário+dispositivo e só cai para IP quando não sabe quem é (ver
 // docs/rate-limits.md).
 func IdentifyRequest(verifier *Verifier, r *http.Request) (*http.Request, string, string, bool) {
@@ -146,7 +162,8 @@ func wsProtocolToken(r *http.Request) (string, bool) {
 // OptionalAccount é o Middleware para rotas públicas que mudam de acordo com
 // quem pede (ex. a lista de ideias mostra o voto de quem está logado): com
 // token válido anexa a conta ao contexto, sem token (ou com token inválido)
-// segue como visitante, sem 401.
+// segue como visitante, sem 401. Token de issuer ainda indisponível recebe
+// 503, como no Middleware.
 func OptionalAccount(verifier *Verifier, accounts *store.AccountStore) func(http.Handler) http.Handler {
 	required := Middleware(verifier, accounts)
 	return func(next http.Handler) http.Handler {
@@ -157,8 +174,16 @@ func OptionalAccount(verifier *Verifier, accounts *store.AccountStore) func(http
 				return
 			}
 			if rawToken, hasToken := bearerToken(r); hasToken {
-				if _, err := verifier.Verify(r.Context(), rawToken); err == nil {
+				_, err := verifier.Verify(r.Context(), rawToken)
+				if err == nil {
 					withAccount.ServeHTTP(w, r)
+					return
+				}
+				// Com o issuer fora não dá para saber quem é: responder
+				// como visitante mostraria a página errada (sem os votos da
+				// pessoa) sem aviso. Melhor o 503, que não passa por sessão recusada.
+				if errors.Is(err, ErrIssuerUnavailable) {
+					writeVerifyError(w, err)
 					return
 				}
 			}

@@ -70,6 +70,9 @@ func main() {
 	}
 	defer db.Close()
 
+	// Só falha com OIDC_ISSUER_URL inválida: Authentik fora do ar não
+	// derruba o boot, o discovery fica tentando em segundo plano (ver
+	// auth.NewVerifier).
 	verifier, err := auth.NewVerifier(ctx, auth.ParseIssuerURLs(issuerURL))
 	if err != nil {
 		log.Fatalf("server-central: %v", err)

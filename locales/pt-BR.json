@@ -408,6 +408,7 @@
     "auth": {
       "account_resolve_failed": "erro ao resolver conta",
       "secret_invalid": "segredo inválido",
+      "issuer_unavailable": "o login está fora do ar no momento; tente de novo em instantes",
       "token_invalid": "token inválido",
       "token_missing": "token ausente ou mal formatado",
       "join_required": "é preciso entrar neste servidor (POST /api/join) antes",
